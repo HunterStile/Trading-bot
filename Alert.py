@@ -23,10 +23,10 @@ while tipo == True:
         webbrowser.open_new('https://www.bybit.com/trade/usdt/'+symbol)
         break
     else:
-        print("il prezzo NON è arrivato a target...")
+        print(f"il prezzo di: {symbol} NON è arrivato a target...")
         print('prezzo attuale: ', prezzo_attuale)
         print('prezzo allert: ', prezzo_allert)
-        time.sleep(10)
+        time.sleep(60)
         prezzo_attuale = vedi_prezzo_moneta(categoria, symbol)
 
 while tipo == False:
@@ -35,10 +35,10 @@ while tipo == False:
         webbrowser.open_new('https://www.bybit.com/trade/usdt/'+symbol)
         break
     else:
-        print("il prezzo NON è arrivato a target...")
+        print(f"il prezzo di: {symbol} NON è arrivato a target...")
         print('prezzo attuale: ', prezzo_attuale)
         print('prezzo allert: ', prezzo_allert)
-        time.sleep(10)
+        time.sleep(60)
         prezzo_attuale = vedi_prezzo_moneta(categoria, symbol)
 
 
