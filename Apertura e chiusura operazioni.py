@@ -3,7 +3,7 @@ from trading_functions import *
 #SCELTA DELLA MONETA
 simbolo = "AVAXUSDT"              #Simbolo della moneta
 operazione = True                 #True = Long, False = Short
-quantita=300                      #Quantità di contratti#
+quantita=50                      #Quantità di contratti#
 categoria = "linear"              #spot, linear(Futures), inverse   
 
 #VARIABILI PER LA STRATEGIA

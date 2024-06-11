@@ -1,3 +1,4 @@
+from config import *
 import threading
 from selenium.webdriver import Chrome
 from selenium import webdriver
@@ -10,22 +11,12 @@ from random import randint
 from bs4 import BeautifulSoup
 from enum import Enum
 from datetime import datetime
-
 import requests
+
 #Variabili 
 a = 1
 b = 2
 attesa = 60
-
-#Token
-api = 'LE TUE API'
-api_sec = 'LE TUE API SECRET'
-
-
-#scelta browser
-path = 'path_driver.txt'
-chrome_scelto = 'path_chrome.txt'
-
 
 #CONFIGURAZIONE BROWSER#
 def configurazione_browser():
@@ -864,7 +855,7 @@ def scelta_moneta_operazione():
         sleep(3)
     else:
         print("Operazione annullata.")
-        scelta_moneta()
+        scelta_moneta_operazione()
         return  # Exit the function if the operation is canceled
 
     return simbolo, quantita, tipo_operazione
