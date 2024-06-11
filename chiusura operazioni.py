@@ -1,3 +1,4 @@
+from config import *
 from trading_functions import *
 
 #SCELTA DELLA MONETA
