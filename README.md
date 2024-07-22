@@ -13,7 +13,6 @@ La Trading App è un'applicazione che consente agli utenti di effettuare operazi
 - Sistema operativo: Windows, macOS, Linux, iOS, Android
 - Python 3.x installato (per la versione desktop)
 - Connessione Internet
-- Dipendenze esterne: `requests`, `pandas`, `matplotlib`, `numpy` (per la versione desktop), `react-native` (per la versione mobile)
 
 ## Installazione
 ### Versione Desktop
