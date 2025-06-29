@@ -424,6 +424,53 @@ def get_kline_data(categoria, simbolo, intervallo, limit=200):
         print(f"Nessun dato Kline disponibile per il simbolo {simbolo}")
         return []
 
+def get_kline_data_with_dates(categoria, simbolo, intervallo, start_timestamp=None, end_timestamp=None, limit=200):
+    """
+    Ottieni dati Kline con date specifiche usando PyBit
+    
+    Args:
+        categoria: Categoria del trading (linear, spot, etc.)
+        simbolo: Simbolo da scaricare (es. BTCUSDT)
+        intervallo: Timeframe (D, 240, 60, etc.)
+        start_timestamp: Timestamp inizio in millisecondi (opzionale)
+        end_timestamp: Timestamp fine in millisecondi (opzionale)
+        limit: Numero massimo di candele da scaricare
+        
+    Returns:
+        Lista di candele OHLCV
+    """
+    # Inizializza la sessione HTTP
+    session = HTTP(testnet=False, api_key=api, api_secret=api_sec)
+    
+    # Prepara parametri per la richiesta
+    params = {
+        "category": categoria,
+        "symbol": simbolo,
+        "interval": intervallo,
+        "limit": limit
+    }
+    
+    # Aggiungi timestamp se forniti
+    if start_timestamp:
+        params["start"] = int(start_timestamp)
+    if end_timestamp:
+        params["end"] = int(end_timestamp)
+    
+    try:
+        # Esegui richiesta
+        kline_data = session.get_kline(**params)["result"]
+        
+        # Verifica se ci sono dati disponibili
+        if "list" in kline_data and kline_data["list"]:
+            return kline_data["list"]
+        else:
+            print(f"Nessun dato Kline disponibile per {simbolo} nel periodo richiesto")
+            return []
+            
+    except Exception as e:
+        print(f"Errore nel download dati per {simbolo}: {e}")
+        return []
+
 #FUNZIONI TRADING#
 def totale_pnl(quantita_acquistata, prezzo_acquisto, prezzo_attuale):
     return (prezzo_attuale - prezzo_acquisto) * quantita_acquistata 

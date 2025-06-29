@@ -9,6 +9,7 @@ Trading-bot/
 ├── config.py                      # Configurazioni API e chiavi
 ├── trading_functions.py            # Funzioni principali di trading e analisi
 ├── test_api.py                     # 🆕 Test completo delle API
+├── backtest.py                     # 🆕 🧪 Sistema di Backtesting
 ├── Apertura e chiusura operazioni.py  # Bot principale per trading automatico
 ├── chiusura operazioni.py          # Bot per trailing stop
 ├── Alert.py                        # Sistema di alert prezzo semplice
@@ -201,10 +202,44 @@ Dopo i test delle API, il tuo bot è **completamente operativo** per il trading 
 ```
 
 ### 🚀 **Cosa Puoi Fare Ora**
-1. **Trading Automatico**: Esegui `python "Apertura e chiusura operazioni.py"`
-2. **Trailing Stop**: Esegui `python "chiusura operazioni.py"`  
-3. **Alert Prezzi**: Esegui `python Alert.py`
-4. **Analisi Mercato**: Usa le funzioni in `trading_functions.py`
+1. **🧪 BACKTEST (RACCOMANDATO)**: Esegui `python backtest.py`
+2. **Trading Automatico**: Esegui `python "Apertura e chiusura operazioni.py"`
+3. **Trailing Stop**: Esegui `python "chiusura operazioni.py"`  
+4. **Alert Prezzi**: Esegui `python Alert.py`
+5. **Analisi Mercato**: Usa le funzioni in `trading_functions.py`
+
+### 🧪 **Backtesting - INIZIA SEMPRE DA QUI!**
+
+**Prima di fare trading reale, TESTA la strategia:**
+
+```bash
+# Avvia il sistema di backtesting
+python backtest.py
+```
+
+**🎯 Opzioni di Backtesting:**
+1. **Test Rapido BTC**: Testa la strategia EMA su Bitcoin (30 giorni)
+2. **Test ETH**: Strategia su Ethereum  
+3. **Simbolo Personalizzato**: Testa qualsiasi coppia (AVAXUSDT, SOLUSDT...)
+4. **Ottimizzazione**: Trova i parametri migliori automaticamente
+5. **Confronto Timeframes**: Scopri quale timeframe funziona meglio
+
+**📊 Cosa Testa il Backtest:**
+- ✅ Strategia EMA su dati storici reali
+- ✅ Simulazione apertura/chiusura posizioni  
+- ✅ Calcolo profitti/perdite
+- ✅ Win rate e statistiche dettagliate
+- ✅ Suggerimenti per ottimizzazione
+
+**💡 Esempio Output:**
+```
+💰 Capitale iniziale: $1000.00
+💰 Capitale finale: $1150.30  
+📈 Rendimento: $150.30 (15.03%)
+🔄 Numero di trades: 8
+✅ Trades vincenti: 6 (75.0%)
+🎯 Miglior trade: $89.45
+```
 
 ### ⚠️ **Raccomandazioni Prima del Trading Live**
 - 🧪 **Testnet**: Considera di testare prima su ambiente demo
