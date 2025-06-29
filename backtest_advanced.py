@@ -7,10 +7,33 @@ Supporta multiple strategie, risk management avanzato e analisi dettagliate
 """
 
 import sys
+import os
 from datetime import datetime, timedelta
 import traceback
 from typing import Dict, List, Optional, Type
 import importlib
+
+# Import per visualizzazione grafica
+try:
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from matplotlib.patches import FancyBboxPatch
+    import numpy as np
+    MATPLOTLIB_AVAILABLE = True
+    print("✅ Matplotlib disponibile per grafici")
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+    print("⚠️  Matplotlib non disponibile - installare con: pip install matplotlib")
+
+try:
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    import plotly.express as px
+    PLOTLY_AVAILABLE = True
+    print("✅ Plotly disponibile per grafici interattivi")
+except ImportError:
+    PLOTLY_AVAILABLE = False
+    print("⚠️  Plotly non disponibile - installare con: pip install plotly")
 
 try:
     from config import *
@@ -22,6 +45,35 @@ try:
 except ImportError as e:
     print(f"❌ Errore nell'import: {e}")
     sys.exit(1)
+
+def _create_output_directory():
+    """
+    Crea la cartella per i file di output (grafici e screenshot)
+    
+    Returns:
+        str: Percorso della cartella di output
+    """
+    output_dir = "screenshots"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"📁 Creata cartella per i grafici: {output_dir}")
+    return output_dir
+
+def _get_output_filepath(filename: str, extension: str = None) -> str:
+    """
+    Genera il percorso completo per un file di output
+    
+    Args:
+        filename: Nome base del file
+        extension: Estensione del file (opzionale)
+    
+    Returns:
+        str: Percorso completo del file
+    """
+    output_dir = _create_output_directory()
+    if extension and not filename.endswith(extension):
+        filename = f"{filename}{extension}"
+    return os.path.join(output_dir, filename)
 
 class AdvancedBacktestEngine:
     """
@@ -138,6 +190,9 @@ class AdvancedBacktestEngine:
         
         # Mostra analisi
         self._print_results(results)
+        
+        # Salva dati per grafici
+        results['indicators'] = indicators
         
         return results
     
@@ -831,6 +886,367 @@ class AdvancedBacktestEngine:
         
         print("❌ Nessun dato scaricato")
         return []
+    
+    def plot_backtest_results(self, indicators: Dict, results: Dict, show_indicators: bool = True):
+        """
+        Crea grafici interattivi dei risultati del backtest
+        
+        Args:
+            indicators: Dati degli indicatori
+            results: Risultati del backtest
+            show_indicators: Se mostrare gli indicatori tecnici
+        """
+        if not PLOTLY_AVAILABLE:
+            print("❌ Plotly non disponibile. Installa con: pip install plotly")
+            print("🔄 Provo con matplotlib...")
+            return self.plot_backtest_matplotlib(indicators, results, show_indicators)
+        
+        print("📊 Creazione grafici interattivi...")
+        
+        # Prepara dati
+        timestamps = [datetime.fromtimestamp(ts/1000) for ts in indicators['timestamps']]
+        prices = indicators['closes']
+        
+        # Crea subplot
+        if show_indicators:
+            fig = make_subplots(
+                rows=4, cols=1,
+                shared_xaxes=True,
+                vertical_spacing=0.02,
+                subplot_titles=('Prezzo + EMA + Trade Points', 'RSI', 'MACD', 'Equity Curve'),
+                row_heights=[0.4, 0.2, 0.2, 0.2]
+            )
+        else:
+            fig = make_subplots(
+                rows=2, cols=1,
+                shared_xaxes=True,
+                vertical_spacing=0.02,
+                subplot_titles=('Prezzo + Trade Points', 'Equity Curve'),
+                row_heights=[0.7, 0.3]
+            )
+        
+        # Grafico prezzo principale
+        fig.add_trace(
+            go.Scatter(
+                x=timestamps, 
+                y=prices,
+                mode='lines',
+                name='Prezzo',
+                line=dict(color='blue', width=1.5)
+            ),
+            row=1, col=1
+        )
+        
+        # EMA
+        if 'ema' in indicators and show_indicators:
+            fig.add_trace(
+                go.Scatter(
+                    x=timestamps,
+                    y=indicators['ema'],
+                    mode='lines',
+                    name='EMA 21',
+                    line=dict(color='orange', width=2)
+                ),
+                row=1, col=1
+            )
+        
+        # Punti di trade
+        self._add_trade_points_plotly(fig, timestamps, prices, results['trades'])
+        
+        if show_indicators:
+            # RSI
+            if 'rsi' in indicators:
+                fig.add_trace(
+                    go.Scatter(
+                        x=timestamps,
+                        y=indicators['rsi'],
+                        mode='lines',
+                        name='RSI',
+                        line=dict(color='purple', width=1.5)
+                    ),
+                    row=2, col=1
+                )
+                
+                # Linee RSI 30/70
+                fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
+                fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
+                fig.add_hline(y=50, line_dash="dot", line_color="gray", row=2, col=1)
+            
+            # MACD
+            if 'macd' in indicators and indicators['macd']:
+                macd_line = indicators['macd'].get('macd_line', [])
+                signal_line = indicators['macd'].get('signal_line', [])
+                histogram = indicators['macd'].get('histogram', [])
+                
+                if macd_line:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=timestamps,
+                            y=macd_line,
+                            mode='lines',
+                            name='MACD Line',
+                            line=dict(color='blue', width=1.5)
+                        ),
+                        row=3, col=1
+                    )
+                
+                if signal_line:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=timestamps,
+                            y=signal_line,
+                            mode='lines',
+                            name='Signal Line',
+                            line=dict(color='red', width=1.5)
+                        ),
+                        row=3, col=1
+                    )
+                
+                if histogram:
+                    fig.add_trace(
+                        go.Bar(
+                            x=timestamps,
+                            y=histogram,
+                            name='MACD Histogram',
+                            marker_color='green',
+                            opacity=0.6
+                        ),
+                        row=3, col=1
+                    )
+        
+        # Equity curve
+        equity_timestamps = [datetime.fromtimestamp(eq['timestamp']/1000) for eq in self.equity_curve]
+        equity_values = [eq['capitale_unrealized'] for eq in self.equity_curve]
+        
+        fig.add_trace(
+            go.Scatter(
+                x=equity_timestamps,
+                y=equity_values,
+                mode='lines',
+                name='Equity Curve',
+                line=dict(color='green', width=2)
+            ),
+            row=4 if show_indicators else 2, col=1
+        )
+        
+        # Aggiorna layout
+        fig.update_layout(
+            title=f"📊 {results['strategy_name']} - {results['symbol']} ({results['timeframe']})<br>"
+                  f"Rendimento: {results['total_return_percent']:.2f}% | Win Rate: {results['win_rate']:.1f}% | Trades: {results['total_trades']}",
+            xaxis_title="Data",
+            height=800 if show_indicators else 600,
+            showlegend=True,
+            hovermode='x unified'
+        )
+        
+        # Salva e mostra
+        base_filename = f"backtest_{results['strategy_name'].replace(' ', '_')}_{results['symbol']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        filepath = _get_output_filepath(base_filename, ".html")
+        fig.write_html(filepath)
+        print(f"✅ Grafico interattivo salvato in: {filepath}")
+        fig.show()
+        
+        return fig
+    
+    def _add_trade_points_plotly(self, fig, timestamps, prices, trades):
+        """
+        Aggiunge punti di entrata e uscita al grafico Plotly
+        """
+        # Separa trades di apertura e chiusura
+        entry_times = []
+        entry_prices = []
+        entry_types = []
+        
+        exit_times = []
+        exit_prices = []
+        exit_types = []
+        
+        for i, trade in enumerate(trades):
+            timestamp = datetime.fromtimestamp(trade['timestamp']/1000)
+            price = trade['prezzo']
+            
+            if trade['tipo'] in ['COMPRA', 'VENDI'] and 'Apertura posizione' in trade['motivo']:
+                entry_times.append(timestamp)
+                entry_prices.append(price)
+                entry_types.append(trade['tipo'])
+            else:
+                exit_times.append(timestamp)
+                exit_prices.append(price)
+                exit_types.append(trade['tipo'])
+        
+        # Punti di entrata
+        if entry_times:
+            fig.add_trace(
+                go.Scatter(
+                    x=entry_times,
+                    y=entry_prices,
+                    mode='markers',
+                    name='Entrate',
+                    marker=dict(
+                        symbol='triangle-up',
+                        size=12,
+                        color='green',
+                        line=dict(width=2, color='darkgreen')
+                    ),
+                    hovertemplate='<b>ENTRATA</b><br>Data: %{x}<br>Prezzo: $%{y:.2f}<extra></extra>'
+                ),
+                row=1, col=1
+            )
+        
+        # Punti di uscita
+        if exit_times:
+            fig.add_trace(
+                go.Scatter(
+                    x=exit_times,
+                    y=exit_prices,
+                    mode='markers',
+                    name='Uscite',
+                    marker=dict(
+                        symbol='triangle-down',
+                        size=12,
+                        color='red',
+                        line=dict(width=2, color='darkred')
+                    ),
+                    hovertemplate='<b>USCITA</b><br>Data: %{x}<br>Prezzo: $%{y:.2f}<extra></extra>'
+                ),
+                row=1, col=1
+            )
+
+    def plot_backtest_matplotlib(self, indicators: Dict, results: Dict, show_indicators: bool = True):
+        """
+        Crea grafici con matplotlib (fallback)
+        
+        Args:
+            indicators: Dati degli indicatori
+            results: Risultati del backtest
+            show_indicators: Se mostrare gli indicatori tecnici
+        """
+        if not MATPLOTLIB_AVAILABLE:
+            print("❌ Nessuna libreria di plotting disponibile")
+            print("💡 Installa con: pip install matplotlib plotly")
+            return None
+        
+        print("📊 Creazione grafici con matplotlib...")
+        
+        # Prepara dati
+        timestamps = [datetime.fromtimestamp(ts/1000) for ts in indicators['timestamps']]
+        prices = indicators['closes']
+        
+        # Crea figure
+        if show_indicators:
+            fig, axes = plt.subplots(4, 1, figsize=(15, 12), sharex=True)
+        else:
+            fig, axes = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
+            
+        fig.suptitle(f"{results['strategy_name']} - {results['symbol']} ({results['timeframe']})\n"
+                     f"Rendimento: {results['total_return_percent']:.2f}% | Win Rate: {results['win_rate']:.1f}% | Trades: {results['total_trades']}", 
+                     fontsize=14, fontweight='bold')
+        
+        # Grafico prezzo principale
+        ax_price = axes[0]
+        ax_price.plot(timestamps, prices, 'b-', linewidth=1.5, label='Prezzo', alpha=0.8)
+        
+        # EMA
+        if 'ema' in indicators and show_indicators:
+            ax_price.plot(timestamps, indicators['ema'], 'orange', linewidth=2, label='EMA 21', alpha=0.8)
+        
+        # Punti di trade
+        self._add_trade_points_matplotlib(ax_price, timestamps, prices, results['trades'])
+        
+        ax_price.set_ylabel('Prezzo ($)')
+        ax_price.legend()
+        ax_price.grid(True, alpha=0.3)
+        ax_price.set_title('Prezzo + Punti di Trade')
+        
+        if show_indicators:
+            # RSI
+            if 'rsi' in indicators:
+                ax_rsi = axes[1]
+                ax_rsi.plot(timestamps, indicators['rsi'], 'purple', linewidth=1.5, label='RSI')
+                ax_rsi.axhline(y=70, color='red', linestyle='--', alpha=0.7, label='Ipercomprato')
+                ax_rsi.axhline(y=30, color='green', linestyle='--', alpha=0.7, label='Ipervenduto')
+                ax_rsi.axhline(y=50, color='gray', linestyle=':', alpha=0.7)
+                ax_rsi.set_ylabel('RSI')
+                ax_rsi.set_ylim(0, 100)
+                ax_rsi.legend()
+                ax_rsi.grid(True, alpha=0.3)
+                ax_rsi.set_title('RSI (14)')
+            
+            # MACD
+            if 'macd' in indicators and indicators['macd']:
+                ax_macd = axes[2]
+                macd_data = indicators['macd']
+                
+                if 'macd_line' in macd_data:
+                    ax_macd.plot(timestamps, macd_data['macd_line'], 'blue', linewidth=1.5, label='MACD Line')
+                if 'signal_line' in macd_data:
+                    ax_macd.plot(timestamps, macd_data['signal_line'], 'red', linewidth=1.5, label='Signal Line')
+                if 'histogram' in macd_data:
+                    ax_macd.bar(timestamps, macd_data['histogram'], alpha=0.6, color='green', label='Histogram', width=1)
+                
+                ax_macd.axhline(y=0, color='black', linestyle='-', alpha=0.3)
+                ax_macd.set_ylabel('MACD')
+                ax_macd.legend()
+                ax_macd.grid(True, alpha=0.3)
+                ax_macd.set_title('MACD (12, 26, 9)')
+        
+        # Equity curve
+        equity_timestamps = [datetime.fromtimestamp(eq['timestamp']/1000) for eq in self.equity_curve]
+        equity_values = [eq['capitale_unrealized'] for eq in self.equity_curve]
+        
+        ax_equity = axes[3 if show_indicators else 1]
+        ax_equity.plot(equity_timestamps, equity_values, 'green', linewidth=2, label='Equity Curve')
+        ax_equity.axhline(y=self.capitale_iniziale, color='gray', linestyle='--', alpha=0.7, label='Capitale Iniziale')
+        ax_equity.set_ylabel('Capitale ($)')
+        ax_equity.legend()
+        ax_equity.grid(True, alpha=0.3)
+        ax_equity.set_title('Curva dell\'Equity')
+        
+        # Formatta asse x
+        ax_equity.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        ax_equity.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+        plt.xticks(rotation=45)
+        
+        plt.tight_layout()
+        
+        # Salva e mostra
+        base_filename = f"backtest_{results['strategy_name'].replace(' ', '_')}_{results['symbol']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        filepath = _get_output_filepath(base_filename, ".png")
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        print(f"✅ Grafico matplotlib salvato in: {filepath}")
+        plt.show()
+        
+        return fig
+    
+    def _add_trade_points_matplotlib(self, ax, timestamps, prices, trades):
+        """
+        Aggiunge punti di entrata e uscita al grafico matplotlib
+        """
+        entry_times = []
+        entry_prices = []
+        exit_times = []
+        exit_prices = []
+        
+        for trade in trades:
+            timestamp = datetime.fromtimestamp(trade['timestamp']/1000)
+            price = trade['prezzo']
+            
+            if trade['tipo'] in ['COMPRA', 'VENDI'] and 'Apertura posizione' in trade['motivo']:
+                entry_times.append(timestamp)
+                entry_prices.append(price)
+            else:
+                exit_times.append(timestamp)
+                exit_prices.append(price)
+        
+        # Punti di entrata
+        if entry_times:
+            ax.scatter(entry_times, entry_prices, color='green', marker='^', s=100, 
+                      label='Entrate', zorder=5, edgecolors='darkgreen', linewidth=2)
+        
+        # Punti di uscita
+        if exit_times:
+            ax.scatter(exit_times, exit_prices, color='red', marker='v', s=100, 
+                      label='Uscite', zorder=5, edgecolors='darkred', linewidth=2)
 
 # ═══════════════════════════════════════════════════════════════
 # 🎯 FUNZIONI DI UTILITÀ E MENU
@@ -928,6 +1344,11 @@ def test_triple_confirmation():
     engine = AdvancedBacktestEngine(simbolo, strategy, capitale)
     results = engine.run_backtest(timeframe, giorni, 100)  # Usa tutto il capitale
     
+    # Opzione visualizzazione
+    if results['success'] and input("\n📊 Vuoi vedere i grafici? (s/N): ").strip().lower() == 's':
+        show_indicators = input("📈 Mostrare anche gli indicatori tecnici? (s/N): ").strip().lower() == 's'
+        engine.plot_backtest_results(results['indicators'], results, show_indicators)
+    
     return results
 
 def test_ema_strategy():
@@ -954,6 +1375,11 @@ def test_ema_strategy():
     # Esegui backtest
     engine = AdvancedBacktestEngine(simbolo, strategy, capitale)
     results = engine.run_backtest(timeframe, giorni, 100)
+    
+    # Opzione visualizzazione
+    if results['success'] and input("\n📊 Vuoi vedere i grafici? (s/N): ").strip().lower() == 's':
+        show_indicators = input("📈 Mostrare anche gli indicatori tecnici? (s/N): ").strip().lower() == 's'
+        engine.plot_backtest_results(results['indicators'], results, show_indicators)
     
     return results
 
@@ -996,6 +1422,11 @@ def test_custom_strategy():
     # Esegui backtest
     engine = AdvancedBacktestEngine(simbolo, strategy, capitale)
     results = engine.run_backtest(timeframe, giorni, 100)
+    
+    # Opzione visualizzazione
+    if results['success'] and input("\n📊 Vuoi vedere i grafici? (s/N): ").strip().lower() == 's':
+        show_indicators = input("📈 Mostrare anche gli indicatori tecnici? (s/N): ").strip().lower() == 's'
+        engine.plot_backtest_results(results['indicators'], results, show_indicators)
     
     return results
 
@@ -1213,6 +1644,11 @@ def test_specific_period():
     engine.specific_start_date = start_date
     engine.specific_end_date = end_date
     results = engine.run_backtest(timeframe, giorni, 100)
+    
+    # Opzione visualizzazione
+    if results['success'] and input("\n📊 Vuoi vedere i grafici? (s/N): ").strip().lower() == 's':
+        show_indicators = input("📈 Mostrare anche gli indicatori tecnici? (s/N): ").strip().lower() == 's'
+        engine.plot_backtest_results(results['indicators'], results, show_indicators)
     
     return results
 

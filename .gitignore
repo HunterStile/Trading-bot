@@ -1,6 +1,7 @@
 # File di configurazione sensibili
 .env
 config.py
+screenshots/
 
 # Cache Python
 __pycache__/
