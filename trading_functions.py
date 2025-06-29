@@ -171,12 +171,23 @@ def execute_thread(func, args):
     return thread
 #FUNZIONI BYBIT#
 def get_server_time():
-    response = requests.get("https://api.bybit.com/v2/public/time")
-    if response.status_code == 200:
-        server_time = response.json()['time_now']
-        return float(server_time)
-    else:
-        print("Errore durante il recupero del tempo del server di Bybit.")
+    try:
+        # Usa il nuovo endpoint v5 per il server time
+        response = requests.get("https://api.bybit.com/v5/market/time")
+        if response.status_code == 200:
+            data = response.json()
+            if data['retCode'] == 0:
+                # Il tempo è in millisecondi, convertiamo in secondi
+                server_time = int(data['result']['timeSecond'])
+                return float(server_time)
+            else:
+                print(f"Errore API Bybit: {data['retMsg']}")
+                return None
+        else:
+            print(f"Errore HTTP: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Errore durante il recupero del tempo del server di Bybit: {e}")
         return None
     
 def check_timestamp(recv_window, timestamp):
