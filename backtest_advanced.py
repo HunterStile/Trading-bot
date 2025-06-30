@@ -907,22 +907,30 @@ class AdvancedBacktestEngine:
         timestamps = [datetime.fromtimestamp(ts/1000) for ts in indicators['timestamps']]
         prices = indicators['closes']
         
-        # Crea subplot
+        # Crea subplot con tabella dei trade
         if show_indicators:
             fig = make_subplots(
-                rows=4, cols=1,
+                rows=5, cols=1,
                 shared_xaxes=True,
                 vertical_spacing=0.02,
-                subplot_titles=('Prezzo + EMA + Trade Points', 'RSI', 'MACD', 'Equity Curve'),
-                row_heights=[0.4, 0.2, 0.2, 0.2]
+                subplot_titles=('Prezzo + EMA + Trade Points', 'RSI', 'MACD', 'Equity Curve', 'Tabella Trade'),
+                row_heights=[0.35, 0.15, 0.15, 0.15, 0.2],
+                specs=[[{"type": "scatter"}],
+                       [{"type": "scatter"}],
+                       [{"type": "scatter"}],
+                       [{"type": "scatter"}],
+                       [{"type": "table"}]]
             )
         else:
             fig = make_subplots(
-                rows=2, cols=1,
+                rows=3, cols=1,
                 shared_xaxes=True,
                 vertical_spacing=0.02,
-                subplot_titles=('Prezzo + Trade Points', 'Equity Curve'),
-                row_heights=[0.7, 0.3]
+                subplot_titles=('Prezzo + Trade Points', 'Equity Curve', 'Tabella Trade'),
+                row_heights=[0.5, 0.25, 0.25],
+                specs=[[{"type": "scatter"}],
+                       [{"type": "scatter"}],
+                       [{"type": "table"}]]
             )
         
         # Grafico prezzo principale
@@ -1029,12 +1037,15 @@ class AdvancedBacktestEngine:
             row=4 if show_indicators else 2, col=1
         )
         
+        # Crea tabella dei trade
+        self._add_trades_table_plotly(fig, results['trades'], show_indicators)
+        
         # Aggiorna layout
         fig.update_layout(
             title=f"📊 {results['strategy_name']} - {results['symbol']} ({results['timeframe']})<br>"
                   f"Rendimento: {results['total_return_percent']:.2f}% | Win Rate: {results['win_rate']:.1f}% | Trades: {results['total_trades']}",
             xaxis_title="Data",
-            height=800 if show_indicators else 600,
+            height=1000 if show_indicators else 800,
             showlegend=True,
             hovermode='x unified'
         )
@@ -1111,6 +1122,134 @@ class AdvancedBacktestEngine:
                 ),
                 row=1, col=1
             )
+
+    def _add_trades_table_plotly(self, fig, trades, show_indicators):
+        """
+        Aggiunge una tabella dei trade al grafico Plotly
+        
+        Args:
+            fig: Figure Plotly
+            trades: Lista dei trade
+            show_indicators: Se gli indicatori sono mostrati (per determinare la riga)
+        """
+        if not trades:
+            print("🔍 Nessun trade da mostrare nella tabella")
+            return
+        
+        print(f"🔍 Debug: Processing {len(trades)} trades for table...")
+        
+        # Prepara i dati per la tabella
+        table_data = {
+            'N°': [],
+            'Data': [],
+            'Tipo': [],
+            'Prezzo': [],
+            'Qty': [],
+            'P&L': [],
+            'P&L %': [],
+            'Max DD': [],
+            'Motivo': []
+        }
+        
+        # Raggruppa i trade in coppie apri/chiudi
+        trade_pairs = []
+        open_trade = None
+        
+        for trade in trades:
+            print(f"🔍 Debug trade: {trade['tipo']} - {trade['motivo']}")
+            if 'Apertura posizione' in trade['motivo']:
+                open_trade = trade
+            elif open_trade and (trade['tipo'] in ['VENDI'] and open_trade['tipo'] == 'COMPRA'):
+                # È una chiusura di posizione LONG
+                trade_pairs.append((open_trade, trade))
+                open_trade = None
+            elif open_trade and (trade['tipo'] in ['COMPRA'] and open_trade['tipo'] == 'VENDI'):
+                # È una chiusura di posizione SHORT
+                trade_pairs.append((open_trade, trade))
+                open_trade = None
+        
+        print(f"🔍 Debug: Found {len(trade_pairs)} trade pairs")
+        
+        # Costruisci i dati della tabella
+        for i, (open_trade, close_trade) in enumerate(trade_pairs, 1):
+            # Calcola P&L
+            if open_trade['tipo'] == 'COMPRA':
+                pnl = (close_trade['prezzo'] - open_trade['prezzo']) * open_trade['quantita']
+                pnl_percent = ((close_trade['prezzo'] - open_trade['prezzo']) / open_trade['prezzo']) * 100
+            else:  # VENDI
+                pnl = (open_trade['prezzo'] - close_trade['prezzo']) * open_trade['quantita']
+                pnl_percent = ((open_trade['prezzo'] - close_trade['prezzo']) / open_trade['prezzo']) * 100
+            
+            # Formatta la data
+            open_date = datetime.fromtimestamp(open_trade['timestamp']/1000).strftime('%Y-%m-%d %H:%M')
+            close_date = datetime.fromtimestamp(close_trade['timestamp']/1000).strftime('%Y-%m-%d %H:%M')
+            
+            # Max drawdown del trade (se disponibile)
+            max_dd = close_trade.get('max_drawdown', 0)
+            max_dd_str = f"{max_dd:.2f}%" if max_dd != 0 else "N/A"
+            
+            # Aggiungi riga di apertura
+            table_data['N°'].append(f"{i}A")
+            table_data['Data'].append(open_date)
+            table_data['Tipo'].append(f"🟢 {open_trade['tipo']}")
+            table_data['Prezzo'].append(f"${open_trade['prezzo']:.2f}")
+            table_data['Qty'].append(f"{open_trade['quantita']:.4f}")
+            table_data['P&L'].append("-")
+            table_data['P&L %'].append("-")
+            table_data['Max DD'].append("-")
+            table_data['Motivo'].append(open_trade['motivo'])
+            
+            # Aggiungi riga di chiusura
+            color = "🟢" if pnl >= 0 else "🔴"
+            table_data['N°'].append(f"{i}B")
+            table_data['Data'].append(close_date)
+            table_data['Tipo'].append(f"🔴 {close_trade['tipo']}")
+            table_data['Prezzo'].append(f"${close_trade['prezzo']:.2f}")
+            table_data['Qty'].append(f"{close_trade['quantita']:.4f}")
+            table_data['P&L'].append(f"{color} ${pnl:.2f}")
+            table_data['P&L %'].append(f"{color} {pnl_percent:.2f}%")
+            table_data['Max DD'].append(max_dd_str)
+            table_data['Motivo'].append(close_trade['motivo'])
+        
+        print(f"🔍 Debug: Table will have {len(table_data['N°'])} rows")
+        
+        # Se non ci sono trade pairs, mostra tutti i trade singolarmente
+        if len(trade_pairs) == 0:
+            print("🔍 No trade pairs found, showing all trades individually")
+            for i, trade in enumerate(trades, 1):
+                date = datetime.fromtimestamp(trade['timestamp']/1000).strftime('%Y-%m-%d %H:%M')
+                table_data['N°'].append(str(i))
+                table_data['Data'].append(date)
+                table_data['Tipo'].append(trade['tipo'])
+                table_data['Prezzo'].append(f"${trade['prezzo']:.2f}")
+                table_data['Qty'].append(f"{trade['quantita']:.4f}")
+                table_data['P&L'].append("-")
+                table_data['P&L %'].append("-")
+                table_data['Max DD'].append("-")
+                table_data['Motivo'].append(trade['motivo'])
+        
+        # Crea la tabella
+        fig.add_trace(
+            go.Table(
+                header=dict(
+                    values=list(table_data.keys()),
+                    fill_color='lightblue',
+                    align='center',
+                    font=dict(size=12, color='black'),
+                    height=30
+                ),
+                cells=dict(
+                    values=list(table_data.values()),
+                    fill_color=[['white', 'lightgray'] * (len(table_data['N°']) // 2 + 1)],
+                    align=['center'] * len(table_data.keys()),
+                    font=dict(size=10),
+                    height=25
+                )
+            ),
+            row=5 if show_indicators else 3, col=1
+        )
+        
+        print(f"✅ Tabella aggiunta con {len(table_data['N°'])} righe")
 
     def plot_backtest_matplotlib(self, indicators: Dict, results: Dict, show_indicators: bool = True):
         """
