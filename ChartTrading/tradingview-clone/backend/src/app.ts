@@ -6,6 +6,8 @@ import marketDataRoutes from './routes/marketData';
 import symbolRoutes from './routes/symbols';
 import userRoutes from './routes/users';
 import bybitRoutes from './routes/bybit';
+import coinGeckoRoutes from './routes/coinGecko';
+import coinCapRoutes from './routes/coinCap';
 import { config } from './config/database';
 
 // Carica le variabili d'ambiente
@@ -33,6 +35,8 @@ app.use('/api/market-data', marketDataRoutes);
 app.use('/api/symbols', symbolRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/bybit', bybitRoutes);
+app.use('/api/coingecko', coinGeckoRoutes);
+app.use('/api/coincap', coinCapRoutes);
 
 // Database connection
 mongoose.connect(config.databaseUrl)

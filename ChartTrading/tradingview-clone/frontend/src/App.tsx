@@ -72,12 +72,77 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT');
   const [selectedInterval, setSelectedInterval] = useState('D');
+  const [selectedProvider, setSelectedProvider] = useState<'bybit' | 'coingecko' | 'coincap'>('coincap');
   const [chartRange, setChartRange] = useState({ start: 0, end: 50 }); // Per zoom/pan
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
   useEffect(() => {
-    fetchBybitData();
-  }, [selectedSymbol, selectedInterval]);
+    fetchData();
+  }, [selectedSymbol, selectedInterval, selectedProvider]);
+
+  const fetchData = async () => {
+    if (selectedProvider === 'coingecko') {
+      await fetchCoinGeckoData();
+    } else if (selectedProvider === 'coincap') {
+      await fetchCoinCapData();
+    } else {
+      await fetchBybitData();
+    }
+  };
+
+  const fetchCoinGeckoData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Test connessione backend
+      const testResponse = await fetch('http://localhost:5000/api/test');
+      if (!testResponse.ok) {
+        throw new Error('Backend non disponibile');
+      }
+
+      // Recupera dati da CoinGecko tramite il nostro backend
+      const limit = getLimitByInterval(selectedInterval);
+      const response = await fetch(
+        `http://localhost:5000/api/coingecko/kline?symbol=${selectedSymbol}&interval=${selectedInterval}&limit=${limit}`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Errore nel recupero dati CoinGecko');
+      }
+
+      const result: BybitApiResponse = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Errore API CoinGecko');
+      }
+      
+      // Converte i dati in formato chart
+      const chartData: ChartData[] = result.data.map((kline: KlineData) => {
+        const date = new Date(kline.openTime);
+        return {
+          time: date.toLocaleDateString(),
+          timestamp: kline.openTime,
+          open: kline.open,
+          high: kline.high,
+          low: kline.low,
+          close: kline.close,
+          volume: kline.volume,
+          formattedTime: formatTimeByInterval(date, selectedInterval)
+        };
+      });
+
+      setChartData(chartData);
+      setBtcPrice(chartData[chartData.length - 1]?.close || 0);
+      setLastUpdate(new Date());
+      setError(null);
+      
+    } catch (err) {
+      console.error('Errore CoinGecko:', err);
+      setError(err instanceof Error ? err.message : 'Errore sconosciuto');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const fetchBybitData = async () => {
     try {
@@ -133,6 +198,63 @@ const App: React.FC = () => {
     }
   };
 
+  const fetchCoinCapData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Test connessione backend
+      const testResponse = await fetch('http://localhost:5000/api/test');
+      if (!testResponse.ok) {
+        throw new Error('Backend non disponibile');
+      }
+
+      const limit = 1000; // Binance può gestire grandi dataset
+
+      // Recupera dati da Binance tramite il nostro backend
+      const response = await fetch(
+        `http://localhost:5000/api/coincap/kline?symbol=${selectedSymbol}&interval=${selectedInterval}&limit=${limit}`
+      );
+
+      if (!response.ok) {
+        throw new Error('Errore nel recupero dati Binance');
+      }
+
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Errore API Binance');
+      }
+
+      console.log(`✅ Binance: Retrieved ${result.data.length} candlesticks`);
+
+      // Convertiamo i dati per il grafico - assicuriamoci che i valori siano numeri
+      const chartData: ChartData[] = result.data.map((kline: any) => {
+        const date = new Date(kline.openTime);
+        return {
+          time: date.toLocaleDateString(),
+          timestamp: kline.openTime,
+          open: parseFloat(kline.open) || 0,
+          high: parseFloat(kline.high) || 0,
+          low: parseFloat(kline.low) || 0,
+          close: parseFloat(kline.close) || 0,
+          volume: parseFloat(kline.volume) || 0,
+          formattedTime: formatTimeByInterval(date, selectedInterval)
+        };
+      });
+
+      setChartData(chartData);
+      setBtcPrice(chartData[chartData.length - 1]?.close || 0);
+      setLastUpdate(new Date());
+      setError(null);
+      
+    } catch (err) {
+      console.error('Errore Binance:', err);
+      setError(err instanceof Error ? err.message : 'Errore sconosciuto');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const calculateChange = () => {
     if (chartData.length < 2) return { value: 0, percentage: 0 };
     
@@ -158,7 +280,10 @@ const App: React.FC = () => {
       <main className="app-main">
         <div className="dashboard">
           <div className="price-card">
-            <h2>{selectedSymbol} via Bybit</h2>
+            <h2>{selectedSymbol} via {
+              selectedProvider === 'coincap' ? 'Binance (100% Free)' : 
+              selectedProvider === 'coingecko' ? 'CoinGecko (Free)' : 'Bybit'
+            }</h2>
             <div className="symbol-selector">
               <select 
                 value={selectedSymbol} 
@@ -183,6 +308,15 @@ const App: React.FC = () => {
                 <option value="15">⚡ 15 Minutes (15m)</option>
                 <option value="5">🚀 5 Minutes (5m)</option>
                 <option value="1">💨 1 Minute (1m)</option>
+              </select>
+              <select 
+                value={selectedProvider} 
+                onChange={(e) => setSelectedProvider(e.target.value as 'bybit' | 'coingecko' | 'coincap')}
+                disabled={isLoading}
+              >
+                <option value="coincap">� Binance (100% Free)</option>
+                <option value="coingecko">🆓 CoinGecko (Free)</option>
+                <option value="bybit">⚡ Bybit (API Key)</option>
               </select>
             </div>
             <div className="price">
@@ -211,9 +345,12 @@ const App: React.FC = () => {
                 selectedInterval === '240' ? '4H' : 
                 selectedInterval === '60' ? '1H' : 
                 selectedInterval === '15' ? '15m' :
-                selectedInterval === '5' ? '5m' : '1m'} - Bybit Data</h3>
+                selectedInterval === '5' ? '5m' : '1m'} - {
+                  selectedProvider === 'coincap' ? 'Binance' :
+                  selectedProvider === 'coingecko' ? 'CoinGecko' : 'Bybit'
+                } Data</h3>
               <div className="chart-controls">
-                <button onClick={fetchBybitData} className="refresh-btn" disabled={isLoading}>
+                <button onClick={fetchData} className="refresh-btn" disabled={isLoading}>
                   🔄 Aggiorna
                 </button>
                 <div className="zoom-controls">
@@ -276,11 +413,15 @@ const App: React.FC = () => {
             <div className="features">
               <h4>🎯 Funzionalità</h4>
               <ul>
-                <li>✅ Dati real-time Bybit</li>
+                <li>✅ Dati real-time {
+                  selectedProvider === 'coincap' ? 'Binance (100% Free)' :
+                  selectedProvider === 'coingecko' ? 'CoinGecko (Free)' : 'Bybit (API)'
+                }</li>
                 <li>✅ Grafico a candele</li>
                 <li>✅ Selezione simbolo</li>
                 <li>✅ Timeframe multipli</li>
-                <li>✅ Backend API Python</li>
+                <li>✅ Selezione Data Provider</li>
+                <li>✅ Backend API Multi-source</li>
                 <li>🔄 WebSocket live</li>
                 <li>🔄 Indicatori tecnici</li>
               </ul>
