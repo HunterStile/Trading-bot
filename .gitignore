@@ -2,6 +2,14 @@
 .env
 config.py
 screenshots/
+node_modules
+
+# Chart Trading - solo node_modules e build files
+ChartTrading/**/node_modules/
+ChartTrading/**/dist/
+ChartTrading/**/build/
+ChartTrading/**/.env
+ChartTrading/**/*.log
 
 # Cache Python
 __pycache__/

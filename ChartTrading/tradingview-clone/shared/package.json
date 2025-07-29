@@ -1,0 +1,27 @@
+{
+  "name": "tradingview-clone-shared",
+  "version": "1.0.0",
+  "description": "Shared code for the TradingView clone project",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "dependencies": {
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "typescript": "^4.5.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/tradingview-clone.git"
+  },
+  "keywords": [
+    "trading",
+    "charting",
+    "financial",
+    "indicators"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}

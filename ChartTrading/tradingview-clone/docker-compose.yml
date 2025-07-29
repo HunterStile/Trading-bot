@@ -1,0 +1,34 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+    environment:
+      - NODE_ENV=development
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: ./ChartTrading/tradingview-clone/backend/Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend/src:/app/src
+      - ./shared:/app/shared
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=mongodb://mongo:27017/tradingview_clone
+
+  mongo:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+volumes:
+  mongo_data:
