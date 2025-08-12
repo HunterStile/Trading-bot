@@ -135,3 +135,6 @@ Thumbs.db
 
 # File di configurazione locale
 local_config.py
+
+
+trading_data.db

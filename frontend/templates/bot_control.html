@@ -226,13 +226,56 @@ function setupEventListeners() {
     
     // Socket events
     socket.on('bot_update', function(data) {
-        addLog(`[${new Date().toLocaleTimeString()}] ${data.message}`, 'info');
+        // Log dettagliato del bot update
+        const time = new Date().toLocaleTimeString();
+        let message = data.message;
+        
+        // Aggiungi informazioni extra se disponibili
+        if (data.price) {
+            message += ` - Prezzo: $${data.price}`;
+        }
+        if (data.ema_value) {
+            message += ` - EMA: $${data.ema_value.toFixed(4)}`;
+        }
+        if (data.active_trades > 0) {
+            message += ` - Trade attivi: ${data.active_trades}`;
+        }
+        
+        addLog(`[${time}] ${message}`, 'info');
         updateBotStatus(data.status === 'running');
     });
     
     socket.on('bot_error', function(data) {
         addLog(`[${new Date().toLocaleTimeString()}] ERRORE: ${data.error}`, 'error');
         updateBotStatus(false);
+    });
+    
+    // Nuovo evento per log dettagliati di analisi
+    socket.on('analysis_log', function(data) {
+        const time = new Date().toLocaleTimeString();
+        addLog(`[${time}] ${data.message}`, data.type || 'info');
+    });
+    
+    // Evento per notifiche trade
+    socket.on('trade_notification', function(data) {
+        const time = new Date().toLocaleTimeString();
+        const side = data.side || 'UNKNOWN';
+        const symbol = data.symbol || '';
+        const price = data.price ? `$${data.price}` : '';
+        
+        let message = '';
+        if (data.type === 'POSITION_OPENED') {
+            message = `🚀 POSIZIONE ${side} APERTA - ${symbol} @ ${price}`;
+        } else if (data.type === 'POSITION_CLOSED') {
+            message = `✅ POSIZIONE ${side} CHIUSA - ${symbol} @ ${price}`;
+        } else {
+            message = `📢 ${data.type}: ${side} ${symbol} @ ${price}`;
+        }
+        
+        addLog(`[${time}] ${message}`, 'success');
+        
+        // Mostra anche come notifica
+        showAlert(message, 'success');
     });
 }
 
@@ -414,34 +457,44 @@ function updateBotStatus(isRunning) {
 function addLog(message, type = 'info') {
     const logsContainer = document.getElementById('bot-logs');
     const logEntry = document.createElement('div');
+    logEntry.className = 'log-entry mb-1';
     
     let color = '#ffffff';
+    let icon = '';
     switch (type) {
         case 'success':
             color = '#22c55e';
+            icon = '✅';
             break;
         case 'error':
             color = '#ef4444';
+            icon = '❌';
             break;
         case 'warning':
             color = '#f59e0b';
+            icon = '⚠️';
             break;
         case 'info':
             color = '#3b82f6';
+            icon = '🔵';
             break;
     }
     
     logEntry.style.color = color;
-    logEntry.textContent = message;
+    logEntry.innerHTML = `<span style="opacity: 0.7;">${icon}</span> ${message}`;
     
     logsContainer.appendChild(logEntry);
+    
+    // Auto-scroll al bottom
     logsContainer.scrollTop = logsContainer.scrollHeight;
     
-    // Mantieni solo gli ultimi 100 log
-    while (logsContainer.children.length > 100) {
-        logsContainer.removeChild(logsContainer.firstChild);
+    // Limita il numero di log (mantieni solo gli ultimi 100)
+    const logEntries = logsContainer.querySelectorAll('.log-entry');
+    if (logEntries.length > 100) {
+        logEntries[0].remove();
     }
 }
+
 
 // Pulisci log
 function clearLogs() {

@@ -1,9 +1,10 @@
 @echo off
-title Trading Bot Dashboard
+title Trading Bot Dashboard v2.0 - Con Storico
 echo.
-echo ========================================
-echo      TRADING BOT DASHBOARD
-echo ========================================
+echo ===============================================
+echo     🤖 TRADING BOT DASHBOARD v2.0
+echo     Con Sistema di Storico Completo!
+echo ===============================================
 echo.
 
 cd /d "%~dp0"

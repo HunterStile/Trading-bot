@@ -1,0 +1,776 @@
+{% extends "base.html" %}
+
+{% block title %}Storico Trading - Trading Bot Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header con filtri -->
+    <div class="row mb-4">
+        <div class="col-lg-8">
+            <h2 class="text-gradient-primary mb-0">📊 Storico Trading</h2>
+            <p class="text-muted">Analizza le performance e lo storico delle operazioni</p>
+        </div>
+        <div class="col-lg-4 text-end">
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-primary" onclick="exportData()">
+                    <i class="fas fa-download me-1"></i>Esporta Dati
+                </button>
+                <button type="button" class="btn btn-outline-info" onclick="refreshData()">
+                    <i class="fas fa-sync me-1"></i>Aggiorna
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiche Performance -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card glass-card h-100">
+                <div class="card-body text-center">
+                    <div class="icon-box bg-gradient-success mb-3">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <h5 class="text-white mb-2">PnL Totale</h5>
+                    <h3 class="text-gradient-success mb-0" id="total-pnl">$0.00</h3>
+                    <small class="text-muted">Ultimi 30 giorni</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card glass-card h-100">
+                <div class="card-body text-center">
+                    <div class="icon-box bg-gradient-info mb-3">
+                        <i class="fas fa-exchange-alt"></i>
+                    </div>
+                    <h5 class="text-white mb-2">Trade Totali</h5>
+                    <h3 class="text-gradient-info mb-0" id="total-trades">0</h3>
+                    <small class="text-muted">Operazioni eseguite</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card glass-card h-100">
+                <div class="card-body text-center">
+                    <div class="icon-box bg-gradient-warning mb-3">
+                        <i class="fas fa-percentage"></i>
+                    </div>
+                    <h5 class="text-white mb-2">Win Rate</h5>
+                    <h3 class="text-gradient-warning mb-0" id="win-rate">0%</h3>
+                    <small class="text-muted">Percentuale vincite</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card glass-card h-100">
+                <div class="card-body text-center">
+                    <div class="icon-box bg-gradient-danger mb-3">
+                        <i class="fas fa-arrow-down"></i>
+                    </div>
+                    <h5 class="text-white mb-2">Max Loss</h5>
+                    <h3 class="text-gradient-danger mb-0" id="max-loss">$0.00</h3>
+                    <small class="text-muted">Perdita massima</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Grafici Performance -->
+    <div class="row mb-4">
+        <div class="col-lg-8 mb-4">
+            <div class="card glass-card">
+                <div class="card-header border-0 pb-0">
+                    <h6 class="text-white mb-0">📈 Performance Giornaliera</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="performanceChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 mb-4">
+            <div class="card glass-card">
+                <div class="card-header border-0 pb-0">
+                    <h6 class="text-white mb-0">🎯 Distribuzione Trade</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="tradesChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card glass-card">
+                <div class="card-header border-0 pb-0">
+                    <ul class="nav nav-tabs card-header-tabs" id="historyTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="sessions-tab" data-bs-toggle="tab" 
+                                    data-bs-target="#sessions" type="button" role="tab">
+                                <i class="fas fa-play-circle me-1"></i>Sessioni
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="trades-tab" data-bs-toggle="tab" 
+                                    data-bs-target="#trades" type="button" role="tab">
+                                <i class="fas fa-exchange-alt me-1"></i>Trade
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="events-tab" data-bs-toggle="tab" 
+                                    data-bs-target="#events" type="button" role="tab">
+                                <i class="fas fa-list me-1"></i>Eventi
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body">
+                    <div class="tab-content" id="historyTabsContent">
+                        <!-- Sessioni Tab -->
+                        <div class="tab-pane fade show active" id="sessions" role="tabpanel">
+                            <div class="table-responsive">
+                                <table class="table table-dark table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th><i class="fas fa-clock me-1"></i>Inizio</th>
+                                            <th><i class="fas fa-coins me-1"></i>Simbolo</th>
+                                            <th><i class="fas fa-chart-line me-1"></i>Trade</th>
+                                            <th><i class="fas fa-trophy me-1"></i>Vincenti</th>
+                                            <th><i class="fas fa-dollar-sign me-1"></i>PnL</th>
+                                            <th><i class="fas fa-info-circle me-1"></i>Stato</th>
+                                            <th><i class="fas fa-cogs me-1"></i>Azioni</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sessions-table">
+                                        <tr>
+                                            <td colspan="7" class="text-center text-muted">
+                                                <i class="fas fa-spinner fa-spin me-2"></i>Caricamento sessioni...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Trade Tab -->
+                        <div class="tab-pane fade" id="trades" role="tabpanel">
+                            <div class="mb-3">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <select class="form-select bg-dark text-white" id="session-filter">
+                                            <option value="">Tutte le sessioni</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <select class="form-select bg-dark text-white" id="status-filter">
+                                            <option value="">Tutti gli stati</option>
+                                            <option value="OPEN">Aperti</option>
+                                            <option value="CLOSED">Chiusi</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-dark table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th><i class="fas fa-clock me-1"></i>Ora</th>
+                                            <th><i class="fas fa-coins me-1"></i>Simbolo</th>
+                                            <th><i class="fas fa-arrows-alt-h me-1"></i>Tipo</th>
+                                            <th><i class="fas fa-chart-line me-1"></i>Entrata</th>
+                                            <th><i class="fas fa-chart-line me-1"></i>Uscita</th>
+                                            <th><i class="fas fa-dollar-sign me-1"></i>PnL</th>
+                                            <th><i class="fas fa-info-circle me-1"></i>Stato</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="trades-table">
+                                        <tr>
+                                            <td colspan="7" class="text-center text-muted">
+                                                <i class="fas fa-spinner fa-spin me-2"></i>Caricamento trade...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Eventi Tab -->
+                        <div class="tab-pane fade" id="events" role="tabpanel">
+                            <div class="mb-3">
+                                <select class="form-select bg-dark text-white" id="event-type-filter">
+                                    <option value="">Tutti i tipi</option>
+                                    <option value="TRADING">Trading</option>
+                                    <option value="SYSTEM">Sistema</option>
+                                    <option value="ERROR">Errori</option>
+                                </select>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-dark table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th><i class="fas fa-clock me-1"></i>Timestamp</th>
+                                            <th><i class="fas fa-tag me-1"></i>Tipo</th>
+                                            <th><i class="fas fa-layer-group me-1"></i>Categoria</th>
+                                            <th><i class="fas fa-comment me-1"></i>Messaggio</th>
+                                            <th><i class="fas fa-exclamation-triangle me-1"></i>Severità</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="events-table">
+                                        <tr>
+                                            <td colspan="5" class="text-center text-muted">
+                                                <i class="fas fa-spinner fa-spin me-2"></i>Caricamento eventi...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Dettagli Sessione -->
+<div class="modal fade" id="sessionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title text-white">Dettagli Sessione</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="session-details">
+                <!-- Contenuto dinamico -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Variabili globali
+let performanceChart = null;
+let tradesChart = null;
+let historyData = {
+    sessions: [],
+    trades: [],
+    events: [],
+    performance: {}
+};
+
+// Inizializzazione
+$(document).ready(function() {
+    loadHistoryData();
+    setupEventListeners();
+    
+    // Auto-refresh ogni 30 secondi
+    setInterval(refreshData, 30000);
+});
+
+function setupEventListeners() {
+    // Filtri
+    $('#session-filter').change(filterTrades);
+    $('#status-filter').change(filterTrades);
+    $('#event-type-filter').change(filterEvents);
+    
+    // Tab change
+    $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
+        if (e.target.id === 'trades-tab') {
+            loadTrades();
+        } else if (e.target.id === 'events-tab') {
+            loadEvents();
+        }
+    });
+}
+
+async function loadHistoryData() {
+    try {
+        // Carica statistiche performance
+        const perfResponse = await fetch('/api/history/performance?days=30');
+        const perfData = await perfResponse.json();
+        
+        if (perfData.success) {
+            updatePerformanceStats(perfData.data);
+        }
+        
+        // Carica performance giornaliera
+        const dailyResponse = await fetch('/api/history/daily-performance?days=30');
+        const dailyData = await dailyResponse.json();
+        
+        if (dailyData.success) {
+            updatePerformanceChart(dailyData.data);
+        }
+        
+        // Carica sessioni
+        loadSessions();
+        
+    } catch (error) {
+        console.error('Errore nel caricamento dati:', error);
+        showAlert('Errore nel caricamento dei dati storici', 'danger');
+    }
+}
+
+function updatePerformanceStats(stats) {
+    $('#total-pnl').text(`$${stats.total_pnl?.toFixed(2) || '0.00'}`);
+    $('#total-trades').text(stats.total_trades || 0);
+    $('#win-rate').text(`${stats.win_rate?.toFixed(1) || 0}%`);
+    $('#max-loss').text(`$${Math.abs(stats.max_loss)?.toFixed(2) || '0.00'}`);
+    
+    // Aggiorna colori in base al PnL
+    const pnlElement = $('#total-pnl');
+    if (stats.total_pnl > 0) {
+        pnlElement.removeClass('text-gradient-danger').addClass('text-gradient-success');
+    } else if (stats.total_pnl < 0) {
+        pnlElement.removeClass('text-gradient-success').addClass('text-gradient-danger');
+    }
+}
+
+function updatePerformanceChart(dailyData) {
+    const ctx = document.getElementById('performanceChart').getContext('2d');
+    
+    if (performanceChart) {
+        performanceChart.destroy();
+    }
+    
+    const labels = dailyData.map(d => new Date(d.date).toLocaleDateString());
+    const pnlData = dailyData.map(d => d.daily_pnl || 0);
+    const cumulativePnl = [];
+    let cumulative = 0;
+    
+    pnlData.forEach(pnl => {
+        cumulative += pnl;
+        cumulativePnl.push(cumulative);
+    });
+    
+    performanceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'PnL Giornaliero',
+                    data: pnlData,
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    borderWidth: 2,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'PnL Cumulativo',
+                    data: cumulativePnl,
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    borderWidth: 2,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    ticks: { color: '#fff' },
+                    grid: { color: 'rgba(255,255,255,0.1)' }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    ticks: { color: '#fff' },
+                    grid: { color: 'rgba(255,255,255,0.1)' }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    ticks: { color: '#fff' },
+                    grid: { drawOnChartArea: false }
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: { color: '#fff' }
+                }
+            }
+        }
+    });
+    
+    // Grafico a torta per i trade
+    updateTradesChart(dailyData);
+}
+
+function updateTradesChart(dailyData) {
+    const ctx = document.getElementById('tradesChart').getContext('2d');
+    
+    if (tradesChart) {
+        tradesChart.destroy();
+    }
+    
+    const totalWins = dailyData.reduce((sum, d) => sum + (d.wins || 0), 0);
+    const totalTrades = dailyData.reduce((sum, d) => sum + (d.trades || 0), 0);
+    const totalLosses = totalTrades - totalWins;
+    
+    tradesChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Vincenti', 'Perdenti'],
+            datasets: [{
+                data: [totalWins, totalLosses],
+                backgroundColor: [
+                    'rgba(40, 167, 69, 0.8)',
+                    'rgba(220, 53, 69, 0.8)'
+                ],
+                borderColor: [
+                    'rgba(40, 167, 69, 1)',
+                    'rgba(220, 53, 69, 1)'
+                ],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: { color: '#fff' }
+                }
+            }
+        }
+    });
+}
+
+async function loadSessions() {
+    try {
+        const response = await fetch('/api/history/sessions?limit=50');
+        const data = await response.json();
+        
+        if (data.success) {
+            historyData.sessions = data.data;
+            renderSessionsTable(data.data);
+            updateSessionFilter(data.data);
+        }
+    } catch (error) {
+        console.error('Errore nel caricamento sessioni:', error);
+    }
+}
+
+function renderSessionsTable(sessions) {
+    const tbody = $('#sessions-table');
+    tbody.empty();
+    
+    if (sessions.length === 0) {
+        tbody.html(`
+            <tr>
+                <td colspan="7" class="text-center text-muted">
+                    <i class="fas fa-inbox me-2"></i>Nessuna sessione trovata
+                </td>
+            </tr>
+        `);
+        return;
+    }
+    
+    sessions.forEach(session => {
+        const startTime = new Date(session.start_time).toLocaleString();
+        const statusBadge = getStatusBadge(session.status);
+        const pnlClass = session.total_pnl >= 0 ? 'text-success' : 'text-danger';
+        
+        tbody.append(`
+            <tr>
+                <td>
+                    <small class="text-muted">${startTime}</small>
+                </td>
+                <td>
+                    <span class="badge bg-info">${session.symbol}</span>
+                </td>
+                <td>
+                    <span class="badge bg-secondary">${session.total_trades || 0}</span>
+                </td>
+                <td>
+                    <span class="badge bg-success">${session.winning_trades || 0}</span>
+                </td>
+                <td>
+                    <span class="${pnlClass}">$${(session.total_pnl || 0).toFixed(2)}</span>
+                </td>
+                <td>${statusBadge}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-info" onclick="showSessionDetails('${session.session_id}')">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </td>
+            </tr>
+        `);
+    });
+}
+
+function getStatusBadge(status) {
+    const badges = {
+        'ACTIVE': '<span class="badge bg-success pulse">Attiva</span>',
+        'COMPLETED': '<span class="badge bg-secondary">Completata</span>',
+        'STOPPED': '<span class="badge bg-warning">Fermata</span>',
+        'ERROR': '<span class="badge bg-danger">Errore</span>'
+    };
+    return badges[status] || `<span class="badge bg-secondary">${status}</span>`;
+}
+
+async function showSessionDetails(sessionId) {
+    try {
+        // Carica dettagli sessione
+        const sessionResponse = await fetch(`/api/history/trades?session_id=${sessionId}`);
+        const tradesData = await sessionResponse.json();
+        
+        if (tradesData.success) {
+            const session = historyData.sessions.find(s => s.session_id === sessionId);
+            renderSessionModal(session, tradesData.data);
+            $('#sessionModal').modal('show');
+        }
+    } catch (error) {
+        console.error('Errore nel caricamento dettagli:', error);
+    }
+}
+
+function renderSessionModal(session, trades) {
+    const details = $('#session-details');
+    const config = session.strategy_config || {};
+    
+    details.html(`
+        <div class="row">
+            <div class="col-md-6">
+                <h6 class="text-gradient-primary">Informazioni Sessione</h6>
+                <ul class="list-unstyled">
+                    <li><strong>ID:</strong> ${session.session_id}</li>
+                    <li><strong>Simbolo:</strong> ${session.symbol}</li>
+                    <li><strong>Inizio:</strong> ${new Date(session.start_time).toLocaleString()}</li>
+                    <li><strong>Fine:</strong> ${session.end_time ? new Date(session.end_time).toLocaleString() : 'In corso'}</li>
+                    <li><strong>Stato:</strong> ${getStatusBadge(session.status)}</li>
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <h6 class="text-gradient-primary">Performance</h6>
+                <ul class="list-unstyled">
+                    <li><strong>Trade Totali:</strong> ${session.total_trades || 0}</li>
+                    <li><strong>Vincenti:</strong> ${session.winning_trades || 0}</li>
+                    <li><strong>Perdenti:</strong> ${session.losing_trades || 0}</li>
+                    <li><strong>PnL Totale:</strong> <span class="${session.total_pnl >= 0 ? 'text-success' : 'text-danger'}">$${(session.total_pnl || 0).toFixed(2)}</span></li>
+                    <li><strong>Saldo Iniziale:</strong> $${(session.initial_balance || 0).toFixed(2)}</li>
+                </ul>
+            </div>
+        </div>
+        <hr class="border-secondary">
+        <h6 class="text-gradient-primary">Configurazione Strategia</h6>
+        <pre class="bg-secondary p-3 rounded"><code>${JSON.stringify(config, null, 2)}</code></pre>
+        <hr class="border-secondary">
+        <h6 class="text-gradient-primary">Trade della Sessione (${trades.length})</h6>
+        <div class="table-responsive">
+            <table class="table table-sm table-dark">
+                <thead>
+                    <tr>
+                        <th>Tipo</th>
+                        <th>Entrata</th>
+                        <th>Uscita</th>
+                        <th>Quantità</th>
+                        <th>PnL</th>
+                        <th>Stato</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${trades.map(trade => `
+                        <tr>
+                            <td><span class="badge ${trade.side === 'BUY' ? 'bg-success' : 'bg-danger'}">${trade.side}</span></td>
+                            <td>$${(trade.entry_price || 0).toFixed(4)}</td>
+                            <td>${trade.exit_price ? '$' + trade.exit_price.toFixed(4) : '-'}</td>
+                            <td>${trade.quantity}</td>
+                            <td class="${trade.pnl >= 0 ? 'text-success' : 'text-danger'}">${trade.pnl ? '$' + trade.pnl.toFixed(2) : '-'}</td>
+                            <td><span class="badge ${trade.status === 'OPEN' ? 'bg-warning' : 'bg-secondary'}">${trade.status}</span></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `);
+}
+
+async function loadTrades() {
+    try {
+        const sessionId = $('#session-filter').val();
+        const status = $('#status-filter').val();
+        
+        let url = '/api/history/trades?limit=100';
+        if (sessionId) url += `&session_id=${sessionId}`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success) {
+            historyData.trades = data.data;
+            renderTradesTable(data.data, status);
+        }
+    } catch (error) {
+        console.error('Errore nel caricamento trade:', error);
+    }
+}
+
+function renderTradesTable(trades, statusFilter = '') {
+    const tbody = $('#trades-table');
+    tbody.empty();
+    
+    // Applica filtro stato
+    const filteredTrades = statusFilter ? 
+        trades.filter(trade => trade.status === statusFilter) : trades;
+    
+    if (filteredTrades.length === 0) {
+        tbody.html(`
+            <tr>
+                <td colspan="7" class="text-center text-muted">
+                    <i class="fas fa-inbox me-2"></i>Nessun trade trovato
+                </td>
+            </tr>
+        `);
+        return;
+    }
+    
+    filteredTrades.forEach(trade => {
+        const entryTime = new Date(trade.entry_time).toLocaleString();
+        const exitTime = trade.exit_time ? new Date(trade.exit_time).toLocaleString() : '-';
+        const sideBadge = trade.side === 'BUY' ? 
+            '<span class="badge bg-success">LONG</span>' : 
+            '<span class="badge bg-danger">SHORT</span>';
+        const statusBadge = trade.status === 'OPEN' ? 
+            '<span class="badge bg-warning">Aperto</span>' : 
+            '<span class="badge bg-secondary">Chiuso</span>';
+        const pnlClass = trade.pnl >= 0 ? 'text-success' : 'text-danger';
+        
+        tbody.append(`
+            <tr>
+                <td><small class="text-muted">${entryTime}</small></td>
+                <td><span class="badge bg-info">${trade.symbol}</span></td>
+                <td>${sideBadge}</td>
+                <td>$${(trade.entry_price || 0).toFixed(4)}</td>
+                <td>${trade.exit_price ? '$' + trade.exit_price.toFixed(4) : '-'}</td>
+                <td><span class="${pnlClass}">${trade.pnl ? '$' + trade.pnl.toFixed(2) : '-'}</span></td>
+                <td>${statusBadge}</td>
+            </tr>
+        `);
+    });
+}
+
+function updateSessionFilter(sessions) {
+    const select = $('#session-filter');
+    select.find('option:not(:first)').remove();
+    
+    sessions.forEach(session => {
+        select.append(`<option value="${session.session_id}">${session.session_id} (${session.symbol})</option>`);
+    });
+}
+
+function filterTrades() {
+    loadTrades();
+}
+
+async function loadEvents() {
+    try {
+        const response = await fetch('/api/history/events?limit=100');
+        const data = await response.json();
+        
+        if (data.success) {
+            historyData.events = data.data;
+            renderEventsTable(data.data);
+        }
+    } catch (error) {
+        console.error('Errore nel caricamento eventi:', error);
+    }
+}
+
+function renderEventsTable(events) {
+    const tbody = $('#events-table');
+    tbody.empty();
+    
+    // Applica filtro tipo evento
+    const typeFilter = $('#event-type-filter').val();
+    const filteredEvents = typeFilter ? 
+        events.filter(event => event.event_category === typeFilter) : events;
+    
+    if (filteredEvents.length === 0) {
+        tbody.html(`
+            <tr>
+                <td colspan="5" class="text-center text-muted">
+                    <i class="fas fa-inbox me-2"></i>Nessun evento trovato
+                </td>
+            </tr>
+        `);
+        return;
+    }
+    
+    filteredEvents.forEach(event => {
+        const timestamp = new Date(event.timestamp).toLocaleString();
+        const severityBadge = getSeverityBadge(event.severity);
+        
+        tbody.append(`
+            <tr>
+                <td><small class="text-muted">${timestamp}</small></td>
+                <td><span class="badge bg-secondary">${event.event_type}</span></td>
+                <td><span class="badge bg-info">${event.event_category}</span></td>
+                <td>${event.message}</td>
+                <td>${severityBadge}</td>
+            </tr>
+        `);
+    });
+}
+
+function getSeverityBadge(severity) {
+    const badges = {
+        'INFO': '<span class="badge bg-info">Info</span>',
+        'WARNING': '<span class="badge bg-warning">Warning</span>',
+        'ERROR': '<span class="badge bg-danger">Errore</span>',
+        'SUCCESS': '<span class="badge bg-success">Successo</span>'
+    };
+    return badges[severity] || `<span class="badge bg-secondary">${severity}</span>`;
+}
+
+function filterEvents() {
+    renderEventsTable(historyData.events);
+}
+
+async function exportData() {
+    try {
+        showAlert('Esportazione dati in corso...', 'info');
+        
+        const response = await fetch('/api/export/data');
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Dati esportati con successo: ${data.filename}`, 'success');
+        } else {
+            showAlert('Errore nell\'esportazione: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore nell\'esportazione:', error);
+        showAlert('Errore nell\'esportazione dei dati', 'danger');
+    }
+}
+
+function refreshData() {
+    showAlert('Aggiornamento dati...', 'info');
+    loadHistoryData();
+}
+
+function showAlert(message, type) {
+    const alertDiv = $(`
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999;">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `);
+    
+    $('body').append(alertDiv);
+    
+    // Auto-dismiss dopo 5 secondi
+    setTimeout(() => {
+        alertDiv.alert('close');
+    }, 5000);
+}
+</script>
+{% endblock %}
