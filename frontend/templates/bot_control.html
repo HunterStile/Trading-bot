@@ -2,6 +2,57 @@
 
 {% block title %}Controllo Bot - Trading Bot{% endblock %}
 
+{% block extra_css %}
+<style>
+/* Symbol Search Dropdown */
+.position-relative .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 1050;
+    display: none;
+    background-color: var(--bs-dark);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.375rem;
+}
+
+.position-relative .dropdown-menu.show {
+    display: block;
+}
+
+.dropdown-item {
+    color: var(--bs-body-color);
+    padding: 0.5rem 1rem;
+    border: none;
+    background: none;
+}
+
+.dropdown-item:hover {
+    background-color: var(--bs-secondary);
+    color: var(--bs-body-color);
+}
+
+.dropdown-item:focus {
+    background-color: var(--bs-primary);
+    color: white;
+}
+
+/* Symbol search input */
+#symbol-search {
+    background-color: var(--bs-dark);
+    border-color: var(--bs-border-color);
+    color: var(--bs-body-color);
+}
+
+#symbol-search:focus {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    background-color: var(--bs-dark);
+    color: var(--bs-body-color);
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row">
     <div class="col-lg-8">
@@ -71,15 +122,22 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="symbol" class="form-label">Simbolo Trading</label>
-                                <select class="form-select" id="symbol" name="symbol">
-                                    <option value="AVAXUSDT">AVAX/USDT</option>
-                                    <option value="BTCUSDT">BTC/USDT</option>
-                                    <option value="ETHUSDT">ETH/USDT</option>
-                                    <option value="SOLUSDT">SOL/USDT</option>
-                                    <option value="ADAUSDT">ADA/USDT</option>
-                                    <option value="DOTUSDT">DOT/USDT</option>
-                                </select>
+                                <label for="symbol" class="form-label">
+                                    Simbolo Trading
+                                    <button type="button" class="btn btn-link btn-sm p-0 ms-2" 
+                                            data-bs-toggle="modal" data-bs-target="#addSymbolModal">
+                                        <i class="fas fa-plus"></i> Aggiungi
+                                    </button>
+                                </label>
+                                <div class="position-relative">
+                                    <input type="text" class="form-control" id="symbol-search" 
+                                           placeholder="Cerca simbolo..." autocomplete="off">
+                                    <input type="hidden" id="symbol" name="symbol" value="AVAXUSDT">
+                                    <div id="symbol-dropdown" class="dropdown-menu w-100" style="max-height: 200px; overflow-y: auto;"></div>
+                                </div>
+                                <div class="form-text">
+                                    <small id="selected-symbol-info" class="text-muted">Simbolo selezionato: AVAX/USDT</small>
+                                </div>
                             </div>
                             
                             <div class="mb-3">
@@ -515,5 +573,203 @@ function resetSettings() {
     
     showAlert('Impostazioni resettate ai valori di default', 'info');
 }
+
+// ==================== GESTIONE SIMBOLI ====================
+
+let allSymbols = [];
+let currentSymbols = [];
+
+// Carica tutti i simboli
+async function loadSymbols() {
+    try {
+        const response = await fetch('/api/symbols');
+        const data = await response.json();
+        if (data.success) {
+            allSymbols = data.symbols;
+            currentSymbols = allSymbols;
+            updateSymbolDropdown();
+            
+            // Imposta il simbolo corrente se esiste
+            const currentSymbol = document.getElementById('symbol').value;
+            const symbolData = allSymbols.find(s => s.symbol === currentSymbol);
+            if (symbolData) {
+                updateSelectedSymbol(symbolData.symbol, symbolData.name);
+            }
+        }
+    } catch (error) {
+        console.error('Errore nel caricamento simboli:', error);
+    }
+}
+
+// Aggiorna il dropdown dei simboli
+function updateSymbolDropdown() {
+    const dropdown = document.getElementById('symbol-dropdown');
+    dropdown.innerHTML = '';
+    
+    currentSymbols.forEach(symbolData => {
+        const item = document.createElement('a');
+        item.className = 'dropdown-item d-flex justify-content-between';
+        item.href = '#';
+        item.innerHTML = `
+            <span>${symbolData.name}</span>
+            <small class="text-muted">${symbolData.symbol}</small>
+        `;
+        item.onclick = (e) => {
+            e.preventDefault();
+            selectSymbol(symbolData.symbol, symbolData.name);
+        };
+        dropdown.appendChild(item);
+    });
+}
+
+// Seleziona un simbolo
+function selectSymbol(symbol, name) {
+    updateSelectedSymbol(symbol, name);
+    hideSymbolDropdown();
+}
+
+// Aggiorna il simbolo selezionato
+function updateSelectedSymbol(symbol, name) {
+    document.getElementById('symbol').value = symbol;
+    document.getElementById('symbol-search').value = name;
+    document.getElementById('selected-symbol-info').textContent = `Simbolo selezionato: ${name}`;
+}
+
+// Mostra/nasconde dropdown
+function showSymbolDropdown() {
+    document.getElementById('symbol-dropdown').classList.add('show');
+}
+
+function hideSymbolDropdown() {
+    document.getElementById('symbol-dropdown').classList.remove('show');
+}
+
+// Filtra simboli in base alla ricerca
+function filterSymbols(query) {
+    if (!query.trim()) {
+        currentSymbols = allSymbols;
+    } else {
+        const lowerQuery = query.toLowerCase();
+        currentSymbols = allSymbols.filter(s => 
+            s.symbol.toLowerCase().includes(lowerQuery) || 
+            s.name.toLowerCase().includes(lowerQuery)
+        );
+    }
+    updateSymbolDropdown();
+}
+
+// Event listeners per la ricerca simboli
+document.getElementById('symbol-search').addEventListener('input', (e) => {
+    filterSymbols(e.target.value);
+    showSymbolDropdown();
+});
+
+document.getElementById('symbol-search').addEventListener('focus', () => {
+    showSymbolDropdown();
+});
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.position-relative')) {
+        hideSymbolDropdown();
+    }
+});
+
+// Aggiunge un nuovo simbolo
+async function addNewSymbol() {
+    const symbol = document.getElementById('new-symbol').value.trim().toUpperCase();
+    const name = document.getElementById('new-symbol-name').value.trim();
+    
+    if (!symbol || !name) {
+        showAlert('Inserisci sia il simbolo che il nome', 'warning');
+        return;
+    }
+    
+    // Mostra loading
+    const addBtn = document.getElementById('add-symbol-btn');
+    const originalText = addBtn.innerHTML;
+    addBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifica...';
+    addBtn.disabled = true;
+    
+    try {
+        const response = await fetch('/api/symbols/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ symbol, name })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(data.message, 'success');
+            
+            // Ricarica i simboli
+            await loadSymbols();
+            
+            // Chiudi modal
+            bootstrap.Modal.getInstance(document.getElementById('addSymbolModal')).hide();
+            
+            // Reset form
+            document.getElementById('new-symbol').value = '';
+            document.getElementById('new-symbol-name').value = '';
+            
+            // Seleziona il nuovo simbolo
+            selectSymbol(data.symbol.symbol, data.symbol.name);
+        } else {
+            showAlert(data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore nella connessione', 'danger');
+    } finally {
+        addBtn.innerHTML = originalText;
+        addBtn.disabled = false;
+    }
+}
+
+// Inizializza simboli al caricamento
+document.addEventListener('DOMContentLoaded', () => {
+    loadSymbols();
+});
+</script>
+
+<!-- Modal Aggiungi Simbolo -->
+<div class="modal fade" id="addSymbolModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus-circle text-primary me-2"></i>
+                    Aggiungi Nuovo Simbolo
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="new-symbol" class="form-label">Simbolo</label>
+                    <input type="text" class="form-control" id="new-symbol" 
+                           placeholder="es. LINKUSDT" oninput="this.value = this.value.toUpperCase()">
+                    <div class="form-text">Inserisci il simbolo esatto come su Bybit (es. LINKUSDT, MATICUSDT)</div>
+                </div>
+                <div class="mb-3">
+                    <label for="new-symbol-name" class="form-label">Nome Visualizzato</label>
+                    <input type="text" class="form-control" id="new-symbol-name" 
+                           placeholder="es. LINK/USDT">
+                    <div class="form-text">Nome che apparirà nel menu di selezione</div>
+                </div>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Il simbolo verrà verificato su Bybit prima di essere aggiunto
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" id="add-symbol-btn" onclick="addNewSymbol()">
+                    <i class="fas fa-check me-1"></i> Aggiungi Simbolo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 </script>
 {% endblock %}

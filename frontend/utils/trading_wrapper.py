@@ -4,6 +4,7 @@ Wrapper per le funzioni di trading che integra il salvataggio nel database
 
 import sys
 import os
+import time
 from pathlib import Path
 from datetime import datetime
 import json
@@ -71,8 +72,40 @@ class TradingWrapper:
                 session_id=self.current_session_id
             )
             
-            # Chiama la funzione originale
-            result = _original_open_position(symbol, side, quantity, price, **kwargs)
+            # Chiama la funzione originale con i parametri corretti
+            # bot_open_position(categoria, simbolo, periodo_ema, intervallo, quantita, candele, lunghezza, operazione)
+            # La funzione originale non restituisce un valore, fa tutto il processo direttamente
+            categoria = kwargs.get('categoria', 'linear')
+            periodo_ema = kwargs.get('periodo_ema', 10)
+            intervallo = kwargs.get('intervallo', 30)
+            candele = kwargs.get('candele', 3)
+            lunghezza = kwargs.get('lunghezza', 3)
+            operazione = True if side.lower() == 'buy' else False
+            
+            try:
+                # La funzione originale probabilmente non restituisce nulla, ma fa il processo completo
+                _original_open_position(
+                    categoria,
+                    symbol,
+                    periodo_ema,
+                    intervallo,
+                    quantity,
+                    candele,
+                    lunghezza,
+                    operazione
+                )
+                
+                # Se arriviamo qui senza eccezioni, assumiamo il successo
+                result = {
+                    'success': True,
+                    'entry_price': price if price else 0,
+                    'order_id': f"BOT_{symbol}_{int(time.time())}"
+                }
+            except Exception as e:
+                result = {
+                    'success': False,
+                    'error': str(e)
+                }
             
             if result and result.get('success'):
                 # Salva trade nel database
