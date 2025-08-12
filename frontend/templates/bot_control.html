@@ -1,0 +1,466 @@
+{% extends "base.html" %}
+
+{% block title %}Controllo Bot - Trading Bot{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Bot Control Panel -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">🤖 Pannello di Controllo Bot</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center mb-3">
+                            <div id="bot-status-indicator" class="status-indicator status-offline me-3"></div>
+                            <div>
+                                <h6 class="mb-0">Stato Bot</h6>
+                                <small class="text-muted" id="bot-status-text">Offline</small>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex">
+                            <button class="btn btn-success" id="start-bot-btn" onclick="startBot()">
+                                <i class="fas fa-play"></i> Avvia Bot
+                            </button>
+                            <button class="btn btn-danger" id="stop-bot-btn" onclick="stopBot()" disabled>
+                                <i class="fas fa-stop"></i> Ferma Bot
+                            </button>
+                            <button class="btn btn-warning" onclick="restartBot()">
+                                <i class="fas fa-redo"></i> Riavvia
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h6>📊 Statistiche Sessione</h6>
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="border rounded p-2">
+                                    <div class="fw-bold" id="trades-count">0</div>
+                                    <small class="text-muted">Trades</small>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="border rounded p-2">
+                                    <div class="fw-bold text-success" id="profit-trades">0</div>
+                                    <small class="text-muted">Profitti</small>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="border rounded p-2">
+                                    <div class="fw-bold text-danger" id="loss-trades">0</div>
+                                    <small class="text-muted">Perdite</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Bot Settings -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">⚙️ Configurazione Bot</h5>
+            </div>
+            <div class="card-body">
+                <form id="bot-settings-form">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="symbol" class="form-label">Simbolo Trading</label>
+                                <select class="form-select" id="symbol" name="symbol">
+                                    <option value="AVAXUSDT">AVAX/USDT</option>
+                                    <option value="BTCUSDT">BTC/USDT</option>
+                                    <option value="ETHUSDT">ETH/USDT</option>
+                                    <option value="SOLUSDT">SOL/USDT</option>
+                                    <option value="ADAUSDT">ADA/USDT</option>
+                                    <option value="DOTUSDT">DOT/USDT</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="quantity" class="form-label">Quantità (USDT)</label>
+                                <input type="number" class="form-control" id="quantity" name="quantity" 
+                                       value="50" min="10" step="10">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="operation" class="form-label">Tipo Operazione</label>
+                                <select class="form-select" id="operation" name="operation">
+                                    <option value="true">Long (Buy)</option>
+                                    <option value="false">Short (Sell)</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="ema_period" class="form-label">Periodo EMA</label>
+                                <input type="number" class="form-control" id="ema_period" name="ema_period" 
+                                       value="10" min="5" max="200">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="interval" class="form-label">Intervallo (minuti)</label>
+                                <select class="form-select" id="interval" name="interval">
+                                    <option value="1">1 minuto</option>
+                                    <option value="5">5 minuti</option>
+                                    <option value="15">15 minuti</option>
+                                    <option value="30" selected>30 minuti</option>
+                                    <option value="60">1 ora</option>
+                                    <option value="240">4 ore</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="open_candles" class="form-label">Candele per Apertura</label>
+                                <input type="number" class="form-control" id="open_candles" name="open_candles" 
+                                       value="3" min="1" max="10">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="stop_candles" class="form-label">Candele per Stop</label>
+                                <input type="number" class="form-control" id="stop_candles" name="stop_candles" 
+                                       value="3" min="1" max="10">
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="distance" class="form-label">Distanza EMA (%)</label>
+                                <input type="number" class="form-control" id="distance" name="distance" 
+                                       value="1" min="0.1" max="10" step="0.1">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Salva Configurazione
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="resetSettings()">
+                            <i class="fas fa-undo"></i> Reset Default
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Active Positions -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">📈 Posizioni Attive</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Simbolo</th>
+                                <th>Tipo</th>
+                                <th>Quantità</th>
+                                <th>Prezzo Entrata</th>
+                                <th>Prezzo Corrente</th>
+                                <th>PnL</th>
+                                <th>Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="active-positions">
+                            <tr>
+                                <td colspan="7" class="text-center text-muted">
+                                    Nessuna posizione attiva
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Log Panel -->
+    <div class="col-lg-4">
+        <div class="card" style="height: 600px;">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">📝 Log Bot</h5>
+                <button class="btn btn-outline-secondary btn-sm" onclick="clearLogs()">
+                    <i class="fas fa-trash"></i> Pulisci
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div id="bot-logs" style="height: 540px; overflow-y: auto; font-family: monospace; font-size: 0.875rem; padding: 15px; background-color: #1e1e1e; color: #fff;">
+                    <div class="text-muted">In attesa di attività del bot...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let botRunning = false;
+
+// Inizializza la pagina
+document.addEventListener('DOMContentLoaded', function() {
+    loadBotStatus();
+    loadSettings();
+    setupEventListeners();
+});
+
+// Setup event listeners
+function setupEventListeners() {
+    // Form submission
+    document.getElementById('bot-settings-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveSettings();
+    });
+    
+    // Socket events
+    socket.on('bot_update', function(data) {
+        addLog(`[${new Date().toLocaleTimeString()}] ${data.message}`, 'info');
+        updateBotStatus(data.status === 'running');
+    });
+    
+    socket.on('bot_error', function(data) {
+        addLog(`[${new Date().toLocaleTimeString()}] ERRORE: ${data.error}`, 'error');
+        updateBotStatus(false);
+    });
+}
+
+// Carica lo stato del bot
+function loadBotStatus() {
+    fetch('/api/bot/status')
+        .then(response => response.json())
+        .then(data => {
+            updateBotStatus(data.running);
+            botRunning = data.running;
+        })
+        .catch(error => {
+            console.error('Errore caricamento stato bot:', error);
+        });
+}
+
+// Carica le impostazioni
+function loadSettings() {
+    fetch('/api/bot/status')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('symbol').value = data.symbol || 'AVAXUSDT';
+            document.getElementById('quantity').value = data.quantity || 50;
+            document.getElementById('operation').value = data.operation || true;
+            document.getElementById('ema_period').value = data.ema_period || 10;
+            document.getElementById('interval').value = data.interval || 30;
+            document.getElementById('open_candles').value = data.open_candles || 3;
+            document.getElementById('stop_candles').value = data.stop_candles || 3;
+            document.getElementById('distance').value = data.distance || 1;
+        })
+        .catch(error => {
+            console.error('Errore caricamento impostazioni:', error);
+        });
+}
+
+// Salva le impostazioni
+function saveSettings() {
+    const formData = new FormData(document.getElementById('bot-settings-form'));
+    const settings = {};
+    
+    for (let [key, value] of formData.entries()) {
+        if (key === 'operation') {
+            settings[key] = value === 'true';
+        } else if (['quantity', 'ema_period', 'interval', 'open_candles', 'stop_candles', 'distance'].includes(key)) {
+            settings[key] = parseFloat(value);
+        } else {
+            settings[key] = value;
+        }
+    }
+    
+    fetch('/api/bot/settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Impostazioni salvate con successo', 'success');
+            addLog(`[${new Date().toLocaleTimeString()}] Impostazioni aggiornate`, 'info');
+        } else {
+            showAlert('Errore nel salvataggio: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        showAlert('Errore di connessione', 'danger');
+    });
+}
+
+// Avvia il bot
+function startBot() {
+    if (botRunning) {
+        showAlert('Il bot è già in esecuzione', 'warning');
+        return;
+    }
+    
+    const settings = getFormSettings();
+    
+    fetch('/api/bot/start', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            addLog(`[${new Date().toLocaleTimeString()}] Bot avviato`, 'success');
+            updateBotStatus(true);
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+            addLog(`[${new Date().toLocaleTimeString()}] Errore avvio: ${data.error}`, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Errore di connessione', 'danger');
+        addLog(`[${new Date().toLocaleTimeString()}] Errore connessione`, 'error');
+    });
+}
+
+// Ferma il bot
+function stopBot() {
+    if (!botRunning) {
+        showAlert('Il bot non è in esecuzione', 'warning');
+        return;
+    }
+    
+    fetch('/api/bot/stop', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'warning');
+            addLog(`[${new Date().toLocaleTimeString()}] Bot fermato`, 'warning');
+            updateBotStatus(false);
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        showAlert('Errore di connessione', 'danger');
+    });
+}
+
+// Riavvia il bot
+function restartBot() {
+    if (botRunning) {
+        stopBot();
+        setTimeout(() => {
+            startBot();
+        }, 2000);
+    } else {
+        startBot();
+    }
+}
+
+// Ottieni impostazioni dal form
+function getFormSettings() {
+    return {
+        symbol: document.getElementById('symbol').value,
+        quantity: parseFloat(document.getElementById('quantity').value),
+        operation: document.getElementById('operation').value === 'true',
+        ema_period: parseInt(document.getElementById('ema_period').value),
+        interval: parseInt(document.getElementById('interval').value),
+        open_candles: parseInt(document.getElementById('open_candles').value),
+        stop_candles: parseInt(document.getElementById('stop_candles').value),
+        distance: parseFloat(document.getElementById('distance').value),
+        category: 'linear'
+    };
+}
+
+// Aggiorna stato bot UI
+function updateBotStatus(isRunning) {
+    botRunning = isRunning;
+    const indicator = document.getElementById('bot-status-indicator');
+    const text = document.getElementById('bot-status-text');
+    const startBtn = document.getElementById('start-bot-btn');
+    const stopBtn = document.getElementById('stop-bot-btn');
+    
+    if (isRunning) {
+        indicator.className = 'status-indicator status-online me-3';
+        text.textContent = 'Online - Bot in esecuzione';
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+    } else {
+        indicator.className = 'status-indicator status-offline me-3';
+        text.textContent = 'Offline - Bot fermo';
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+    }
+}
+
+// Aggiungi log
+function addLog(message, type = 'info') {
+    const logsContainer = document.getElementById('bot-logs');
+    const logEntry = document.createElement('div');
+    
+    let color = '#ffffff';
+    switch (type) {
+        case 'success':
+            color = '#22c55e';
+            break;
+        case 'error':
+            color = '#ef4444';
+            break;
+        case 'warning':
+            color = '#f59e0b';
+            break;
+        case 'info':
+            color = '#3b82f6';
+            break;
+    }
+    
+    logEntry.style.color = color;
+    logEntry.textContent = message;
+    
+    logsContainer.appendChild(logEntry);
+    logsContainer.scrollTop = logsContainer.scrollHeight;
+    
+    // Mantieni solo gli ultimi 100 log
+    while (logsContainer.children.length > 100) {
+        logsContainer.removeChild(logsContainer.firstChild);
+    }
+}
+
+// Pulisci log
+function clearLogs() {
+    document.getElementById('bot-logs').innerHTML = 
+        '<div class="text-muted">Log puliti - In attesa di attività...</div>';
+}
+
+// Reset impostazioni
+function resetSettings() {
+    document.getElementById('symbol').value = 'AVAXUSDT';
+    document.getElementById('quantity').value = 50;
+    document.getElementById('operation').value = 'true';
+    document.getElementById('ema_period').value = 10;
+    document.getElementById('interval').value = 30;
+    document.getElementById('open_candles').value = 3;
+    document.getElementById('stop_candles').value = 3;
+    document.getElementById('distance').value = 1;
+    
+    showAlert('Impostazioni resettate ai valori di default', 'info');
+}
+</script>
+{% endblock %}

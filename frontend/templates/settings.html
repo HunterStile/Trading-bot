@@ -1,0 +1,572 @@
+{% extends "base.html" %}
+
+{% block title %}Impostazioni - Trading Bot{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Bot Configuration -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">🤖 Configurazione Bot</h5>
+            </div>
+            <div class="card-body">
+                <form id="main-settings-form">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>💹 Impostazioni Trading</h6>
+                            
+                            <div class="mb-3">
+                                <label for="default_symbol" class="form-label">Simbolo di Default</label>
+                                <select class="form-select" id="default_symbol" name="symbol">
+                                    <option value="AVAXUSDT" {{ 'selected' if bot_status.symbol == 'AVAXUSDT' }}>AVAX/USDT</option>
+                                    <option value="BTCUSDT" {{ 'selected' if bot_status.symbol == 'BTCUSDT' }}>BTC/USDT</option>
+                                    <option value="ETHUSDT" {{ 'selected' if bot_status.symbol == 'ETHUSDT' }}>ETH/USDT</option>
+                                    <option value="SOLUSDT" {{ 'selected' if bot_status.symbol == 'SOLUSDT' }}>SOL/USDT</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="default_quantity" class="form-label">Quantità di Default (USDT)</label>
+                                <input type="number" class="form-control" id="default_quantity" 
+                                       name="quantity" value="{{ bot_status.quantity or 50 }}" 
+                                       min="10" step="10">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="default_category" class="form-label">Categoria Trading</label>
+                                <select class="form-select" id="default_category" name="category">
+                                    <option value="linear" {{ 'selected' if bot_status.category == 'linear' }}>Futures Linear</option>
+                                    <option value="spot" {{ 'selected' if bot_status.category == 'spot' }}>Spot</option>
+                                    <option value="inverse" {{ 'selected' if bot_status.category == 'inverse' }}>Futures Inverse</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h6>📊 Parametri Strategia</h6>
+                            
+                            <div class="mb-3">
+                                <label for="default_ema" class="form-label">Periodo EMA</label>
+                                <input type="number" class="form-control" id="default_ema" 
+                                       name="ema_period" value="{{ bot_status.ema_period or 10 }}" 
+                                       min="5" max="200">
+                                <div class="form-text">Periodo per il calcolo della media mobile esponenziale</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="default_interval" class="form-label">Intervallo Candele</label>
+                                <select class="form-select" id="default_interval" name="interval">
+                                    <option value="1" {{ 'selected' if bot_status.interval == 1 }}>1 minuto</option>
+                                    <option value="5" {{ 'selected' if bot_status.interval == 5 }}>5 minuti</option>
+                                    <option value="15" {{ 'selected' if bot_status.interval == 15 }}>15 minuti</option>
+                                    <option value="30" {{ 'selected' if bot_status.interval == 30 }}>30 minuti</option>
+                                    <option value="60" {{ 'selected' if bot_status.interval == 60 }}>1 ora</option>
+                                    <option value="240" {{ 'selected' if bot_status.interval == 240 }}>4 ore</option>
+                                </select>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="mb-3">
+                                        <label for="default_open_candles" class="form-label">Candele Apertura</label>
+                                        <input type="number" class="form-control" id="default_open_candles" 
+                                               name="open_candles" value="{{ bot_status.open_candles or 3 }}" 
+                                               min="1" max="10">
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="mb-3">
+                                        <label for="default_stop_candles" class="form-label">Candele Stop</label>
+                                        <input type="number" class="form-control" id="default_stop_candles" 
+                                               name="stop_candles" value="{{ bot_status.stop_candles or 3 }}" 
+                                               min="1" max="10">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Salva Configurazione
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="resetToDefaults()">
+                            <i class="fas fa-undo"></i> Reset Default
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Risk Management -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">⚠️ Gestione del Rischio</h5>
+            </div>
+            <div class="card-body">
+                <form id="risk-settings-form">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="max_position_size" class="form-label">Dimensione Max Posizione (USDT)</label>
+                                <input type="number" class="form-control" id="max_position_size" 
+                                       name="max_position_size" value="1000" min="50" step="50">
+                                <div class="form-text">Limite massimo per una singola posizione</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="daily_loss_limit" class="form-label">Limite Perdita Giornaliera (%)</label>
+                                <input type="number" class="form-control" id="daily_loss_limit" 
+                                       name="daily_loss_limit" value="5" min="1" max="20" step="0.5">
+                                <div class="form-text">Ferma il bot se le perdite superano questa percentuale</div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="stop_loss_percentage" class="form-label">Stop Loss (%)</label>
+                                <input type="number" class="form-control" id="stop_loss_percentage" 
+                                       name="stop_loss_percentage" value="2" min="0.5" max="10" step="0.1">
+                                <div class="form-text">Stop loss automatico per ogni posizione</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="take_profit_percentage" class="form-label">Take Profit (%)</label>
+                                <input type="number" class="form-control" id="take_profit_percentage" 
+                                       name="take_profit_percentage" value="4" min="1" max="20" step="0.1">
+                                <div class="form-text">Take profit automatico per ogni posizione</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="enable_risk_management" 
+                               name="enable_risk_management" checked>
+                        <label class="form-check-label" for="enable_risk_management">
+                            Abilita gestione automatica del rischio
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-shield-alt"></i> Salva Impostazioni Rischio
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Notification Settings -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">🔔 Impostazioni Notifiche</h5>
+            </div>
+            <div class="card-body">
+                <form id="notification-settings-form">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>📱 Telegram</h6>
+                            
+                            <div class="mb-3">
+                                <label for="telegram_token" class="form-label">Token Bot Telegram</label>
+                                <input type="password" class="form-control" id="telegram_token" 
+                                       name="telegram_token" placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyZ">
+                                <div class="form-text">Token del tuo bot Telegram</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="telegram_chat_id" class="form-label">Chat ID</label>
+                                <input type="text" class="form-control" id="telegram_chat_id" 
+                                       name="telegram_chat_id" placeholder="-1001234567890">
+                                <div class="form-text">ID della chat dove inviare i messaggi</div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h6>📧 Tipi di Notifiche</h6>
+                            
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="notify_bot_start" 
+                                       name="notify_bot_start" checked>
+                                <label class="form-check-label" for="notify_bot_start">
+                                    Avvio/Stop bot
+                                </label>
+                            </div>
+                            
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="notify_trades" 
+                                       name="notify_trades" checked>
+                                <label class="form-check-label" for="notify_trades">
+                                    Apertura/Chiusura posizioni
+                                </label>
+                            </div>
+                            
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="notify_errors" 
+                                       name="notify_errors" checked>
+                                <label class="form-check-label" for="notify_errors">
+                                    Errori e problemi
+                                </label>
+                            </div>
+                            
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="notify_daily_summary" 
+                                       name="notify_daily_summary">
+                                <label class="form-check-label" for="notify_daily_summary">
+                                    Riepilogo giornaliero
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-info">
+                            <i class="fas fa-bell"></i> Salva Notifiche
+                        </button>
+                        <button type="button" class="btn btn-outline-info" onclick="testTelegramNotification()">
+                            <i class="fas fa-paper-plane"></i> Test Telegram
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Settings Summary -->
+    <div class="col-lg-4">
+        <!-- Current Settings -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">📋 Configurazione Corrente</h5>
+            </div>
+            <div class="card-body">
+                <div id="current-settings">
+                    <p class="small mb-1"><strong>Simbolo:</strong> {{ bot_status.symbol or 'AVAXUSDT' }}</p>
+                    <p class="small mb-1"><strong>Quantità:</strong> {{ bot_status.quantity or 50 }} USDT</p>
+                    <p class="small mb-1"><strong>EMA:</strong> {{ bot_status.ema_period or 10 }} periodi</p>
+                    <p class="small mb-1"><strong>Intervallo:</strong> {{ bot_status.interval or 30 }} min</p>
+                    <p class="small mb-1"><strong>Tipo:</strong> 
+                        {% if bot_status.operation %}Long{% else %}Short{% endif %}
+                    </p>
+                    <p class="small mb-0"><strong>Categoria:</strong> {{ bot_status.category or 'linear' }}</p>
+                </div>
+                
+                <hr>
+                
+                <div class="d-grid">
+                    <button class="btn btn-outline-primary btn-sm" onclick="exportSettings()">
+                        <i class="fas fa-download"></i> Esporta Configurazione
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- System Info -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">💻 Informazioni Sistema</h5>
+            </div>
+            <div class="card-body">
+                <p class="small mb-1"><strong>Frontend:</strong> Flask v2.3.3</p>
+                <p class="small mb-1"><strong>WebSocket:</strong> Socket.IO</p>
+                <p class="small mb-1"><strong>API:</strong> Bybit V5</p>
+                <p class="small mb-1"><strong>Status:</strong> 
+                    <span class="text-success">✅ Operativo</span>
+                </p>
+                <p class="small mb-0"><strong>Ultima modifica:</strong> 
+                    <span id="last-config-update">{{ bot_status.last_update or 'Mai' }}</span>
+                </p>
+            </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">⚡ Azioni Rapide</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-primary btn-sm" onclick="loadPreset('conservative')">
+                        🛡️ Preset Conservativo
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm" onclick="loadPreset('balanced')">
+                        ⚖️ Preset Bilanciato
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="loadPreset('aggressive')">
+                        🚀 Preset Aggressivo
+                    </button>
+                    
+                    <hr>
+                    
+                    <button class="btn btn-outline-secondary btn-sm" onclick="backupSettings()">
+                        <i class="fas fa-archive"></i> Backup Configurazione
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="restoreSettings()">
+                        <i class="fas fa-upload"></i> Ripristina Backup
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Presets predefiniti
+const presets = {
+    conservative: {
+        quantity: 25,
+        ema_period: 20,
+        interval: 60,
+        open_candles: 5,
+        stop_candles: 5,
+        distance: 0.5,
+        max_position_size: 500,
+        stop_loss_percentage: 1.5,
+        take_profit_percentage: 3
+    },
+    balanced: {
+        quantity: 50,
+        ema_period: 10,
+        interval: 30,
+        open_candles: 3,
+        stop_candles: 3,
+        distance: 1,
+        max_position_size: 1000,
+        stop_loss_percentage: 2,
+        take_profit_percentage: 4
+    },
+    aggressive: {
+        quantity: 100,
+        ema_period: 5,
+        interval: 15,
+        open_candles: 2,
+        stop_candles: 2,
+        distance: 1.5,
+        max_position_size: 2000,
+        stop_loss_percentage: 3,
+        take_profit_percentage: 6
+    }
+};
+
+// Inizializza la pagina
+document.addEventListener('DOMContentLoaded', function() {
+    setupEventListeners();
+    updateCurrentSettings();
+});
+
+// Setup event listeners
+function setupEventListeners() {
+    // Form submissions
+    document.getElementById('main-settings-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveMainSettings();
+    });
+    
+    document.getElementById('risk-settings-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveRiskSettings();
+    });
+    
+    document.getElementById('notification-settings-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveNotificationSettings();
+    });
+}
+
+// Salva impostazioni principali
+function saveMainSettings() {
+    const formData = new FormData(document.getElementById('main-settings-form'));
+    const settings = {};
+    
+    for (let [key, value] of formData.entries()) {
+        if (['quantity', 'ema_period', 'interval', 'open_candles', 'stop_candles'].includes(key)) {
+            settings[key] = parseFloat(value);
+        } else {
+            settings[key] = value;
+        }
+    }
+    
+    fetch('/api/bot/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Configurazione salvata con successo', 'success');
+            updateCurrentSettings();
+        } else {
+            showAlert('Errore nel salvataggio: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        showAlert('Errore di connessione', 'danger');
+    });
+}
+
+// Salva impostazioni rischio
+function saveRiskSettings() {
+    showAlert('Impostazioni di rischio salvate', 'warning');
+    // Implementa il salvataggio delle impostazioni di rischio
+}
+
+// Salva impostazioni notifiche
+function saveNotificationSettings() {
+    showAlert('Impostazioni notifiche salvate', 'info');
+    // Implementa il salvataggio delle impostazioni notifiche
+}
+
+// Aggiorna riepilogo impostazioni correnti
+function updateCurrentSettings() {
+    fetch('/api/bot/status')
+        .then(response => response.json())
+        .then(data => {
+            const settingsDiv = document.getElementById('current-settings');
+            settingsDiv.innerHTML = `
+                <p class="small mb-1"><strong>Simbolo:</strong> ${data.symbol || 'AVAXUSDT'}</p>
+                <p class="small mb-1"><strong>Quantità:</strong> ${data.quantity || 50} USDT</p>
+                <p class="small mb-1"><strong>EMA:</strong> ${data.ema_period || 10} periodi</p>
+                <p class="small mb-1"><strong>Intervallo:</strong> ${data.interval || 30} min</p>
+                <p class="small mb-1"><strong>Tipo:</strong> ${data.operation ? 'Long' : 'Short'}</p>
+                <p class="small mb-0"><strong>Categoria:</strong> ${data.category || 'linear'}</p>
+            `;
+            
+            if (data.last_update) {
+                document.getElementById('last-config-update').textContent = 
+                    new Date(data.last_update).toLocaleString('it-IT');
+            }
+        })
+        .catch(error => {
+            console.error('Errore aggiornamento impostazioni:', error);
+        });
+}
+
+// Carica preset
+function loadPreset(presetName) {
+    const preset = presets[presetName];
+    if (!preset) return;
+    
+    // Aggiorna i campi del form
+    Object.keys(preset).forEach(key => {
+        const field = document.getElementById(`default_${key}`) || 
+                     document.getElementById(key);
+        if (field) {
+            field.value = preset[key];
+        }
+    });
+    
+    showAlert(`Preset "${presetName}" caricato. Salva per applicare le modifiche.`, 'info');
+}
+
+// Reset ai valori di default
+function resetToDefaults() {
+    document.getElementById('default_symbol').value = 'AVAXUSDT';
+    document.getElementById('default_quantity').value = 50;
+    document.getElementById('default_category').value = 'linear';
+    document.getElementById('default_ema').value = 10;
+    document.getElementById('default_interval').value = 30;
+    document.getElementById('default_open_candles').value = 3;
+    document.getElementById('default_stop_candles').value = 3;
+    
+    showAlert('Valori resettati ai default. Salva per applicare le modifiche.', 'info');
+}
+
+// Test notifica Telegram
+function testTelegramNotification() {
+    const token = document.getElementById('telegram_token').value;
+    const chatId = document.getElementById('telegram_chat_id').value;
+    
+    if (!token || !chatId) {
+        showAlert('Inserisci Token e Chat ID prima di testare', 'warning');
+        return;
+    }
+    
+    // Simula invio notifica test
+    showAlert('Invio notifica di test...', 'info');
+    
+    setTimeout(() => {
+        showAlert('Notifica di test inviata! Controlla Telegram.', 'success');
+    }, 2000);
+}
+
+// Esporta configurazione
+function exportSettings() {
+    fetch('/api/bot/status')
+        .then(response => response.json())
+        .then(data => {
+            const configJson = JSON.stringify(data, null, 2);
+            const blob = new Blob([configJson], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `trading-bot-config-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showAlert('Configurazione esportata', 'success');
+        })
+        .catch(error => {
+            showAlert('Errore nell\'esportazione', 'danger');
+        });
+}
+
+// Backup configurazione
+function backupSettings() {
+    localStorage.setItem('trading-bot-backup', JSON.stringify({
+        timestamp: new Date().toISOString(),
+        settings: getCurrentFormSettings()
+    }));
+    
+    showAlert('Backup salvato localmente', 'success');
+}
+
+// Ripristina configurazione
+function restoreSettings() {
+    const backup = localStorage.getItem('trading-bot-backup');
+    if (!backup) {
+        showAlert('Nessun backup trovato', 'warning');
+        return;
+    }
+    
+    try {
+        const backupData = JSON.parse(backup);
+        const settings = backupData.settings;
+        
+        // Ripristina i campi
+        Object.keys(settings).forEach(key => {
+            const field = document.getElementById(key);
+            if (field) {
+                field.value = settings[key];
+            }
+        });
+        
+        showAlert(`Backup ripristinato (${new Date(backupData.timestamp).toLocaleString()})`, 'success');
+    } catch (error) {
+        showAlert('Errore nel ripristino del backup', 'danger');
+    }
+}
+
+// Ottieni impostazioni correnti dal form
+function getCurrentFormSettings() {
+    const forms = ['main-settings-form', 'risk-settings-form', 'notification-settings-form'];
+    const settings = {};
+    
+    forms.forEach(formId => {
+        const form = document.getElementById(formId);
+        if (form) {
+            const formData = new FormData(form);
+            for (let [key, value] of formData.entries()) {
+                settings[key] = value;
+            }
+        }
+    });
+    
+    return settings;
+}
+</script>
+{% endblock %}

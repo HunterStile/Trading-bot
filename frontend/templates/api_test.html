@@ -1,0 +1,533 @@
+{% extends "base.html" %}
+
+{% block title %}Test API - Trading Bot{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- API Connection Test -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">🔌 Test Connessione API</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center mb-3">
+                            <div id="api-status-indicator" class="status-indicator status-offline me-3"></div>
+                            <div>
+                                <h6 class="mb-0">Stato API Bybit</h6>
+                                <small class="text-muted" id="api-status-text">Non testato</small>
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-primary" onclick="testConnection()">
+                            <i class="fas fa-plug"></i> Test Connessione
+                        </button>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h6>📊 Info Connessione</h6>
+                        <div id="connection-info">
+                            <p class="text-muted">Effettua un test per vedere le informazioni</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- API Functions Test -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">🧪 Test Funzioni API</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- Balance Test -->
+                    <div class="col-md-6 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">💰 Test Saldo Wallet</h6>
+                                <button class="btn btn-outline-primary btn-sm" onclick="testBalance()">
+                                    <i class="fas fa-wallet"></i> Test Saldo
+                                </button>
+                                <div id="balance-result" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Price Test -->
+                    <div class="col-md-6 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">💹 Test Prezzo</h6>
+                                <div class="input-group input-group-sm mb-2">
+                                    <input type="text" class="form-control" id="price-symbol" 
+                                           value="BTCUSDT" placeholder="Simbolo (es. BTCUSDT)">
+                                    <button class="btn btn-outline-primary" onclick="testPrice()">
+                                        <i class="fas fa-chart-line"></i> Test
+                                    </button>
+                                </div>
+                                <div id="price-result" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Market Data Test -->
+                    <div class="col-md-6 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">📈 Test Dati Mercato</h6>
+                                <div class="input-group input-group-sm mb-2">
+                                    <input type="text" class="form-control" id="market-symbol" 
+                                           value="ETHUSDT" placeholder="Simbolo">
+                                    <button class="btn btn-outline-primary" onclick="testMarketData()">
+                                        <i class="fas fa-chart-bar"></i> Test
+                                    </button>
+                                </div>
+                                <div id="market-result" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Order Test (Simulation) -->
+                    <div class="col-md-6 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">📋 Test Ordine (Simulazione)</h6>
+                                <div class="row mb-2">
+                                    <div class="col-6">
+                                        <input type="text" class="form-control form-control-sm" 
+                                               id="order-symbol" value="AVAXUSDT" placeholder="Simbolo">
+                                    </div>
+                                    <div class="col-6">
+                                        <select class="form-select form-select-sm" id="order-side">
+                                            <option value="Buy">Buy</option>
+                                            <option value="Sell">Sell</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <button class="btn btn-outline-warning btn-sm" onclick="testOrder()">
+                                    <i class="fas fa-file-invoice"></i> Test Ordine
+                                </button>
+                                <div id="order-result" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Performance Test -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">⚡ Test Performance</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 text-center">
+                        <h6>Latenza Media</h6>
+                        <div class="h4" id="avg-latency">-</div>
+                        <small class="text-muted">milliseconds</small>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <h6>Test Riusciti</h6>
+                        <div class="h4 text-success" id="success-count">0</div>
+                        <small class="text-muted">su <span id="total-tests">0</span></small>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <h6>Tasso Successo</h6>
+                        <div class="h4" id="success-rate">-</div>
+                        <small class="text-muted">percentuale</small>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary" onclick="runPerformanceTest()">
+                        <i class="fas fa-stopwatch"></i> Test Performance
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetStats()">
+                        <i class="fas fa-undo"></i> Reset Statistiche
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- API Documentation -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">📚 Documentazione API</h5>
+            </div>
+            <div class="card-body">
+                <h6>🔑 Configurazione API</h6>
+                <p class="small text-muted">
+                    Le chiavi API sono configurate nel file <code>.env</code>:
+                </p>
+                <ul class="small">
+                    <li><code>BYBIT_API_KEY</code></li>
+                    <li><code>BYBIT_API_SECRET</code></li>
+                </ul>
+                
+                <hr>
+                
+                <h6>🛠️ Endpoints Testati</h6>
+                <div class="small">
+                    <p><strong>Saldo Wallet:</strong><br>
+                    <code>GET /v5/account/wallet-balance</code></p>
+                    
+                    <p><strong>Prezzo Mercato:</strong><br>
+                    <code>GET /v5/market/orderbook</code></p>
+                    
+                    <p><strong>Dati Candele:</strong><br>
+                    <code>GET /v5/market/kline</code></p>
+                    
+                    <p><strong>Piazzamento Ordini:</strong><br>
+                    <code>POST /v5/order/create</code></p>
+                </div>
+                
+                <hr>
+                
+                <h6>⚠️ Note Importanti</h6>
+                <div class="small text-muted">
+                    <ul>
+                        <li>I test degli ordini sono simulati</li>
+                        <li>Verifica sempre i permessi API</li>
+                        <li>Usa testnet per i test reali</li>
+                        <li>Monitora i rate limits</li>
+                    </ul>
+                </div>
+                
+                <hr>
+                
+                <h6>🔗 Link Utili</h6>
+                <div class="d-grid gap-1">
+                    <a href="https://bybit-exchange.github.io/docs/v5/intro" 
+                       class="btn btn-outline-primary btn-sm" target="_blank">
+                        <i class="fas fa-external-link-alt"></i> Docs Bybit V5
+                    </a>
+                    <a href="https://testnet.bybit.com/" 
+                       class="btn btn-outline-secondary btn-sm" target="_blank">
+                        <i class="fas fa-vial"></i> Testnet Bybit
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let testStats = {
+    total: 0,
+    success: 0,
+    totalLatency: 0
+};
+
+// Test connessione API
+function testConnection() {
+    showApiLoading('api-status-text', 'Testing connessione...');
+    
+    const startTime = Date.now();
+    
+    fetch('/api/test-connection')
+        .then(response => response.json())
+        .then(data => {
+            const latency = Date.now() - startTime;
+            
+            if (data.success) {
+                updateApiStatus(true, 'Connessione riuscita');
+                updateConnectionInfo(data, latency);
+                showAlert('Connessione API riuscita!', 'success');
+            } else {
+                updateApiStatus(false, 'Connessione fallita');
+                showAlert('Errore: ' + data.error, 'danger');
+            }
+            
+            updateTestStats(data.success, latency);
+        })
+        .catch(error => {
+            const latency = Date.now() - startTime;
+            updateApiStatus(false, 'Errore di connessione');
+            showAlert('Errore di connessione: ' + error.message, 'danger');
+            updateTestStats(false, latency);
+        });
+}
+
+// Test saldo
+function testBalance() {
+    showApiLoading('balance-result', 'Testing saldo...');
+    
+    const startTime = Date.now();
+    
+    fetch('/api/balance')
+        .then(response => response.json())
+        .then(data => {
+            const latency = Date.now() - startTime;
+            
+            if (data.success) {
+                document.getElementById('balance-result').innerHTML = `
+                    <div class="alert alert-success alert-sm">
+                        <strong>✅ Saldo caricato:</strong><br>
+                        <small>Equity: ${formatCurrency(data.data.total_equity)}</small><br>
+                        <small>Wallet: ${formatCurrency(data.data.total_wallet_balance)}</small><br>
+                        <small>Latenza: ${latency}ms</small>
+                    </div>
+                `;
+            } else {
+                document.getElementById('balance-result').innerHTML = `
+                    <div class="alert alert-danger alert-sm">
+                        <strong>❌ Errore:</strong><br>
+                        <small>${data.error}</small>
+                    </div>
+                `;
+            }
+            
+            updateTestStats(data.success, latency);
+        })
+        .catch(error => {
+            const latency = Date.now() - startTime;
+            document.getElementById('balance-result').innerHTML = `
+                <div class="alert alert-danger alert-sm">
+                    <strong>❌ Errore di rete:</strong><br>
+                    <small>${error.message}</small>
+                </div>
+            `;
+            updateTestStats(false, latency);
+        });
+}
+
+// Test prezzo
+function testPrice() {
+    const symbol = document.getElementById('price-symbol').value;
+    if (!symbol) {
+        showAlert('Inserisci un simbolo valido', 'warning');
+        return;
+    }
+    
+    showApiLoading('price-result', 'Testing prezzo...');
+    
+    const startTime = Date.now();
+    
+    fetch(`/api/price/${symbol}`)
+        .then(response => response.json())
+        .then(data => {
+            const latency = Date.now() - startTime;
+            
+            if (data.success) {
+                document.getElementById('price-result').innerHTML = `
+                    <div class="alert alert-success alert-sm">
+                        <strong>✅ Prezzo ${data.symbol}:</strong><br>
+                        <span class="h6">${formatCurrency(data.price)}</span><br>
+                        <small>Latenza: ${latency}ms</small>
+                    </div>
+                `;
+            } else {
+                document.getElementById('price-result').innerHTML = `
+                    <div class="alert alert-danger alert-sm">
+                        <strong>❌ Errore:</strong><br>
+                        <small>${data.error}</small>
+                    </div>
+                `;
+            }
+            
+            updateTestStats(data.success, latency);
+        })
+        .catch(error => {
+            const latency = Date.now() - startTime;
+            document.getElementById('price-result').innerHTML = `
+                <div class="alert alert-danger alert-sm">
+                    <strong>❌ Errore:</strong><br>
+                    <small>${error.message}</small>
+                </div>
+            `;
+            updateTestStats(false, latency);
+        });
+}
+
+// Test dati mercato
+function testMarketData() {
+    const symbol = document.getElementById('market-symbol').value;
+    if (!symbol) {
+        showAlert('Inserisci un simbolo valido', 'warning');
+        return;
+    }
+    
+    showApiLoading('market-result', 'Testing dati mercato...');
+    
+    const startTime = Date.now();
+    
+    fetch(`/api/market-data/${symbol}`)
+        .then(response => response.json())
+        .then(data => {
+            const latency = Date.now() - startTime;
+            
+            if (data.success) {
+                const analysis = data.analysis;
+                const trendIcon = analysis.above_ema ? '📈' : '📉';
+                const trendText = analysis.above_ema ? 'Sopra EMA' : 'Sotto EMA';
+                
+                document.getElementById('market-result').innerHTML = `
+                    <div class="alert alert-success alert-sm">
+                        <strong>✅ Dati ${data.symbol}:</strong><br>
+                        <small>${trendIcon} ${trendText}</small><br>
+                        <small>Prezzo: ${formatCurrency(analysis.current_price)}</small><br>
+                        <small>Diff EMA: ${formatPercentage(analysis.percentage_diff)}</small><br>
+                        <small>Candele: ${data.chart_data.length}</small><br>
+                        <small>Latenza: ${latency}ms</small>
+                    </div>
+                `;
+            } else {
+                document.getElementById('market-result').innerHTML = `
+                    <div class="alert alert-danger alert-sm">
+                        <strong>❌ Errore:</strong><br>
+                        <small>${data.error}</small>
+                    </div>
+                `;
+            }
+            
+            updateTestStats(data.success, latency);
+        })
+        .catch(error => {
+            const latency = Date.now() - startTime;
+            document.getElementById('market-result').innerHTML = `
+                <div class="alert alert-danger alert-sm">
+                    <strong>❌ Errore:</strong><br>
+                    <small>${error.message}</small>
+                </div>
+            `;
+            updateTestStats(false, latency);
+        });
+}
+
+// Test ordine (simulato)
+function testOrder() {
+    const symbol = document.getElementById('order-symbol').value;
+    const side = document.getElementById('order-side').value;
+    
+    if (!symbol) {
+        showAlert('Inserisci un simbolo valido', 'warning');
+        return;
+    }
+    
+    showApiLoading('order-result', 'Testing ordine...');
+    
+    // Simula test ordine
+    setTimeout(() => {
+        const success = Math.random() > 0.1; // 90% successo simulato
+        const latency = Math.floor(Math.random() * 200) + 50;
+        
+        if (success) {
+            document.getElementById('order-result').innerHTML = `
+                <div class="alert alert-warning alert-sm">
+                    <strong>⚠️ Test Simulato:</strong><br>
+                    <small>Ordine ${side} ${symbol}</small><br>
+                    <small>Status: Simulato OK</small><br>
+                    <small>Latenza: ${latency}ms</small><br>
+                    <small class="text-danger">Nota: Test simulato, nessun ordine reale</small>
+                </div>
+            `;
+        } else {
+            document.getElementById('order-result').innerHTML = `
+                <div class="alert alert-danger alert-sm">
+                    <strong>❌ Test Fallito:</strong><br>
+                    <small>Simulazione errore ordine</small>
+                </div>
+            `;
+        }
+        
+        updateTestStats(success, latency);
+    }, 1000);
+}
+
+// Test performance
+function runPerformanceTest() {
+    showAlert('Avvio test performance...', 'info');
+    
+    const tests = [
+        () => testConnection(),
+        () => testBalance(),
+        () => testPrice(),
+        () => testMarketData()
+    ];
+    
+    // Esegui tutti i test in sequenza
+    tests.forEach((test, index) => {
+        setTimeout(() => {
+            test();
+        }, index * 2000);
+    });
+}
+
+// Aggiorna stato API
+function updateApiStatus(isConnected, statusText) {
+    const indicator = document.getElementById('api-status-indicator');
+    const text = document.getElementById('api-status-text');
+    
+    if (isConnected) {
+        indicator.className = 'status-indicator status-online me-3';
+    } else {
+        indicator.className = 'status-indicator status-offline me-3';
+    }
+    
+    text.textContent = statusText;
+}
+
+// Aggiorna info connessione
+function updateConnectionInfo(data, latency) {
+    document.getElementById('connection-info').innerHTML = `
+        <p class="small mb-1"><strong>Server Time:</strong> ${new Date(data.server_time * 1000).toLocaleString()}</p>
+        <p class="small mb-1"><strong>Latenza:</strong> ${latency}ms</p>
+        <p class="small mb-0"><strong>Status:</strong> <span class="text-success">Connesso</span></p>
+    `;
+}
+
+// Aggiorna statistiche test
+function updateTestStats(success, latency) {
+    testStats.total++;
+    if (success) testStats.success++;
+    testStats.totalLatency += latency;
+    
+    const avgLatency = Math.round(testStats.totalLatency / testStats.total);
+    const successRate = Math.round((testStats.success / testStats.total) * 100);
+    
+    document.getElementById('avg-latency').textContent = avgLatency;
+    document.getElementById('success-count').textContent = testStats.success;
+    document.getElementById('total-tests').textContent = testStats.total;
+    document.getElementById('success-rate').textContent = successRate + '%';
+    
+    // Colora il tasso di successo
+    const rateElement = document.getElementById('success-rate');
+    if (successRate >= 90) {
+        rateElement.className = 'h4 text-success';
+    } else if (successRate >= 70) {
+        rateElement.className = 'h4 text-warning';
+    } else {
+        rateElement.className = 'h4 text-danger';
+    }
+}
+
+// Reset statistiche
+function resetStats() {
+    testStats = { total: 0, success: 0, totalLatency: 0 };
+    document.getElementById('avg-latency').textContent = '-';
+    document.getElementById('success-count').textContent = '0';
+    document.getElementById('total-tests').textContent = '0';
+    document.getElementById('success-rate').textContent = '-';
+    document.getElementById('success-rate').className = 'h4';
+    
+    showAlert('Statistiche resettate', 'info');
+}
+
+// Mostra loading per API
+function showApiLoading(elementId, text) {
+    document.getElementById(elementId).innerHTML = `
+        <span class="loading-spinner"></span> ${text}
+    `;
+}
+</script>
+{% endblock %}
