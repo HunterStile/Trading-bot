@@ -43,7 +43,7 @@ except ImportError as e:
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'trading_bot_secret_key_2024'
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # Setup logger
 logger = logging.getLogger(__name__)
