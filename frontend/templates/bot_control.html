@@ -1,0 +1,1606 @@
+{% extends "base.html" %}
+
+{% block title %}Controllo Bot - Trading Bot{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Symbol Search Dropdown */
+.position-relative .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 1050;
+    display: none;
+    background-color: var(--bs-dark);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.375rem;
+}
+
+.position-relative .dropdown-menu.show {
+    display: block;
+}
+
+.dropdown-item {
+    color: var(--bs-body-color);
+    padding: 0.5rem 1rem;
+    border: none;
+    background: none;
+}
+
+.dropdown-item:hover {
+    background-color: var(--bs-secondary);
+    color: var(--bs-body-color);
+}
+
+.dropdown-item:focus {
+    background-color: var(--bs-primary);
+    color: white;
+}
+
+/* Symbol search input */
+#symbol-search {
+    background-color: var(--bs-dark);
+    border-color: var(--bs-border-color);
+    color: var(--bs-body-color);
+}
+
+#symbol-search:focus {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    background-color: var(--bs-dark);
+    color: var(--bs-body-color);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Bot Control Panel -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">🤖 Pannello di Controllo Bot</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center mb-3">
+                            <div id="bot-status-indicator" class="status-indicator status-offline me-3"></div>
+                            <div>
+                                <h6 class="mb-0">Stato Bot</h6>
+                                <small class="text-muted" id="bot-status-text">Offline</small>
+                                <div class="mt-1">
+                                    <span class="badge bg-primary me-1" id="active-positions-count">0 Posizioni</span>
+                                    <span class="badge bg-info" id="bot-instances-count">1 Istanza</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex">
+                            <button class="btn btn-success" id="start-bot-btn" onclick="startBot()">
+                                <i class="fas fa-play"></i> Avvia Bot
+                            </button>
+                            <button class="btn btn-danger" id="stop-bot-btn" onclick="stopBot()" disabled>
+                                <i class="fas fa-stop"></i> Ferma Bot
+                            </button>
+                            <button class="btn btn-warning" onclick="restartBot()">
+                                <i class="fas fa-redo"></i> Riavvia
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h6>📊 Statistiche Sessione</h6>
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="border rounded p-2">
+                                    <div class="fw-bold" id="trades-count">0</div>
+                                    <small class="text-muted">Trades</small>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="border rounded p-2">
+                                    <div class="fw-bold text-success" id="profit-trades">0</div>
+                                    <small class="text-muted">Profitti</small>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="border rounded p-2">
+                                    <div class="fw-bold text-danger" id="loss-trades">0</div>
+                                    <small class="text-muted">Perdite</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Bot Settings -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">⚙️ Configurazione Bot</h5>
+            </div>
+            <div class="card-body">
+                <form id="bot-settings-form">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="symbol" class="form-label">
+                                    Simbolo Trading
+                                    <button type="button" class="btn btn-link btn-sm p-0 ms-2" 
+                                            data-bs-toggle="modal" data-bs-target="#addSymbolModal">
+                                        <i class="fas fa-plus"></i> Aggiungi
+                                    </button>
+                                </label>
+                                <div class="position-relative">
+                                    <input type="text" class="form-control" id="symbol-search" 
+                                           placeholder="Cerca simbolo..." autocomplete="off">
+                                    <input type="hidden" id="symbol" name="symbol" value="AVAXUSDT">
+                                    <div id="symbol-dropdown" class="dropdown-menu w-100" style="max-height: 200px; overflow-y: auto;"></div>
+                                </div>
+                                <div class="form-text">
+                                    <small id="selected-symbol-info" class="text-muted">Simbolo selezionato: AVAX/USDT</small>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="quantity" class="form-label">Quantità (USDT)</label>
+                                <input type="number" class="form-control" id="quantity" name="quantity" 
+                                       value="50" min="10" step="10">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="operation" class="form-label">Tipo Operazione</label>
+                                <select class="form-select" id="operation" name="operation">
+                                    <option value="true">Long (Buy)</option>
+                                    <option value="false">Short (Sell)</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="ema_period" class="form-label">Periodo EMA</label>
+                                <input type="number" class="form-control" id="ema_period" name="ema_period" 
+                                       value="10" min="5" max="200">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="interval" class="form-label">Intervallo (minuti)</label>
+                                <select class="form-select" id="interval" name="interval">
+                                    <option value="1">1 minuto</option>
+                                    <option value="5">5 minuti</option>
+                                    <option value="15">15 minuti</option>
+                                    <option value="30" selected>30 minuti</option>
+                                    <option value="60">1 ora</option>
+                                    <option value="240">4 ore</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="open_candles" class="form-label">Candele per Apertura</label>
+                                <input type="number" class="form-control" id="open_candles" name="open_candles" 
+                                       value="3" min="1" max="10">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="stop_candles" class="form-label">Candele per Stop</label>
+                                <input type="number" class="form-control" id="stop_candles" name="stop_candles" 
+                                       value="3" min="1" max="10">
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="distance" class="form-label">Distanza EMA (%)</label>
+                                <input type="number" class="form-control" id="distance" name="distance" 
+                                       value="1" min="0.1" max="10" step="0.1">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Salva Configurazione
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="resetSettings()">
+                            <i class="fas fa-undo"></i> Reset Default
+                        </button>
+                        <button type="button" class="btn btn-info" onclick="debugPositions()">
+                            <i class="fas fa-bug"></i> Debug API
+                        </button>
+                        <button type="button" class="btn btn-warning" onclick="debugInternalTrades()">
+                            <i class="fas fa-database"></i> Debug Trades
+                        </button>
+                        <button type="button" class="btn btn-success" onclick="forceSyncTrades()">
+                            <i class="fas fa-sync"></i> Forza Sync
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Active Positions -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">📈 Posizioni Attive</h5>
+                <span id="active-positions-count" class="badge bg-secondary">0 Posizioni</span>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Simbolo</th>
+                                <th>Tipo</th>
+                                <th>Quantità</th>
+                                <th>Prezzo Entrata</th>
+                                <th>Prezzo Corrente</th>
+                                <th>PnL</th>
+                                <th>Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="active-positions">
+                            <tr>
+                                <td colspan="7" class="text-center text-muted">
+                                    Nessuna posizione attiva
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recovery & Strategy Management -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">🔄 Recovery & Gestione Strategie</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card border-info h-100">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-redo-alt me-2"></i>Recovery System
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-outline-success btn-sm" onclick="checkRecoveryStatus()">
+                                        <i class="fas fa-search me-1"></i>Verifica Recovery
+                                    </button>
+                                    <button class="btn btn-outline-warning btn-sm" onclick="startBotRecovery()">
+                                        <i class="fas fa-play me-1"></i>Avvia Recovery
+                                    </button>
+                                    <button class="btn btn-outline-info btn-sm" onclick="showActiveStrategies()">
+                                        <i class="fas fa-list me-1"></i>Strategie Attive
+                                    </button>
+                                </div>
+                                <div id="recovery-status" class="mt-2 small text-muted">
+                                    Recovery status: Unknown
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card border-warning h-100">
+                            <div class="card-header bg-warning text-dark">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-chart-line me-2"></i>Trailing Stops
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-outline-primary btn-sm" onclick="showAddTrailingModal()">
+                                        <i class="fas fa-plus me-1"></i>Aggiungi Trailing Stop
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm" onclick="showTrailingStops()">
+                                        <i class="fas fa-list me-1"></i>Lista Trailing Stops
+                                    </button>
+                                </div>
+                                <div id="trailing-status" class="mt-2 small text-muted">
+                                    Trailing stops: Unknown
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Log Panel -->
+    <div class="col-lg-4">
+        <div class="card" style="height: 600px;">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">📝 Log Bot</h5>
+                <button class="btn btn-outline-secondary btn-sm" onclick="clearLogs()">
+                    <i class="fas fa-trash"></i> Pulisci
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div id="bot-logs" style="height: 540px; overflow-y: auto; font-family: monospace; font-size: 0.875rem; padding: 15px; background-color: #1e1e1e; color: #fff;">
+                    <div class="text-muted">In attesa di attività del bot...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let botRunning = false;
+
+// Inizializza la pagina
+document.addEventListener('DOMContentLoaded', function() {
+    loadBotStatus();
+    loadSettings();
+    loadActivePositions(); // Carica posizioni attive
+    checkRecoveryStatus(); // Controlla recovery status
+    setupEventListeners();
+});
+
+// Setup event listeners
+function setupEventListeners() {
+    // Form submission
+    document.getElementById('bot-settings-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveSettings();
+    });
+    
+    // Socket events
+    socket.on('bot_update', function(data) {
+        // Log dettagliato del bot update
+        const time = new Date().toLocaleTimeString();
+        let message = data.message;
+        
+        // Aggiungi informazioni extra se disponibili
+        if (data.price) {
+            message += ` - Prezzo: $${data.price}`;
+        }
+        if (data.ema_value) {
+            message += ` - EMA: $${data.ema_value.toFixed(4)}`;
+        }
+        if (data.active_trades > 0) {
+            message += ` - Trade attivi: ${data.active_trades}`;
+        }
+        
+        addLog(`[${time}] ${message}`, 'info');
+        updateBotStatus(data.status === 'running');
+    });
+    
+    socket.on('bot_error', function(data) {
+        addLog(`[${new Date().toLocaleTimeString()}] ERRORE: ${data.error}`, 'error');
+        updateBotStatus(false);
+    });
+    
+    // Nuovo evento per log dettagliati di analisi
+    socket.on('analysis_log', function(data) {
+        const time = new Date().toLocaleTimeString();
+        addLog(`[${time}] ${data.message}`, data.type || 'info');
+    });
+    
+    // Evento per notifiche trade
+    socket.on('trade_notification', function(data) {
+        const time = new Date().toLocaleTimeString();
+        const side = data.side || 'UNKNOWN';
+        const symbol = data.symbol || '';
+        const price = data.price ? `$${data.price}` : '';
+        
+        let message = '';
+        if (data.type === 'POSITION_OPENED') {
+            message = `🚀 POSIZIONE ${side} APERTA - ${symbol} @ ${price}`;
+        } else if (data.type === 'POSITION_CLOSED') {
+            message = `✅ POSIZIONE ${side} CHIUSA - ${symbol} @ ${price}`;
+        } else {
+            message = `📢 ${data.type}: ${side} ${symbol} @ ${price}`;
+        }
+        
+        addLog(`[${time}] ${message}`, 'success');
+        
+        // Mostra anche come notifica
+        showAlert(message, 'success');
+    });
+}
+
+// Carica lo stato del bot
+function loadBotStatus() {
+    fetch('/api/bot/status')
+        .then(response => response.json())
+        .then(data => {
+            updateBotStatus(data.running);
+            botRunning = data.running;
+        })
+        .catch(error => {
+            console.error('Errore caricamento stato bot:', error);
+        });
+}
+
+// Carica le impostazioni
+function loadSettings() {
+    fetch('/api/bot/status')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('symbol').value = data.symbol || 'AVAXUSDT';
+            document.getElementById('quantity').value = data.quantity || 50;
+            document.getElementById('operation').value = data.operation || true;
+            document.getElementById('ema_period').value = data.ema_period || 10;
+            document.getElementById('interval').value = data.interval || 30;
+            document.getElementById('open_candles').value = data.open_candles || 3;
+            document.getElementById('stop_candles').value = data.stop_candles || 3;
+            document.getElementById('distance').value = data.distance || 1;
+        })
+        .catch(error => {
+            console.error('Errore caricamento impostazioni:', error);
+        });
+}
+
+// Salva le impostazioni
+function saveSettings() {
+    const formData = new FormData(document.getElementById('bot-settings-form'));
+    const settings = {};
+    
+    for (let [key, value] of formData.entries()) {
+        if (key === 'operation') {
+            settings[key] = value === 'true';
+        } else if (['quantity', 'ema_period', 'interval', 'open_candles', 'stop_candles', 'distance'].includes(key)) {
+            settings[key] = parseFloat(value);
+        } else {
+            settings[key] = value;
+        }
+    }
+    
+    fetch('/api/bot/settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Impostazioni salvate con successo', 'success');
+            addLog(`[${new Date().toLocaleTimeString()}] Impostazioni aggiornate`, 'info');
+        } else {
+            showAlert('Errore nel salvataggio: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        showAlert('Errore di connessione', 'danger');
+    });
+}
+
+// Avvia il bot
+function startBot() {
+    if (botRunning) {
+        showAlert('Il bot è già in esecuzione', 'warning');
+        return;
+    }
+    
+    const settings = getFormSettings();
+    
+    fetch('/api/bot/start', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            addLog(`[${new Date().toLocaleTimeString()}] Bot avviato`, 'success');
+            updateBotStatus(true);
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+            addLog(`[${new Date().toLocaleTimeString()}] Errore avvio: ${data.error}`, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Errore di connessione', 'danger');
+        addLog(`[${new Date().toLocaleTimeString()}] Errore connessione`, 'error');
+    });
+}
+
+// Ferma il bot
+function stopBot() {
+    if (!botRunning) {
+        showAlert('Il bot non è in esecuzione', 'warning');
+        return;
+    }
+    
+    fetch('/api/bot/stop', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'warning');
+            addLog(`[${new Date().toLocaleTimeString()}] Bot fermato`, 'warning');
+            updateBotStatus(false);
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        showAlert('Errore di connessione', 'danger');
+    });
+}
+
+// Riavvia il bot
+function restartBot() {
+    if (botRunning) {
+        stopBot();
+        setTimeout(() => {
+            startBot();
+        }, 2000);
+    } else {
+        startBot();
+    }
+}
+
+// Ottieni impostazioni dal form
+function getFormSettings() {
+    return {
+        symbol: document.getElementById('symbol').value,
+        quantity: parseFloat(document.getElementById('quantity').value),
+        operation: document.getElementById('operation').value === 'true',
+        ema_period: parseInt(document.getElementById('ema_period').value),
+        interval: parseInt(document.getElementById('interval').value),
+        open_candles: parseInt(document.getElementById('open_candles').value),
+        stop_candles: parseInt(document.getElementById('stop_candles').value),
+        distance: parseFloat(document.getElementById('distance').value),
+        category: 'linear'
+    };
+}
+
+// Aggiorna stato bot UI
+function updateBotStatus(isRunning) {
+    botRunning = isRunning;
+    const indicator = document.getElementById('bot-status-indicator');
+    const text = document.getElementById('bot-status-text');
+    const startBtn = document.getElementById('start-bot-btn');
+    const stopBtn = document.getElementById('stop-bot-btn');
+    
+    if (isRunning) {
+        indicator.className = 'status-indicator status-online me-3';
+        text.textContent = 'Online - Bot in esecuzione';
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+    } else {
+        indicator.className = 'status-indicator status-offline me-3';
+        text.textContent = 'Offline - Bot fermo';
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+    }
+}
+
+// Aggiungi log
+function addLog(message, type = 'info') {
+    const logsContainer = document.getElementById('bot-logs');
+    const logEntry = document.createElement('div');
+    logEntry.className = 'log-entry mb-1';
+    
+    let color = '#ffffff';
+    let icon = '';
+    switch (type) {
+        case 'success':
+            color = '#22c55e';
+            icon = '✅';
+            break;
+        case 'error':
+            color = '#ef4444';
+            icon = '❌';
+            break;
+        case 'warning':
+            color = '#f59e0b';
+            icon = '⚠️';
+            break;
+        case 'info':
+            color = '#3b82f6';
+            icon = '🔵';
+            break;
+    }
+    
+    logEntry.style.color = color;
+    logEntry.innerHTML = `<span style="opacity: 0.7;">${icon}</span> ${message}`;
+    
+    logsContainer.appendChild(logEntry);
+    
+    // Auto-scroll al bottom
+    logsContainer.scrollTop = logsContainer.scrollHeight;
+    
+    // Limita il numero di log (mantieni solo gli ultimi 100)
+    const logEntries = logsContainer.querySelectorAll('.log-entry');
+    if (logEntries.length > 100) {
+        logEntries[0].remove();
+    }
+}
+
+
+// Pulisci log
+function clearLogs() {
+    document.getElementById('bot-logs').innerHTML = 
+        '<div class="text-muted">Log puliti - In attesa di attività...</div>';
+}
+
+// ==================== GESTIONE POSIZIONI ATTIVE ====================
+
+// Carica e aggiorna posizioni attive
+async function loadActivePositions() {
+    try {
+        const response = await fetch('/api/trading/positions');
+        const data = await response.json();
+        
+        if (data.success) {
+            updatePositionsTable(data.positions, data.debug_info);
+            updatePnLWidget(data.positions, data.debug_info);
+        } else {
+            console.error('Errore nel caricamento posizioni:', data.error);
+            updatePositionsTable([], null);
+            updatePnLWidget([], null);
+        }
+    } catch (error) {
+        console.error('Errore connessione API posizioni:', error);
+        updatePositionsTable([], null);
+    }
+}
+
+// Aggiorna la tabella delle posizioni
+function updatePositionsTable(positions, debugInfo) {
+    const tbody = document.getElementById('active-positions');
+    const positionsCountBadge = document.getElementById('active-positions-count');
+    
+    // Aggiorna il badge del conteggio
+    if (positionsCountBadge) {
+        positionsCountBadge.textContent = `${positions.length} Posizioni`;
+        positionsCountBadge.className = positions.length > 0 ? 'badge bg-success me-1' : 'badge bg-secondary me-1';
+    }
+    
+    if (!positions || positions.length === 0) {
+        let debugText = '';
+        if (debugInfo) {
+            const linearCount = debugInfo.linear_positions ? debugInfo.linear_positions.length : 0;
+            const spotCount = debugInfo.spot_positions ? debugInfo.spot_positions.length : 0;
+            const inverseCount = debugInfo.inverse_positions ? debugInfo.inverse_positions.length : 0;
+            
+            debugText = `<br><small class="text-muted">
+                Debug: Linear(${linearCount}) | Spot(${spotCount}) | Inverse(${inverseCount})
+                <br>Usa il pulsante "Debug API" per dettagli completi
+            </small>`;
+        }
+        
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center text-muted">
+                    <i class="fas fa-chart-line me-2"></i>
+                    Nessuna posizione attiva
+                    ${debugText}
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = positions.map(position => {
+        const pnlClass = position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger';
+        const pnlIcon = position.unrealized_pnl >= 0 ? '📈' : '📉';
+        const sideClass = position.side === 'Buy' ? 'text-success' : 'text-danger';
+        const sideIcon = position.side === 'Buy' ? '🟢' : '🔴';
+        
+        return `
+            <tr>
+                <td>
+                    <strong>${position.symbol}</strong>
+                    <br><small class="text-muted">${position.category || 'linear'}</small>
+                </td>
+                <td>
+                    <span class="${sideClass}">
+                        ${sideIcon} ${position.side}
+                    </span>
+                </td>
+                <td>${position.size}</td>
+                <td>$${position.entry_price.toFixed(4)}</td>
+                <td>$${position.current_price.toFixed(4)}</td>
+                <td class="${pnlClass}">
+                    ${pnlIcon} $${position.unrealized_pnl.toFixed(2)}<br>
+                    <small>(${position.pnl_percentage}%)</small>
+                </td>
+                <td>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-sm btn-outline-danger" 
+                                onclick="closePosition('${position.symbol}', '${position.side}')"
+                                title="Chiudi posizione">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-warning" 
+                                onclick="addInlineTrailing('${position.symbol}', '${position.side}')"
+                                title="Aggiungi Trailing Stop">
+                            <i class="fas fa-chart-line"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Aggiorna il widget PnL
+function updatePnLWidget(positions, debugInfo) {
+    try {
+        let totalPnL = 0;
+        let totalWin = 0;
+        let totalLoss = 0;
+        let positionCount = 0;
+        
+        if (positions && positions.length > 0) {
+            positions.forEach(position => {
+                if (position.unrealized_pnl != null) {
+                    totalPnL += parseFloat(position.unrealized_pnl);
+                    positionCount++;
+                    
+                    if (position.unrealized_pnl > 0) {
+                        totalWin += parseFloat(position.unrealized_pnl);
+                    } else {
+                        totalLoss += parseFloat(position.unrealized_pnl);
+                    }
+                }
+            });
+        }
+        
+        // Aggiorna PnL totale
+        const totalPnLElement = document.getElementById('total-pnl');
+        if (totalPnLElement) {
+            const pnlClass = totalPnL >= 0 ? 'text-success' : 'text-danger';
+            const pnlIcon = totalPnL >= 0 ? '📈' : '📉';
+            const sign = totalPnL >= 0 ? '+' : '';
+            
+            totalPnLElement.innerHTML = `
+                <span class="${pnlClass}">
+                    ${pnlIcon} ${sign}$${totalPnL.toFixed(2)}
+                </span>
+            `;
+        }
+        
+        // Aggiorna conteggio posizioni
+        const positionsCountElement = document.getElementById('positions-count');
+        if (positionsCountElement) {
+            positionsCountElement.textContent = positionCount;
+        }
+        
+        // Aggiorna profitti
+        const totalWinElement = document.getElementById('total-win');
+        if (totalWinElement) {
+            totalWinElement.innerHTML = `<span class="text-success">+$${totalWin.toFixed(2)}</span>`;
+        }
+        
+        // Aggiorna perdite
+        const totalLossElement = document.getElementById('total-loss');
+        if (totalLossElement) {
+            totalLossElement.innerHTML = `<span class="text-danger">$${totalLoss.toFixed(2)}</span>`;
+        }
+        
+        // Debug info se disponibile
+        if (debugInfo && positionCount === 0) {
+            const linearCount = debugInfo.linear_positions ? debugInfo.linear_positions.length : 0;
+            const spotCount = debugInfo.spot_positions ? debugInfo.spot_positions.length : 0;
+            const inverseCount = debugInfo.inverse_positions ? debugInfo.inverse_positions.length : 0;
+            
+            console.log('Debug PnL - Nessuna posizione mostrata, ma API ha:', {
+                linear: linearCount,
+                spot: spotCount,
+                inverse: inverseCount,
+                total_api_positions: linearCount + spotCount + inverseCount
+            });
+        }
+        
+        console.log('PnL Widget aggiornato:', {
+            positionCount,
+            totalPnL: totalPnL.toFixed(2),
+            totalWin: totalWin.toFixed(2),
+            totalLoss: totalLoss.toFixed(2)
+        });
+        
+    } catch (error) {
+        console.error('Errore nell\'aggiornamento del widget PnL:', error);
+    }
+}
+
+// Chiudi una posizione specifica
+async function closePosition(symbol, side) {
+    if (!confirm(`Vuoi chiudere la posizione ${side} su ${symbol}?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/trading/close-position', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                symbol: symbol,
+                side: side
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Posizione ${side} su ${symbol} chiusa con successo`, 'success');
+            loadActivePositions(); // Ricarica le posizioni
+            setTimeout(loadActivePositions, 2000); // Ricarica di nuovo dopo 2 secondi per assicurarsi
+        } else {
+            showAlert(`Errore nella chiusura: ${data.error}`, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Aggiorna posizioni ogni 5 secondi
+setInterval(loadActivePositions, 5000);
+
+// Debug delle posizioni Bybit
+async function debugPositions() {
+    try {
+        const response = await fetch('/api/trading/positions/debug');
+        const data = await response.json();
+        
+        if (data.success) {
+            // Mostra i dati di debug in una finestra popup
+            const debugWindow = window.open('', 'debug', 'width=800,height=600,scrollbars=yes');
+            debugWindow.document.write(`
+                <html>
+                <head>
+                    <title>Debug API Bybit - Posizioni</title>
+                    <style>
+                        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #fff; }
+                        pre { background: #2a2a2a; padding: 15px; border-radius: 5px; overflow: auto; }
+                        h2 { color: #4CAF50; }
+                        .error { color: #f44336; }
+                        .success { color: #4CAF50; }
+                        .warning { color: #ff9800; }
+                    </style>
+                </head>
+                <body>
+                    <h1>🐛 Debug API Bybit - Posizioni</h1>
+                    <h2>Dati Completi:</h2>
+                    <pre>${JSON.stringify(data.debug_data, null, 2)}</pre>
+                    
+                    <h2>Analisi Rapida:</h2>
+                    <div>
+                        <p><strong>Linear Positions:</strong> ${data.debug_data.linear_active_count || 0} attive</p>
+                        <p><strong>Spot Positions:</strong> ${data.debug_data.spot_active_count || 0} attive</p>
+                        <p><strong>Inverse Positions:</strong> ${data.debug_data.inverse_active_count || 0} attive</p>
+                    </div>
+                    
+                    <button onclick="window.close()" style="padding: 10px; margin: 10px 0;">Chiudi</button>
+                </body>
+                </html>
+            `);
+        } else {
+            showAlert(`Errore debug: ${data.error}`, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore di connessione per debug', 'danger');
+    }
+}
+
+// Debug trade interni
+async function debugInternalTrades() {
+    try {
+        const response = await fetch('/api/trading/debug-trades');
+        const data = await response.json();
+        
+        if (data.success) {
+            // Mostra i dati di debug in una finestra popup
+            const debugWindow = window.open('', 'debug-trades', 'width=900,height=700,scrollbars=yes');
+            debugWindow.document.write(`
+                <html>
+                <head>
+                    <title>Debug Trading System - Trade Interni</title>
+                    <style>
+                        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #fff; }
+                        pre { background: #2a2a2a; padding: 15px; border-radius: 5px; overflow: auto; }
+                        h2 { color: #4CAF50; }
+                        h3 { color: #ff9800; }
+                        .error { color: #f44336; }
+                        .success { color: #4CAF50; }
+                        .warning { color: #ff9800; }
+                    </style>
+                </head>
+                <body>
+                    <h1>🔍 Debug Trading System - Trade Interni</h1>
+                    
+                    <h2>Sessione Corrente:</h2>
+                    <p><strong>Session ID:</strong> ${data.current_session_id || 'Nessuna'}</p>
+                    
+                    <h3>Trade nel Wrapper (${data.wrapper_trades_count}):</h3>
+                    <pre>${JSON.stringify(data.wrapper_trades, null, 2)}</pre>
+                    
+                    <h3>Trade nel Database (${data.db_trades_count}):</h3>
+                    <pre>${JSON.stringify(data.db_trades, null, 2)}</pre>
+                    
+                    <button onclick="window.close()" style="padding: 10px; margin: 10px 0;">Chiudi</button>
+                </body>
+                </html>
+            `);
+        } else {
+            showAlert(`Errore debug trade: ${data.error}`, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore di connessione per debug trade', 'danger');
+    }
+}
+
+// Forza sincronizzazione trade
+async function forceSyncTrades() {
+    try {
+        const response = await fetch('/api/trading/sync-trades', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`✅ Sincronizzazione completata: ${data.active_trades} trade attivi`, 'success');
+            console.log('Trade sincronizzati:', data.trade_details);
+            
+            // Ricarica le posizioni dopo la sincronizzazione
+            loadActivePositions();
+        } else {
+            showAlert(`❌ Errore sincronizzazione: ${data.error}`, 'danger');
+        }
+    } catch (error) {
+        showAlert('❌ Errore di connessione per sincronizzazione', 'danger');
+    }
+}
+
+// Reset impostazioni
+function resetSettings() {
+    document.getElementById('symbol').value = 'AVAXUSDT';
+    document.getElementById('quantity').value = 50;
+    document.getElementById('operation').value = 'true';
+    document.getElementById('ema_period').value = 10;
+    document.getElementById('interval').value = 30;
+    document.getElementById('open_candles').value = 3;
+    document.getElementById('stop_candles').value = 3;
+    document.getElementById('distance').value = 1;
+    
+    showAlert('Impostazioni resettate ai valori di default', 'info');
+}
+
+// ==================== RECOVERY SYSTEM ====================
+
+// Controlla stato recovery
+async function checkRecoveryStatus() {
+    try {
+        const response = await fetch('/api/bot/recovery/status');
+        const data = await response.json();
+        
+        if (data.success) {
+            const summary = data.recovery_summary;
+            const statusEl = document.getElementById('recovery-status');
+            
+            if (summary.needs_recovery) {
+                statusEl.innerHTML = `
+                    <span class="text-warning">
+                        <i class="fas fa-exclamation-triangle"></i> 
+                        Recovery necessario: ${summary.active_strategies_count} strategie, ${summary.trailing_stops_count} trailing stops
+                    </span>
+                `;
+            } else {
+                statusEl.innerHTML = `
+                    <span class="text-success">
+                        <i class="fas fa-check"></i> 
+                        Nessun recovery necessario
+                    </span>
+                `;
+            }
+            
+            // Aggiorna status trailing
+            updateTrailingStatus(summary.trailing_stops_count);
+            
+            // Controlla se il bot dovrebbe auto-riavviare
+            checkAutoRestartStatus();
+            
+        } else {
+            showAlert('Errore nel controllo recovery: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore connessione recovery: ' + error.message, 'danger');
+    }
+}
+
+// Controlla se il bot dovrebbe auto-riavviare
+async function checkAutoRestartStatus() {
+    try {
+        const response = await fetch('/api/bot/config/last');
+        const data = await response.json();
+        
+        if (data.success && data.should_auto_restart) {
+            const config = data.config;
+            const statusEl = document.getElementById('recovery-status');
+            
+            statusEl.innerHTML = `
+                <span class="text-info">
+                    <i class="fas fa-redo"></i> 
+                    Bot era attivo: ${config.symbol} - 
+                    <button class="btn btn-sm btn-outline-primary" onclick="triggerAutoRestart()">
+                        Auto-Restart
+                    </button>
+                </span>
+            `;
+        }
+    } catch (error) {
+        console.error('Errore nel controllo auto-restart:', error);
+    }
+}
+
+// Trigger auto-restart manuale
+async function triggerAutoRestart() {
+    try {
+        const response = await fetch('/api/bot/recovery/auto-restart', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Bot riavviato automaticamente: ${data.config.symbol}`, 'success');
+            
+            // Aggiorna stato bot
+            loadBotStatus();
+            checkRecoveryStatus();
+        } else {
+            showAlert('Errore nel riavvio automatico: ' + data.error, 'warning');
+        }
+    } catch (error) {
+        showAlert('Errore connessione auto-restart: ' + error.message, 'danger');
+    }
+}
+
+// Avvia recovery del bot
+async function startBotRecovery() {
+    if (!confirm('Vuoi avviare il recovery del bot? Questo ripristinerà tutte le strategie per le posizioni attive.')) {
+        return;
+    }
+    
+    try {
+        showAlert('Avvio recovery in corso...', 'info');
+        
+        const response = await fetch('/api/bot/recovery/start', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Recovery completato: ${data.recovered_strategies.length} strategie, ${data.recovered_trailing_stops.length} trailing stops`, 'success');
+            
+            // Ricarica dati
+            checkRecoveryStatus();
+            loadActivePositions();
+        } else {
+            showAlert('Errore nel recovery: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore connessione recovery: ' + error.message, 'danger');
+    }
+}
+
+// Mostra modal trailing stop
+function showAddTrailingModal() {
+    // Carica posizioni attive nel dropdown
+    loadPositionsForTrailing();
+    
+    // Mostra modal
+    const modal = new bootstrap.Modal(document.getElementById('addTrailingModal'));
+    modal.show();
+}
+
+// Carica posizioni per trailing
+async function loadPositionsForTrailing() {
+    try {
+        const response = await fetch('/api/trading/positions');
+        const data = await response.json();
+        
+        const select = document.getElementById('trailing-symbol');
+        select.innerHTML = '<option value="">Seleziona una posizione attiva</option>';
+        
+        if (data.success && data.positions) {
+            data.positions.forEach(position => {
+                const option = document.createElement('option');
+                option.value = `${position.symbol}|${position.side}`;
+                option.textContent = `${position.symbol} - ${position.side} (${position.size})`;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Errore nel caricamento posizioni:', error);
+    }
+}
+
+// Aggiungi trailing stop
+async function addTrailingStop() {
+    try {
+        const symbolSide = document.getElementById('trailing-symbol').value;
+        const percentage = document.getElementById('trailing-percentage').value;
+        
+        if (!symbolSide || !percentage) {
+            showAlert('Seleziona una posizione e inserisci la percentuale', 'warning');
+            return;
+        }
+        
+        const [symbol, side] = symbolSide.split('|');
+        
+        const response = await fetch('/api/bot/trailing-stop/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                symbol: symbol,
+                side: side,
+                trail_percentage: parseFloat(percentage)
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Trailing stop aggiunto: ${symbol} ${side} (${percentage}%)`, 'success');
+            
+            // Chiudi modal
+            bootstrap.Modal.getInstance(document.getElementById('addTrailingModal')).hide();
+            
+            // Ricarica status
+            checkRecoveryStatus();
+        } else {
+            showAlert('Errore nell\'aggiunta trailing stop: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore connessione: ' + error.message, 'danger');
+    }
+}
+
+// Mostra strategie attive
+async function showActiveStrategies() {
+    try {
+        const response = await fetch('/api/bot/trailing-stops');
+        const data = await response.json();
+        
+        if (data.success) {
+            const tbody = document.getElementById('strategies-table');
+            tbody.innerHTML = '';
+            
+            // Aggiungi strategie attive
+            data.active_strategies.forEach(strategy => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${strategy.symbol}</td>
+                    <td><span class="badge bg-${strategy.side === 'Buy' ? 'success' : 'danger'}">${strategy.side}</span></td>
+                    <td><span class="badge bg-info">${strategy.strategy_type}</span></td>
+                    <td><small>${JSON.stringify(strategy.strategy_params)}</small></td>
+                    <td><small>${new Date(strategy.created_at).toLocaleString()}</small></td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="removeStrategy('${strategy.symbol}', '${strategy.side}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+            });
+            
+            // Aggiungi trailing stops
+            data.trailing_stops.forEach(trail => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${trail.symbol}</td>
+                    <td><span class="badge bg-${trail.side === 'Buy' ? 'success' : 'danger'}">${trail.side}</span></td>
+                    <td><span class="badge bg-warning">Trailing Stop</span></td>
+                    <td><small>Stop: ${trail.current_stop_price.toFixed(4)}<br>Trail: ${(trail.trail_amount * 100).toFixed(2)}%</small></td>
+                    <td><small>${new Date(trail.created_at).toLocaleString()}</small></td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="removeStrategy('${trail.symbol}', '${trail.side}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+            });
+            
+            if (data.active_strategies.length === 0 && data.trailing_stops.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nessuna strategia attiva</td></tr>';
+            }
+            
+            // Mostra modal
+            const modal = new bootstrap.Modal(document.getElementById('strategiesModal'));
+            modal.show();
+        } else {
+            showAlert('Errore nel caricamento strategie: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore connessione: ' + error.message, 'danger');
+    }
+}
+
+// Rimuovi strategia
+async function removeStrategy(symbol, side) {
+    if (!confirm(`Vuoi rimuovere la strategia per ${symbol} ${side}?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/bot/strategy/remove', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                symbol: symbol,
+                side: side
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Strategia rimossa: ${symbol} ${side}`, 'success');
+            
+            // Ricarica strategie
+            showActiveStrategies();
+            checkRecoveryStatus();
+        } else {
+            showAlert('Errore nella rimozione: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore connessione: ' + error.message, 'danger');
+    }
+}
+
+// Mostra trailing stops (redirect a lista strategie)
+function showTrailingStops() {
+    showActiveStrategies();
+}
+
+// Aggiorna status trailing
+function updateTrailingStatus(count) {
+    const statusEl = document.getElementById('trailing-status');
+    if (statusEl) {
+        if (count > 0) {
+            statusEl.innerHTML = `
+                <span class="text-success">
+                    <i class="fas fa-chart-line"></i> 
+                    ${count} trailing stop${count > 1 ? 's' : ''} attiv${count > 1 ? 'i' : 'o'}
+                </span>
+            `;
+        } else {
+            statusEl.innerHTML = `
+                <span class="text-muted">
+                    <i class="fas fa-minus-circle"></i> 
+                    Nessun trailing stop attivo
+                </span>
+            `;
+        }
+    }
+}
+
+// Aggiungi trailing stop inline
+function addInlineTrailing(symbol, side) {
+    const percentage = prompt('Inserisci la percentuale di trailing stop (es: 0.5 per 0.5%):');
+    
+    if (percentage && parseFloat(percentage) > 0) {
+        addTrailingStopDirect(symbol, side, parseFloat(percentage));
+    }
+}
+
+// Aggiungi trailing stop diretto
+async function addTrailingStopDirect(symbol, side, percentage) {
+    try {
+        const response = await fetch('/api/bot/trailing-stop/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                symbol: symbol,
+                side: side,
+                trail_percentage: percentage
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Trailing stop aggiunto: ${symbol} ${side} (${percentage}%)`, 'success');
+            checkRecoveryStatus();
+        } else {
+            showAlert('Errore nell\'aggiunta trailing stop: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore connessione: ' + error.message, 'danger');
+    }
+}
+
+// ==================== GESTIONE SIMBOLI ====================
+
+let allSymbols = [];
+let currentSymbols = [];
+
+// Carica tutti i simboli
+async function loadSymbols() {
+    try {
+        const response = await fetch('/api/symbols');
+        const data = await response.json();
+        if (data.success) {
+            allSymbols = data.symbols;
+            currentSymbols = allSymbols;
+            updateSymbolDropdown();
+            
+            // Imposta il simbolo corrente se esiste
+            const currentSymbol = document.getElementById('symbol').value;
+            const symbolData = allSymbols.find(s => s.symbol === currentSymbol);
+            if (symbolData) {
+                updateSelectedSymbol(symbolData.symbol, symbolData.name);
+            }
+        }
+    } catch (error) {
+        console.error('Errore nel caricamento simboli:', error);
+    }
+}
+
+// Aggiorna il dropdown dei simboli
+function updateSymbolDropdown() {
+    const dropdown = document.getElementById('symbol-dropdown');
+    dropdown.innerHTML = '';
+    
+    currentSymbols.forEach(symbolData => {
+        const item = document.createElement('a');
+        item.className = 'dropdown-item d-flex justify-content-between';
+        item.href = '#';
+        item.innerHTML = `
+            <span>${symbolData.name}</span>
+            <small class="text-muted">${symbolData.symbol}</small>
+        `;
+        item.onclick = (e) => {
+            e.preventDefault();
+            selectSymbol(symbolData.symbol, symbolData.name);
+        };
+        dropdown.appendChild(item);
+    });
+}
+
+// Seleziona un simbolo
+function selectSymbol(symbol, name) {
+    updateSelectedSymbol(symbol, name);
+    hideSymbolDropdown();
+}
+
+// Aggiorna il simbolo selezionato
+function updateSelectedSymbol(symbol, name) {
+    document.getElementById('symbol').value = symbol;
+    document.getElementById('symbol-search').value = name;
+    document.getElementById('selected-symbol-info').textContent = `Simbolo selezionato: ${name}`;
+}
+
+// Mostra/nasconde dropdown
+function showSymbolDropdown() {
+    document.getElementById('symbol-dropdown').classList.add('show');
+}
+
+function hideSymbolDropdown() {
+    document.getElementById('symbol-dropdown').classList.remove('show');
+}
+
+// Filtra simboli in base alla ricerca
+function filterSymbols(query) {
+    if (!query.trim()) {
+        currentSymbols = allSymbols;
+    } else {
+        const lowerQuery = query.toLowerCase();
+        currentSymbols = allSymbols.filter(s => 
+            s.symbol.toLowerCase().includes(lowerQuery) || 
+            s.name.toLowerCase().includes(lowerQuery)
+        );
+    }
+    updateSymbolDropdown();
+}
+
+// Event listeners per la ricerca simboli
+document.getElementById('symbol-search').addEventListener('input', (e) => {
+    filterSymbols(e.target.value);
+    showSymbolDropdown();
+});
+
+document.getElementById('symbol-search').addEventListener('focus', () => {
+    showSymbolDropdown();
+});
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.position-relative')) {
+        hideSymbolDropdown();
+    }
+});
+
+// Aggiunge un nuovo simbolo
+async function addNewSymbol() {
+    const symbol = document.getElementById('new-symbol').value.trim().toUpperCase();
+    const name = document.getElementById('new-symbol-name').value.trim();
+    
+    if (!symbol || !name) {
+        showAlert('Inserisci sia il simbolo che il nome', 'warning');
+        return;
+    }
+    
+    // Mostra loading
+    const addBtn = document.getElementById('add-symbol-btn');
+    const originalText = addBtn.innerHTML;
+    addBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifica...';
+    addBtn.disabled = true;
+    
+    try {
+        const response = await fetch('/api/symbols/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ symbol, name })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(data.message, 'success');
+            
+            // Ricarica i simboli
+            await loadSymbols();
+            
+            // Chiudi modal
+            bootstrap.Modal.getInstance(document.getElementById('addSymbolModal')).hide();
+            
+            // Reset form
+            document.getElementById('new-symbol').value = '';
+            document.getElementById('new-symbol-name').value = '';
+            
+            // Seleziona il nuovo simbolo
+            selectSymbol(data.symbol.symbol, data.symbol.name);
+        } else {
+            showAlert(data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore nella connessione', 'danger');
+    } finally {
+        addBtn.innerHTML = originalText;
+        addBtn.disabled = false;
+    }
+}
+
+// Inizializza simboli al caricamento
+document.addEventListener('DOMContentLoaded', () => {
+    loadSymbols();
+});
+</script>
+
+<!-- Modal Aggiungi Simbolo -->
+<div class="modal fade" id="addSymbolModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus-circle text-primary me-2"></i>
+                    Aggiungi Nuovo Simbolo
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="new-symbol" class="form-label">Simbolo</label>
+                    <input type="text" class="form-control" id="new-symbol" 
+                           placeholder="es. LINKUSDT" oninput="this.value = this.value.toUpperCase()">
+                    <div class="form-text">Inserisci il simbolo esatto come su Bybit (es. LINKUSDT, MATICUSDT)</div>
+                </div>
+                <div class="mb-3">
+                    <label for="new-symbol-name" class="form-label">Nome Visualizzato</label>
+                    <input type="text" class="form-control" id="new-symbol-name" 
+                           placeholder="es. LINK/USDT">
+                    <div class="form-text">Nome che apparirà nel menu di selezione</div>
+                </div>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Il simbolo verrà verificato su Bybit prima di essere aggiunto
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" id="add-symbol-btn" onclick="addNewSymbol()">
+                    <i class="fas fa-check me-1"></i> Aggiungi Simbolo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Aggiungi Trailing Stop -->
+<div class="modal fade" id="addTrailingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title">🎯 Aggiungi Trailing Stop</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="trailing-form">
+                    <div class="mb-3">
+                        <label for="trailing-symbol" class="form-label">Simbolo</label>
+                        <select class="form-select" id="trailing-symbol" required>
+                            <option value="">Seleziona una posizione attiva</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="trailing-percentage" class="form-label">Percentuale Trailing (%)</label>
+                        <input type="number" class="form-control" id="trailing-percentage" 
+                               value="0.5" min="0.1" max="10" step="0.1" required>
+                        <div class="form-text text-muted">
+                            Percentuale di distanza dal prezzo migliore per il trailing stop
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" onclick="addTrailingStop()">
+                    <i class="fas fa-plus"></i> Aggiungi Trailing Stop
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Lista Strategie -->
+<div class="modal fade" id="strategiesModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title">📋 Strategie e Trailing Stops Attivi</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-dark">
+                        <thead>
+                            <tr>
+                                <th>Simbolo</th>
+                                <th>Tipo</th>
+                                <th>Strategia</th>
+                                <th>Parametri</th>
+                                <th>Creato</th>
+                                <th>Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="strategies-table">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">
+                                    Caricamento...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+            </div>
+        </div>
+    </div>
+</div>
+</script>
+{% endblock %}

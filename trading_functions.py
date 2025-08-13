@@ -171,12 +171,23 @@ def execute_thread(func, args):
     return thread
 #FUNZIONI BYBIT#
 def get_server_time():
-    response = requests.get("https://api.bybit.com/v2/public/time")
-    if response.status_code == 200:
-        server_time = response.json()['time_now']
-        return float(server_time)
-    else:
-        print("Errore durante il recupero del tempo del server di Bybit.")
+    try:
+        # Usa il nuovo endpoint v5 per il server time
+        response = requests.get("https://api.bybit.com/v5/market/time")
+        if response.status_code == 200:
+            data = response.json()
+            if data['retCode'] == 0:
+                # Il tempo è in millisecondi, convertiamo in secondi
+                server_time = int(data['result']['timeSecond'])
+                return float(server_time)
+            else:
+                print(f"Errore API Bybit: {data['retMsg']}")
+                return None
+        else:
+            print(f"Errore HTTP: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Errore durante il recupero del tempo del server di Bybit: {e}")
         return None
     
 def check_timestamp(recv_window, timestamp):
@@ -411,6 +422,53 @@ def get_kline_data(categoria, simbolo, intervallo, limit=200):
         return kline_data["list"]
     else:
         print(f"Nessun dato Kline disponibile per il simbolo {simbolo}")
+        return []
+
+def get_kline_data_with_dates(categoria, simbolo, intervallo, start_timestamp=None, end_timestamp=None, limit=200):
+    """
+    Ottieni dati Kline con date specifiche usando PyBit
+    
+    Args:
+        categoria: Categoria del trading (linear, spot, etc.)
+        simbolo: Simbolo da scaricare (es. BTCUSDT)
+        intervallo: Timeframe (D, 240, 60, etc.)
+        start_timestamp: Timestamp inizio in millisecondi (opzionale)
+        end_timestamp: Timestamp fine in millisecondi (opzionale)
+        limit: Numero massimo di candele da scaricare
+        
+    Returns:
+        Lista di candele OHLCV
+    """
+    # Inizializza la sessione HTTP
+    session = HTTP(testnet=False, api_key=api, api_secret=api_sec)
+    
+    # Prepara parametri per la richiesta
+    params = {
+        "category": categoria,
+        "symbol": simbolo,
+        "interval": intervallo,
+        "limit": limit
+    }
+    
+    # Aggiungi timestamp se forniti
+    if start_timestamp:
+        params["start"] = int(start_timestamp)
+    if end_timestamp:
+        params["end"] = int(end_timestamp)
+    
+    try:
+        # Esegui richiesta
+        kline_data = session.get_kline(**params)["result"]
+        
+        # Verifica se ci sono dati disponibili
+        if "list" in kline_data and kline_data["list"]:
+            return kline_data["list"]
+        else:
+            print(f"Nessun dato Kline disponibile per {simbolo} nel periodo richiesto")
+            return []
+            
+    except Exception as e:
+        print(f"Errore nel download dati per {simbolo}: {e}")
         return []
 
 #FUNZIONI TRADING#

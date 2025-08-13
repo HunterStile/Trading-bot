@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Trading Bot{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Sidebar -->
+    <div class="col-lg-3 col-md-4">
+        <div class="sidebar p-3">
+            <h5 class="mb-3">📊 Panoramica</h5>
+            
+            <!-- Bot Status -->
+            <div class="card mb-3">
+                <div class="card-body text-center">
+                    <h6 class="card-title">Stato Bot</h6>
+                    <div id="bot-status-indicator" class="status-indicator status-offline"></div>
+                    <span id="bot-status-text">Offline</span>
+                    <div class="mt-2">
+                        <small class="text-muted" id="last-update">Mai aggiornato</small>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Quick Actions -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">⚡ Azioni Rapide</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-success btn-sm" onclick="quickStartBot()">
+                            <i class="fas fa-play"></i> Avvia Bot
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="quickStopBot()">
+                            <i class="fas fa-stop"></i> Ferma Bot
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="refreshData()">
+                            <i class="fas fa-sync"></i> Aggiorna Dati
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Main Dashboard -->
+    <div class="col-lg-9 col-md-8">
+        <!-- Metrics Row -->
+        <div class="row mb-4">
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="metric-card">
+                    <div class="metric-value" id="total-balance">-</div>
+                    <div class="metric-label">Saldo Totale (USDT)</div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="metric-card">
+                    <div class="metric-value" id="current-price">-</div>
+                    <div class="metric-label">Prezzo Corrente</div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="metric-card">
+                    <div class="metric-value" id="daily-pnl">-</div>
+                    <div class="metric-label">PnL Giornaliero</div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="metric-card">
+                    <div class="metric-value" id="open-positions">-</div>
+                    <div class="metric-label">Posizioni Aperte</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Charts and Analysis -->
+        <div class="row">
+            <!-- Price Chart -->
+            <div class="col-lg-8 mb-4">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">📈 Grafico Prezzi</h5>
+                        <div>
+                            <select class="form-select form-select-sm" id="chart-symbol" onchange="updateChart()">
+                                <option value="AVAXUSDT">AVAX/USDT</option>
+                                <option value="BTCUSDT">BTC/USDT</option>
+                                <option value="ETHUSDT">ETH/USDT</option>
+                                <option value="SOLUSDT">SOL/USDT</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="priceChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Market Analysis -->
+            <div class="col-lg-4 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">🔍 Analisi Mercato</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="market-analysis">
+                            <div class="text-center">
+                                <div class="loading-spinner"></div>
+                                <p class="mt-2 text-muted">Caricamento analisi...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Trading Activity -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">📝 Attività di Trading</h5>
+                        <button class="btn btn-outline-primary btn-sm" onclick="refreshActivity()">
+                            <i class="fas fa-sync"></i> Aggiorna
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Simbolo</th>
+                                        <th>Tipo</th>
+                                        <th>Quantità</th>
+                                        <th>Prezzo</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="trading-activity">
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted">
+                                            Nessuna attività di trading recente
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Alerts and Notifications -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">🔔 Alert e Notifiche</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="alerts-container">
+                            <p class="text-muted">Nessun alert attivo</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let priceChart;
+let currentSymbol = 'AVAXUSDT';
+
+// Inizializza la dashboard
+document.addEventListener('DOMContentLoaded', function() {
+    initChart();
+    loadDashboardData();
+    setupRealTimeUpdates();
+});
+
+// Inizializza il grafico
+function initChart() {
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    priceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Prezzo',
+                data: [],
+                borderColor: '#2563eb',
+                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    grid: {
+                        color: 'rgba(0,0,0,0.1)'
+                    }
+                },
+                x: {
+                    grid: {
+                        color: 'rgba(0,0,0,0.1)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Carica i dati iniziali
+function loadDashboardData() {
+    loadBalance();
+    loadCurrentPrice();
+    loadMarketAnalysis();
+}
+
+// Carica il saldo
+function loadBalance() {
+    fetch('/api/balance')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('total-balance').textContent = 
+                    formatCurrency(data.data.total_equity);
+            } else {
+                document.getElementById('total-balance').textContent = 'Errore';
+            }
+        })
+        .catch(error => {
+            console.error('Errore caricamento saldo:', error);
+            document.getElementById('total-balance').textContent = 'Errore';
+        });
+}
+
+// Carica il prezzo corrente
+function loadCurrentPrice() {
+    fetch(`/api/price/${currentSymbol}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('current-price').textContent = 
+                    formatCurrency(data.price, currentSymbol.replace('USDT', ''));
+            } else {
+                document.getElementById('current-price').textContent = 'Errore';
+            }
+        })
+        .catch(error => {
+            console.error('Errore caricamento prezzo:', error);
+            document.getElementById('current-price').textContent = 'Errore';
+        });
+}
+
+// Carica l'analisi di mercato
+function loadMarketAnalysis() {
+    fetch(`/api/market-data/${currentSymbol}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateChartData(data.chart_data);
+                updateMarketAnalysis(data.analysis);
+            } else {
+                document.getElementById('market-analysis').innerHTML = 
+                    '<p class="text-danger">Errore nel caricamento dell\'analisi</p>';
+            }
+        })
+        .catch(error => {
+            console.error('Errore caricamento analisi:', error);
+            document.getElementById('market-analysis').innerHTML = 
+                '<p class="text-danger">Errore nel caricamento dell\'analisi</p>';
+        });
+}
+
+// Aggiorna i dati del grafico
+function updateChartData(chartData) {
+    const labels = chartData.map(item => {
+        const date = new Date(item.timestamp);
+        return date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    });
+    
+    const prices = chartData.map(item => item.close);
+    
+    priceChart.data.labels = labels;
+    priceChart.data.datasets[0].data = prices;
+    priceChart.update();
+}
+
+// Aggiorna l'analisi di mercato
+function updateMarketAnalysis(analysis) {
+    const trendIcon = analysis.above_ema ? '📈' : '📉';
+    const trendText = analysis.above_ema ? 'Sopra EMA' : 'Sotto EMA';
+    const trendClass = analysis.above_ema ? 'text-success' : 'text-danger';
+    
+    document.getElementById('market-analysis').innerHTML = `
+        <div class="mb-3">
+            <h6>${trendIcon} Trend EMA</h6>
+            <p class="${trendClass} fw-bold">${trendText}</p>
+        </div>
+        <div class="mb-3">
+            <h6>📊 Distanza da EMA</h6>
+            <p class="${analysis.percentage_diff >= 0 ? 'text-success' : 'text-danger'}">
+                ${formatPercentage(analysis.percentage_diff)}
+            </p>
+        </div>
+        <div>
+            <h6>💰 Prezzo Corrente</h6>
+            <p class="fw-bold">${formatCurrency(analysis.current_price)}</p>
+        </div>
+    `;
+}
+
+// Aggiorna grafico quando cambia simbolo
+function updateChart() {
+    currentSymbol = document.getElementById('chart-symbol').value;
+    loadCurrentPrice();
+    loadMarketAnalysis();
+}
+
+// Setup aggiornamenti in tempo reale
+function setupRealTimeUpdates() {
+    // Aggiorna ogni 30 secondi
+    setInterval(() => {
+        socket.emit('request_update');
+    }, 30000);
+    
+    // Ascolta aggiornamenti prezzo
+    socket.on('price_update', function(data) {
+        if (data.symbol === currentSymbol) {
+            document.getElementById('current-price').textContent = 
+                formatCurrency(data.price, data.symbol.replace('USDT', ''));
+        }
+    });
+    
+    // Ascolta aggiornamenti bot
+    socket.on('bot_update', function(data) {
+        updateBotStatus(data.status === 'running');
+        showAlert(data.message, 'info');
+    });
+    
+    // Ascolta errori bot
+    socket.on('bot_error', function(data) {
+        updateBotStatus(false);
+        showAlert('Errore bot: ' + data.error, 'danger');
+    });
+}
+
+// Aggiorna stato bot
+function updateBotStatus(isRunning) {
+    const indicator = document.getElementById('bot-status-indicator');
+    const text = document.getElementById('bot-status-text');
+    const lastUpdate = document.getElementById('last-update');
+    
+    if (isRunning) {
+        indicator.className = 'status-indicator status-online';
+        text.textContent = 'Online';
+    } else {
+        indicator.className = 'status-indicator status-offline';
+        text.textContent = 'Offline';
+    }
+    
+    lastUpdate.textContent = 'Aggiornato: ' + new Date().toLocaleTimeString('it-IT');
+}
+
+// Azioni rapide
+function quickStartBot() {
+    fetch('/api/bot/start', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(data.message, 'success');
+                updateBotStatus(true);
+            } else {
+                showAlert('Errore: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            showAlert('Errore di connessione', 'danger');
+        });
+}
+
+function quickStopBot() {
+    fetch('/api/bot/stop', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(data.message, 'warning');
+                updateBotStatus(false);
+            } else {
+                showAlert('Errore: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            showAlert('Errore di connessione', 'danger');
+        });
+}
+
+function refreshData() {
+    showAlert('Aggiornamento dati in corso...', 'info');
+    loadDashboardData();
+}
+
+function refreshActivity() {
+    // Placeholder per attività di trading
+    showAlert('Attività aggiornata', 'success');
+}
+</script>
+{% endblock %}
