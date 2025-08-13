@@ -4,6 +4,7 @@ import sys
 import os
 import threading
 import time
+import logging
 from datetime import datetime, timedelta
 import json
 
@@ -13,6 +14,20 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Import del database e wrapper
 from utils.database import trading_db
 from utils.trading_wrapper import trading_wrapper
+
+# Import sistema di recovery
+try:
+    from utils.bot_state import BotStateManager
+    from utils.bot_recovery import BotRecoveryManager
+    
+    # Inizializza recovery system
+    state_manager = BotStateManager()
+    recovery_manager = BotRecoveryManager(trading_wrapper, state_manager)
+    print("✅ Recovery system inizializzato")
+except ImportError as e:
+    print(f"⚠️ Recovery system non disponibile: {e}")
+    state_manager = None
+    recovery_manager = None
 
 # Import delle funzioni del trading bot
 try:
@@ -29,6 +44,10 @@ except ImportError as e:
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'trading_bot_secret_key_2024'
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Setup logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # Coppie di trading default e personalizzate
 DEFAULT_SYMBOLS = [
@@ -216,6 +235,24 @@ def start_bot():
         if data:
             bot_status.update(data)
         
+        # Salva configurazione bot per recovery
+        if state_manager:
+            bot_config = {
+                'symbol': data.get('symbol'),
+                'quantity': data.get('quantity'),
+                'operation': data.get('operation'),
+                'ema_period': data.get('ema_period'),
+                'interval': data.get('interval'),
+                'open_candles': data.get('open_candles'),
+                'stop_candles': data.get('stop_candles'),
+                'distance': data.get('distance'),
+                'timestamp': datetime.now().isoformat(),
+                'auto_restart': True,
+                'was_running': True
+            }
+            state_manager.save_bot_state('bot_config', bot_config)
+            print("💾 Configurazione bot salvata per recovery")
+        
         bot_status['running'] = True
         bot_status['last_update'] = datetime.now().isoformat()
         stop_bot_flag = False
@@ -238,6 +275,16 @@ def stop_bot():
     stop_bot_flag = True
     bot_status['running'] = False
     bot_status['last_update'] = datetime.now().isoformat()
+    
+    # Aggiorna stato nel recovery (bot fermato manualmente)
+    if state_manager:
+        bot_config = state_manager.get_bot_state('bot_config')
+        if bot_config:
+            bot_config['was_running'] = False
+            bot_config['stopped_manually'] = True
+            bot_config['stop_timestamp'] = datetime.now().isoformat()
+            state_manager.save_bot_state('bot_config', bot_config)
+            print("💾 Stato bot aggiornato: fermato manualmente")
     
     # Chiudi la sessione corrente se attiva
     if bot_status.get('current_session_id'):
@@ -292,7 +339,166 @@ def update_bot_settings():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-# ==================== ROUTE PER DATI STORICI ====================
+@app.route('/api/bot/recovery/status')
+def get_recovery_status():
+    """Ottieni stato del recovery system"""
+    try:
+        if not recovery_manager:
+            return jsonify({'success': False, 'error': 'Recovery system non disponibile'})
+        
+        summary = state_manager.get_recovery_summary()
+        
+        return jsonify({
+            'success': True,
+            'recovery_summary': summary,
+            'recovery_active': recovery_manager.recovery_active
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/bot/recovery/start', methods=['POST'])
+def start_recovery():
+    """Avvia recovery del bot"""
+    try:
+        if not recovery_manager:
+            return jsonify({'success': False, 'error': 'Recovery system non disponibile'})
+        
+        result = recovery_manager.perform_initial_recovery()
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/bot/trailing-stop/add', methods=['POST'])
+def add_trailing_stop():
+    """Aggiungi trailing stop a una posizione"""
+    try:
+        if not recovery_manager:
+            return jsonify({'success': False, 'error': 'Recovery system non disponibile'})
+        
+        data = request.get_json()
+        symbol = data.get('symbol')
+        side = data.get('side')
+        trail_percentage = float(data.get('trail_percentage', 0.5))
+        
+        if not symbol or not side:
+            return jsonify({'success': False, 'error': 'Symbol e side sono richiesti'})
+        
+        result = recovery_manager.add_trailing_stop_to_position(symbol, side, trail_percentage)
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/bot/trailing-stops')
+def get_trailing_stops():
+    """Ottieni tutti i trailing stops attivi"""
+    try:
+        if not state_manager:
+            return jsonify({'success': False, 'error': 'State manager non disponibile'})
+        
+        trailing_stops = state_manager.get_trailing_stops()
+        active_strategies = state_manager.get_active_strategies()
+        
+        return jsonify({
+            'success': True,
+            'trailing_stops': trailing_stops,
+            'active_strategies': active_strategies
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/bot/strategy/remove', methods=['POST'])
+def remove_strategy():
+    """Rimuovi una strategia attiva"""
+    try:
+        if not state_manager:
+            return jsonify({'success': False, 'error': 'State manager non disponibile'})
+        
+        data = request.get_json()
+        symbol = data.get('symbol')
+        side = data.get('side')
+        
+        if not symbol or not side:
+            return jsonify({'success': False, 'error': 'Symbol e side sono richiesti'})
+        
+        # Rimuovi strategia e trailing stop
+        state_manager.deactivate_strategy(symbol, side)
+        state_manager.remove_trailing_stop(symbol, side)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Strategia rimossa per {symbol} {side}'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/bot/recovery/auto-restart', methods=['POST'])
+def auto_restart_bot():
+    """Auto-riavvia il bot se necessario"""
+    try:
+        if not recovery_manager:
+            return jsonify({'success': False, 'error': 'Recovery system non disponibile'})
+        
+        # Controlla se il bot dovrebbe essere riavviato
+        bot_config = state_manager.get_bot_state('bot_config')
+        
+        if not bot_config:
+            return jsonify({'success': False, 'error': 'Nessuna configurazione bot salvata'})
+        
+        was_running = bot_config.get('was_running', False)
+        stopped_manually = bot_config.get('stopped_manually', False)
+        auto_restart = bot_config.get('auto_restart', True)
+        
+        if not (was_running and not stopped_manually and auto_restart):
+            return jsonify({
+                'success': False, 
+                'error': 'Bot non dovrebbe essere riavviato automaticamente',
+                'was_running': was_running,
+                'stopped_manually': stopped_manually,
+                'auto_restart': auto_restart
+            })
+        
+        # Riavvia il bot
+        restarted = recovery_manager._auto_restart_bot(bot_config)
+        
+        if restarted:
+            return jsonify({
+                'success': True,
+                'message': f'Bot riavviato automaticamente con simbolo {bot_config.get("symbol")}',
+                'config': bot_config
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Errore nel riavvio automatico del bot'})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/bot/config/last')
+def get_last_bot_config():
+    """Ottieni l'ultima configurazione del bot"""
+    try:
+        if not state_manager:
+            return jsonify({'success': False, 'error': 'State manager non disponibile'})
+        
+        bot_config = state_manager.get_bot_state('bot_config')
+        
+        if bot_config:
+            return jsonify({
+                'success': True,
+                'config': bot_config,
+                'should_auto_restart': (
+                    bot_config.get('was_running', False) and 
+                    not bot_config.get('stopped_manually', False) and 
+                    bot_config.get('auto_restart', True)
+                )
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Nessuna configurazione salvata'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+# ==================== BOT CONTROL ====================
 
 @app.route('/api/history/sessions')
 def get_session_history():
@@ -397,6 +603,99 @@ def history_page():
     """Pagina storico trading"""
     return render_template('history.html')
 
+@app.route('/api/history/sessions')
+def get_trading_sessions():
+    """Ottieni storico delle sessioni di trading"""
+    try:
+        days = request.args.get('days', 30, type=int)
+        limit = request.args.get('limit', 50, type=int)
+        
+        sessions = trading_db.get_sessions_history(days, limit)
+        
+        return jsonify({
+            'success': True,
+            'sessions': sessions,
+            'total': len(sessions)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/history/trades')
+def get_trades_history():
+    """Ottieni storico dei trade"""
+    try:
+        days = request.args.get('days', 30, type=int)
+        limit = request.args.get('limit', 100, type=int)
+        symbol = request.args.get('symbol')
+        
+        trades = trading_db.get_trades_history(days, limit, symbol)
+        
+        return jsonify({
+            'success': True,
+            'trades': trades,
+            'total': len(trades)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/history/analytics')
+def get_trading_analytics():
+    """Ottieni analytics del trading"""
+    try:
+        days = request.args.get('days', 30, type=int)
+        
+        # Combina varie statistiche per analytics
+        performance = trading_db.get_performance_stats(days)
+        daily_perf = trading_db.get_daily_performance(days)
+        recent_trades = trading_db.get_trade_history(limit=10)
+        
+        analytics = {
+            'performance': performance,
+            'daily_performance': daily_perf,
+            'recent_trades': recent_trades,
+            'total_sessions': len(trading_db.get_session_history(limit=1000))
+        }
+        
+        return jsonify({
+            'success': True,
+            'analytics': analytics
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/history/performance')
+def get_performance_data():
+    """Ottieni dati di performance per grafici"""
+    try:
+        days = request.args.get('days', 30, type=int)
+        
+        performance = trading_db.get_performance_stats(days)
+        
+        return jsonify({
+            'success': True,
+            'performance': performance
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+def get_analytics_data():
+    """Funzione helper per ottenere dati analitici"""
+    try:
+        # Combina varie statistiche
+        performance = trading_db.get_performance_stats(30)
+        daily_perf = trading_db.get_daily_performance(30)
+        recent_trades = trading_db.get_trade_history(limit=10)
+        
+        return {
+            'performance': performance,
+            'daily_performance': daily_perf,
+            'recent_trades': recent_trades,
+            'total_sessions': len(trading_db.get_session_history(limit=1000))
+        }
+    except Exception as e:
+        logger.error(f"Errore nel recupero analytics: {e}")
+        return {}
+
 @app.route('/api/trading/open-position', methods=['POST'])
 def api_open_position():
     """API per aprire una posizione manualmente"""
@@ -454,13 +753,36 @@ def api_close_position():
         data = request.get_json()
         
         trade_id = data.get('trade_id')
+        symbol = data.get('symbol')
+        side = data.get('side')
         price = data.get('price')  # None per market price
         reason = data.get('reason', 'MANUAL_CLOSE')
+        
+        # Se non abbiamo trade_id ma abbiamo symbol e side, prova a trovarlo
+        if not trade_id and symbol and side:
+            active_trades = trading_wrapper.get_active_trades()
+            for tid, trade_info in active_trades.items():
+                if (trade_info.get('symbol') == symbol and 
+                    trade_info.get('side') == side):
+                    trade_id = tid
+                    break
+        
+        # Se ancora non abbiamo trade_id, prova a cercare nel database
+        if not trade_id and symbol and side:
+            try:
+                if trading_wrapper.current_session_id:
+                    trades = trading_db.get_trade_history(trading_wrapper.current_session_id, 100)
+                    open_trades = [t for t in trades if t['status'] == 'OPEN' 
+                                 and t['symbol'] == symbol and t['side'] == side]
+                    if open_trades:
+                        trade_id = open_trades[0]['trade_id']
+            except Exception as e:
+                print(f"Errore ricerca trade nel database: {e}")
         
         if not trade_id:
             return jsonify({
                 'success': False,
-                'error': 'Trade ID richiesto'
+                'error': f'Trade non trovato per {symbol} {side}. Verifica che ci sia una posizione aperta.'
             })
         
         result = trading_wrapper.close_position(
@@ -620,15 +942,70 @@ def get_bybit_positions():
 
 @app.route('/api/trading/sync-trades', methods=['POST'])
 def sync_trades():
-    """Sincronizza trade con il database"""
+    """Sincronizza trade con il database e Bybit"""
     try:
+        # Prima sincronizza con il database
         trading_wrapper.sync_with_database()
+        
+        # Poi sincronizza con Bybit
+        bybit_result = trading_wrapper.sync_with_bybit()
+        
+        active_trades = trading_wrapper.get_active_trades()
+        
+        # Poi verifica se ci sono trade che il database conosce ma il wrapper no
+        if trading_wrapper.current_session_id:
+            db_trades = trading_db.get_trade_history(trading_wrapper.current_session_id, 100)
+            open_db_trades = [t for t in db_trades if t['status'] == 'OPEN']
+            
+            # Aggiungi trade mancanti al wrapper
+            for db_trade in open_db_trades:
+                trade_id = db_trade['trade_id']
+                if trade_id not in active_trades:
+                    trading_wrapper.active_trades[trade_id] = {
+                        'symbol': db_trade['symbol'],
+                        'side': db_trade['side'],
+                        'quantity': db_trade['quantity'],
+                        'entry_price': db_trade['entry_price'],
+                        'timestamp': db_trade['entry_time']
+                    }
+                    print(f"✅ Trade ricaricato dal DB: {trade_id} - {db_trade['side']} {db_trade['symbol']}")
+        
+        # Ricarica dopo tutte le sincronizzazioni
         active_trades = trading_wrapper.get_active_trades()
         
         return jsonify({
             'success': True,
-            'message': f'Sincronizzati {len(active_trades)} trade attivi',
-            'active_trades': len(active_trades)
+            'message': f'Sincronizzazione completata: {len(active_trades)} trade attivi',
+            'active_trades': len(active_trades),
+            'trade_details': active_trades,
+            'bybit_sync': bybit_result
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/trading/debug-trades')
+def debug_trades():
+    """Debug per verificare tutti i trade"""
+    try:
+        # Trade nel wrapper
+        wrapper_trades = trading_wrapper.get_active_trades()
+        
+        # Trade nel database
+        db_trades = []
+        if trading_wrapper.current_session_id:
+            all_trades = trading_db.get_trade_history(trading_wrapper.current_session_id, 100)
+            db_trades = [t for t in all_trades if t['status'] == 'OPEN']
+        
+        return jsonify({
+            'success': True,
+            'current_session_id': trading_wrapper.current_session_id,
+            'wrapper_trades_count': len(wrapper_trades),
+            'wrapper_trades': wrapper_trades,
+            'db_trades_count': len(db_trades),
+            'db_trades': db_trades
         })
     except Exception as e:
         return jsonify({
@@ -836,8 +1213,14 @@ def run_trading_bot():
     global stop_bot_flag, bot_status
     
     try:
-        # Avvia una nuova sessione di trading
-        if not bot_status['current_session_id']:
+        # Configura sempre il wrapper prima di iniziare
+        if bot_status['current_session_id']:
+            # Usa sessione esistente
+            trading_wrapper.set_session(bot_status['current_session_id'])
+            trading_wrapper.sync_with_database()
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔄 Continuando sessione esistente: {bot_status['current_session_id']}")
+        else:
+            # Crea nuova sessione
             strategy_config = {
                 'symbol': bot_status['symbol'],
                 'ema_period': bot_status['ema_period'],
@@ -876,6 +1259,12 @@ def run_trading_bot():
                 strategy_config,
                 session_id=bot_status['current_session_id']
             )
+            
+        # Verifica trade attivi
+        active_trades = trading_wrapper.get_active_trades()
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Trade attivi trovati: {len(active_trades)}")
+        for trade_id, trade_info in active_trades.items():
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] 📈 {trade_id}: {trade_info['side']} {trade_info['symbol']} - {trade_info['quantity']}")
         
         while not stop_bot_flag and bot_status['running']:
             try:
@@ -1124,6 +1513,14 @@ def run_trading_bot():
                             
                             for trade_id, trade_info in active_trades.items():
                                 trade_side = trade_info['side']
+                                trade_symbol = trade_info.get('symbol', bot_status['symbol'])
+                                
+                                # Verifica trailing stop prima delle condizioni EMA
+                                if recovery_manager:
+                                    trailing_stop_result = recovery_manager._check_trailing_stops()
+                                    if trailing_stop_result:
+                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Trailing stop attivato per {trade_symbol}")
+                                        continue  # Salta alle altre posizioni se questa è stata chiusa
                                 
                                 # Condizioni di chiusura per LONG
                                 if trade_side == 'BUY':
@@ -1133,8 +1530,21 @@ def run_trading_bot():
                                         result = trading_wrapper.close_position(trade_id, current_price, "EMA_STOP")
                                         if result['success']:
                                             print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ LONG chiuso con successo!")
+                                            
+                                            # Rimuovi trailing stop dopo chiusura
+                                            if recovery_manager:
+                                                recovery_manager.state_manager.remove_trailing_stop(trade_symbol, 'BUY')
                                     else:
                                         print(f"[{datetime.now().strftime('%H:%M:%S')}] 📈 LONG attivo - Candele sotto EMA: {candles_below}/{bot_status['stop_candles']}")
+                                        
+                                        # Aggiungi/aggiorna trailing stop se non esiste
+                                        if recovery_manager:
+                                            trailing_stops = recovery_manager.state_manager.get_trailing_stops()
+                                            has_trailing = any(ts['symbol'] == trade_symbol and ts['side'] == 'BUY' for ts in trailing_stops)
+                                            if not has_trailing:
+                                                result = recovery_manager.add_trailing_stop_to_position(trade_symbol, 'BUY', 0.5)
+                                                if result['success']:
+                                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Trailing stop aggiunto a {trade_symbol} LONG")
                                 
                                 # Condizioni di chiusura per SHORT
                                 elif trade_side == 'SELL':
@@ -1144,8 +1554,21 @@ def run_trading_bot():
                                         result = trading_wrapper.close_position(trade_id, current_price, "EMA_STOP")
                                         if result['success']:
                                             print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ SHORT chiuso con successo!")
+                                            
+                                            # Rimuovi trailing stop dopo chiusura
+                                            if recovery_manager:
+                                                recovery_manager.state_manager.remove_trailing_stop(trade_symbol, 'SELL')
                                     else:
                                         print(f"[{datetime.now().strftime('%H:%M:%S')}] 📉 SHORT attivo - Candele sopra EMA: {candles_above}/{bot_status['stop_candles']}")
+                                        
+                                        # Aggiungi/aggiorna trailing stop se non esiste
+                                        if recovery_manager:
+                                            trailing_stops = recovery_manager.state_manager.get_trailing_stops()
+                                            has_trailing = any(ts['symbol'] == trade_symbol and ts['side'] == 'SELL' for ts in trailing_stops)
+                                            if not has_trailing:
+                                                result = recovery_manager.add_trailing_stop_to_position(trade_symbol, 'SELL', 0.5)
+                                                if result['success']:
+                                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Trailing stop aggiunto a {trade_symbol} SHORT")
                         
                         # Salva analisi di mercato (converti tupla in dizionario)
                         ema_data = {
@@ -1265,8 +1688,37 @@ def handle_request_update():
 
 if __name__ == '__main__':
     print("🚀 Avvio Trading Bot Dashboard...")
-    print("📊 Dashboard disponibile su: http://localhost:5000")
+    
+    # Avvia recovery automatico se disponibile
+    if recovery_manager:
+        print("� Controllo recovery automatico...")
+        try:
+            recovery_result = recovery_manager.perform_initial_recovery()
+            
+            if recovery_result.get('success'):
+                recovered_strategies = recovery_result.get('recovered_strategies', [])
+                recovered_trailing = recovery_result.get('recovered_trailing_stops', [])
+                
+                if recovered_strategies or recovered_trailing:
+                    print(f"✅ Recovery completato: {len(recovered_strategies)} strategie, {len(recovered_trailing)} trailing stops")
+                else:
+                    print("ℹ️ Nessun recovery necessario")
+            else:
+                print(f"⚠️ Errore nel recovery: {recovery_result.get('error', 'Unknown')}")
+        except Exception as e:
+            print(f"⚠️ Errore durante recovery: {e}")
+    
+    print("�📊 Dashboard disponibile su: http://localhost:5000")
     print("🔧 Controllo Bot: http://localhost:5000/control")
     print("🧪 Test API: http://localhost:5000/api-test")
     
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    try:
+        socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    except KeyboardInterrupt:
+        print("\n👋 Server fermato dall'utente")
+        if recovery_manager:
+            recovery_manager.stop_recovery_check()
+    except Exception as e:
+        print(f"❌ Errore nell'avvio del server: {e}")
+        if recovery_manager:
+            recovery_manager.stop_recovery_check()

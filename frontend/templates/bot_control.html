@@ -214,15 +214,22 @@
                         <button type="button" class="btn btn-info" onclick="debugPositions()">
                             <i class="fas fa-bug"></i> Debug API
                         </button>
+                        <button type="button" class="btn btn-warning" onclick="debugInternalTrades()">
+                            <i class="fas fa-database"></i> Debug Trades
+                        </button>
+                        <button type="button" class="btn btn-success" onclick="forceSyncTrades()">
+                            <i class="fas fa-sync"></i> Forza Sync
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
         
         <!-- Active Positions -->
-        <div class="card">
-            <div class="card-header">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">📈 Posizioni Attive</h5>
+                <span id="active-positions-count" class="badge bg-secondary">0 Posizioni</span>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -246,6 +253,65 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recovery & Strategy Management -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">🔄 Recovery & Gestione Strategie</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card border-info h-100">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-redo-alt me-2"></i>Recovery System
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-outline-success btn-sm" onclick="checkRecoveryStatus()">
+                                        <i class="fas fa-search me-1"></i>Verifica Recovery
+                                    </button>
+                                    <button class="btn btn-outline-warning btn-sm" onclick="startBotRecovery()">
+                                        <i class="fas fa-play me-1"></i>Avvia Recovery
+                                    </button>
+                                    <button class="btn btn-outline-info btn-sm" onclick="showActiveStrategies()">
+                                        <i class="fas fa-list me-1"></i>Strategie Attive
+                                    </button>
+                                </div>
+                                <div id="recovery-status" class="mt-2 small text-muted">
+                                    Recovery status: Unknown
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card border-warning h-100">
+                            <div class="card-header bg-warning text-dark">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-chart-line me-2"></i>Trailing Stops
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-outline-primary btn-sm" onclick="showAddTrailingModal()">
+                                        <i class="fas fa-plus me-1"></i>Aggiungi Trailing Stop
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm" onclick="showTrailingStops()">
+                                        <i class="fas fa-list me-1"></i>Lista Trailing Stops
+                                    </button>
+                                </div>
+                                <div id="trailing-status" class="mt-2 small text-muted">
+                                    Trailing stops: Unknown
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -279,6 +345,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadBotStatus();
     loadSettings();
     loadActivePositions(); // Carica posizioni attive
+    checkRecoveryStatus(); // Controlla recovery status
     setupEventListeners();
 });
 
@@ -651,11 +718,18 @@ function updatePositionsTable(positions, debugInfo) {
                     <small>(${position.pnl_percentage}%)</small>
                 </td>
                 <td>
-                    <button class="btn btn-sm btn-outline-danger" 
-                            onclick="closePosition('${position.symbol}', '${position.side}')"
-                            title="Chiudi posizione">
-                        <i class="fas fa-times"></i>
-                    </button>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-sm btn-outline-danger" 
+                                onclick="closePosition('${position.symbol}', '${position.side}')"
+                                title="Chiudi posizione">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-warning" 
+                                onclick="addInlineTrailing('${position.symbol}', '${position.side}')"
+                                title="Aggiungi Trailing Stop">
+                            <i class="fas fa-chart-line"></i>
+                        </button>
+                    </div>
                 </td>
             </tr>
         `;
@@ -824,6 +898,75 @@ async function debugPositions() {
     }
 }
 
+// Debug trade interni
+async function debugInternalTrades() {
+    try {
+        const response = await fetch('/api/trading/debug-trades');
+        const data = await response.json();
+        
+        if (data.success) {
+            // Mostra i dati di debug in una finestra popup
+            const debugWindow = window.open('', 'debug-trades', 'width=900,height=700,scrollbars=yes');
+            debugWindow.document.write(`
+                <html>
+                <head>
+                    <title>Debug Trading System - Trade Interni</title>
+                    <style>
+                        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #fff; }
+                        pre { background: #2a2a2a; padding: 15px; border-radius: 5px; overflow: auto; }
+                        h2 { color: #4CAF50; }
+                        h3 { color: #ff9800; }
+                        .error { color: #f44336; }
+                        .success { color: #4CAF50; }
+                        .warning { color: #ff9800; }
+                    </style>
+                </head>
+                <body>
+                    <h1>🔍 Debug Trading System - Trade Interni</h1>
+                    
+                    <h2>Sessione Corrente:</h2>
+                    <p><strong>Session ID:</strong> ${data.current_session_id || 'Nessuna'}</p>
+                    
+                    <h3>Trade nel Wrapper (${data.wrapper_trades_count}):</h3>
+                    <pre>${JSON.stringify(data.wrapper_trades, null, 2)}</pre>
+                    
+                    <h3>Trade nel Database (${data.db_trades_count}):</h3>
+                    <pre>${JSON.stringify(data.db_trades, null, 2)}</pre>
+                    
+                    <button onclick="window.close()" style="padding: 10px; margin: 10px 0;">Chiudi</button>
+                </body>
+                </html>
+            `);
+        } else {
+            showAlert(`Errore debug trade: ${data.error}`, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore di connessione per debug trade', 'danger');
+    }
+}
+
+// Forza sincronizzazione trade
+async function forceSyncTrades() {
+    try {
+        const response = await fetch('/api/trading/sync-trades', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`✅ Sincronizzazione completata: ${data.active_trades} trade attivi`, 'success');
+            console.log('Trade sincronizzati:', data.trade_details);
+            
+            // Ricarica le posizioni dopo la sincronizzazione
+            loadActivePositions();
+        } else {
+            showAlert(`❌ Errore sincronizzazione: ${data.error}`, 'danger');
+        }
+    } catch (error) {
+        showAlert('❌ Errore di connessione per sincronizzazione', 'danger');
+    }
+}
+
 // Reset impostazioni
 function resetSettings() {
     document.getElementById('symbol').value = 'AVAXUSDT';
@@ -836,6 +979,355 @@ function resetSettings() {
     document.getElementById('distance').value = 1;
     
     showAlert('Impostazioni resettate ai valori di default', 'info');
+}
+
+// ==================== RECOVERY SYSTEM ====================
+
+// Controlla stato recovery
+async function checkRecoveryStatus() {
+    try {
+        const response = await fetch('/api/bot/recovery/status');
+        const data = await response.json();
+        
+        if (data.success) {
+            const summary = data.recovery_summary;
+            const statusEl = document.getElementById('recovery-status');
+            
+            if (summary.needs_recovery) {
+                statusEl.innerHTML = `
+                    <span class="text-warning">
+                        <i class="fas fa-exclamation-triangle"></i> 
+                        Recovery necessario: ${summary.active_strategies_count} strategie, ${summary.trailing_stops_count} trailing stops
+                    </span>
+                `;
+            } else {
+                statusEl.innerHTML = `
+                    <span class="text-success">
+                        <i class="fas fa-check"></i> 
+                        Nessun recovery necessario
+                    </span>
+                `;
+            }
+            
+            // Aggiorna status trailing
+            updateTrailingStatus(summary.trailing_stops_count);
+            
+            // Controlla se il bot dovrebbe auto-riavviare
+            checkAutoRestartStatus();
+            
+        } else {
+            showAlert('Errore nel controllo recovery: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore connessione recovery: ' + error.message, 'danger');
+    }
+}
+
+// Controlla se il bot dovrebbe auto-riavviare
+async function checkAutoRestartStatus() {
+    try {
+        const response = await fetch('/api/bot/config/last');
+        const data = await response.json();
+        
+        if (data.success && data.should_auto_restart) {
+            const config = data.config;
+            const statusEl = document.getElementById('recovery-status');
+            
+            statusEl.innerHTML = `
+                <span class="text-info">
+                    <i class="fas fa-redo"></i> 
+                    Bot era attivo: ${config.symbol} - 
+                    <button class="btn btn-sm btn-outline-primary" onclick="triggerAutoRestart()">
+                        Auto-Restart
+                    </button>
+                </span>
+            `;
+        }
+    } catch (error) {
+        console.error('Errore nel controllo auto-restart:', error);
+    }
+}
+
+// Trigger auto-restart manuale
+async function triggerAutoRestart() {
+    try {
+        const response = await fetch('/api/bot/recovery/auto-restart', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Bot riavviato automaticamente: ${data.config.symbol}`, 'success');
+            
+            // Aggiorna stato bot
+            loadBotStatus();
+            checkRecoveryStatus();
+        } else {
+            showAlert('Errore nel riavvio automatico: ' + data.error, 'warning');
+        }
+    } catch (error) {
+        showAlert('Errore connessione auto-restart: ' + error.message, 'danger');
+    }
+}
+
+// Avvia recovery del bot
+async function startBotRecovery() {
+    if (!confirm('Vuoi avviare il recovery del bot? Questo ripristinerà tutte le strategie per le posizioni attive.')) {
+        return;
+    }
+    
+    try {
+        showAlert('Avvio recovery in corso...', 'info');
+        
+        const response = await fetch('/api/bot/recovery/start', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Recovery completato: ${data.recovered_strategies.length} strategie, ${data.recovered_trailing_stops.length} trailing stops`, 'success');
+            
+            // Ricarica dati
+            checkRecoveryStatus();
+            loadActivePositions();
+        } else {
+            showAlert('Errore nel recovery: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore connessione recovery: ' + error.message, 'danger');
+    }
+}
+
+// Mostra modal trailing stop
+function showAddTrailingModal() {
+    // Carica posizioni attive nel dropdown
+    loadPositionsForTrailing();
+    
+    // Mostra modal
+    const modal = new bootstrap.Modal(document.getElementById('addTrailingModal'));
+    modal.show();
+}
+
+// Carica posizioni per trailing
+async function loadPositionsForTrailing() {
+    try {
+        const response = await fetch('/api/trading/positions');
+        const data = await response.json();
+        
+        const select = document.getElementById('trailing-symbol');
+        select.innerHTML = '<option value="">Seleziona una posizione attiva</option>';
+        
+        if (data.success && data.positions) {
+            data.positions.forEach(position => {
+                const option = document.createElement('option');
+                option.value = `${position.symbol}|${position.side}`;
+                option.textContent = `${position.symbol} - ${position.side} (${position.size})`;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Errore nel caricamento posizioni:', error);
+    }
+}
+
+// Aggiungi trailing stop
+async function addTrailingStop() {
+    try {
+        const symbolSide = document.getElementById('trailing-symbol').value;
+        const percentage = document.getElementById('trailing-percentage').value;
+        
+        if (!symbolSide || !percentage) {
+            showAlert('Seleziona una posizione e inserisci la percentuale', 'warning');
+            return;
+        }
+        
+        const [symbol, side] = symbolSide.split('|');
+        
+        const response = await fetch('/api/bot/trailing-stop/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                symbol: symbol,
+                side: side,
+                trail_percentage: parseFloat(percentage)
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Trailing stop aggiunto: ${symbol} ${side} (${percentage}%)`, 'success');
+            
+            // Chiudi modal
+            bootstrap.Modal.getInstance(document.getElementById('addTrailingModal')).hide();
+            
+            // Ricarica status
+            checkRecoveryStatus();
+        } else {
+            showAlert('Errore nell\'aggiunta trailing stop: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore connessione: ' + error.message, 'danger');
+    }
+}
+
+// Mostra strategie attive
+async function showActiveStrategies() {
+    try {
+        const response = await fetch('/api/bot/trailing-stops');
+        const data = await response.json();
+        
+        if (data.success) {
+            const tbody = document.getElementById('strategies-table');
+            tbody.innerHTML = '';
+            
+            // Aggiungi strategie attive
+            data.active_strategies.forEach(strategy => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${strategy.symbol}</td>
+                    <td><span class="badge bg-${strategy.side === 'Buy' ? 'success' : 'danger'}">${strategy.side}</span></td>
+                    <td><span class="badge bg-info">${strategy.strategy_type}</span></td>
+                    <td><small>${JSON.stringify(strategy.strategy_params)}</small></td>
+                    <td><small>${new Date(strategy.created_at).toLocaleString()}</small></td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="removeStrategy('${strategy.symbol}', '${strategy.side}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+            });
+            
+            // Aggiungi trailing stops
+            data.trailing_stops.forEach(trail => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${trail.symbol}</td>
+                    <td><span class="badge bg-${trail.side === 'Buy' ? 'success' : 'danger'}">${trail.side}</span></td>
+                    <td><span class="badge bg-warning">Trailing Stop</span></td>
+                    <td><small>Stop: ${trail.current_stop_price.toFixed(4)}<br>Trail: ${(trail.trail_amount * 100).toFixed(2)}%</small></td>
+                    <td><small>${new Date(trail.created_at).toLocaleString()}</small></td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="removeStrategy('${trail.symbol}', '${trail.side}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+            });
+            
+            if (data.active_strategies.length === 0 && data.trailing_stops.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nessuna strategia attiva</td></tr>';
+            }
+            
+            // Mostra modal
+            const modal = new bootstrap.Modal(document.getElementById('strategiesModal'));
+            modal.show();
+        } else {
+            showAlert('Errore nel caricamento strategie: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore connessione: ' + error.message, 'danger');
+    }
+}
+
+// Rimuovi strategia
+async function removeStrategy(symbol, side) {
+    if (!confirm(`Vuoi rimuovere la strategia per ${symbol} ${side}?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/bot/strategy/remove', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                symbol: symbol,
+                side: side
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Strategia rimossa: ${symbol} ${side}`, 'success');
+            
+            // Ricarica strategie
+            showActiveStrategies();
+            checkRecoveryStatus();
+        } else {
+            showAlert('Errore nella rimozione: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore connessione: ' + error.message, 'danger');
+    }
+}
+
+// Mostra trailing stops (redirect a lista strategie)
+function showTrailingStops() {
+    showActiveStrategies();
+}
+
+// Aggiorna status trailing
+function updateTrailingStatus(count) {
+    const statusEl = document.getElementById('trailing-status');
+    if (statusEl) {
+        if (count > 0) {
+            statusEl.innerHTML = `
+                <span class="text-success">
+                    <i class="fas fa-chart-line"></i> 
+                    ${count} trailing stop${count > 1 ? 's' : ''} attiv${count > 1 ? 'i' : 'o'}
+                </span>
+            `;
+        } else {
+            statusEl.innerHTML = `
+                <span class="text-muted">
+                    <i class="fas fa-minus-circle"></i> 
+                    Nessun trailing stop attivo
+                </span>
+            `;
+        }
+    }
+}
+
+// Aggiungi trailing stop inline
+function addInlineTrailing(symbol, side) {
+    const percentage = prompt('Inserisci la percentuale di trailing stop (es: 0.5 per 0.5%):');
+    
+    if (percentage && parseFloat(percentage) > 0) {
+        addTrailingStopDirect(symbol, side, parseFloat(percentage));
+    }
+}
+
+// Aggiungi trailing stop diretto
+async function addTrailingStopDirect(symbol, side, percentage) {
+    try {
+        const response = await fetch('/api/bot/trailing-stop/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                symbol: symbol,
+                side: side,
+                trail_percentage: percentage
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Trailing stop aggiunto: ${symbol} ${side} (${percentage}%)`, 'success');
+            checkRecoveryStatus();
+        } else {
+            showAlert('Errore nell\'aggiunta trailing stop: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore connessione: ' + error.message, 'danger');
+    }
 }
 
 // ==================== GESTIONE SIMBOLI ====================
@@ -1031,6 +1523,81 @@ document.addEventListener('DOMContentLoaded', () => {
                 <button type="button" class="btn btn-primary" id="add-symbol-btn" onclick="addNewSymbol()">
                     <i class="fas fa-check me-1"></i> Aggiungi Simbolo
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Aggiungi Trailing Stop -->
+<div class="modal fade" id="addTrailingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title">🎯 Aggiungi Trailing Stop</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="trailing-form">
+                    <div class="mb-3">
+                        <label for="trailing-symbol" class="form-label">Simbolo</label>
+                        <select class="form-select" id="trailing-symbol" required>
+                            <option value="">Seleziona una posizione attiva</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="trailing-percentage" class="form-label">Percentuale Trailing (%)</label>
+                        <input type="number" class="form-control" id="trailing-percentage" 
+                               value="0.5" min="0.1" max="10" step="0.1" required>
+                        <div class="form-text text-muted">
+                            Percentuale di distanza dal prezzo migliore per il trailing stop
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" onclick="addTrailingStop()">
+                    <i class="fas fa-plus"></i> Aggiungi Trailing Stop
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Lista Strategie -->
+<div class="modal fade" id="strategiesModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title">📋 Strategie e Trailing Stops Attivi</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-dark">
+                        <thead>
+                            <tr>
+                                <th>Simbolo</th>
+                                <th>Tipo</th>
+                                <th>Strategia</th>
+                                <th>Parametri</th>
+                                <th>Creato</th>
+                                <th>Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="strategies-table">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">
+                                    Caricamento...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
             </div>
         </div>
     </div>
