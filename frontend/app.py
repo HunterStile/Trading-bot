@@ -1354,41 +1354,49 @@ def run_trading_bot():
                         # Controlla condizioni di entrata
                         distance_ok = abs(distance_percent) <= bot_status['distance']
                         
-                        # Condizioni per LONG
-                        if bot_status['operation']:  # True = Long
-                            long_conditions = {
-                                'above_ema': is_above_ema,
-                                'enough_candles': candles_above >= bot_status['open_candles'],
-                                'distance_ok': distance_ok
-                            }
-                            
-                            print(f"[{datetime.now().strftime('%H:%M:%S')}] 🟢 LONG - Condizioni:")
-                            print(f"  ✅ Sopra EMA: {'✅' if long_conditions['above_ema'] else '❌'}")
-                            print(f"  ✅ Candele richieste: {'✅' if long_conditions['enough_candles'] else '❌'} ({candles_above}/{bot_status['open_candles']})")
-                            print(f"  ✅ Distanza OK: {'✅' if long_conditions['distance_ok'] else '❌'} ({distance_percent:.2f}% <= {bot_status['distance']}%)")
-                            
-                            # Invia log delle condizioni al frontend
+                        # Verifica se ci sono posizioni attive PRIMA di analizzare apertura
+                        active_trades = trading_wrapper.get_active_trades()
+                        
+                        # ============= ANALISI APERTURA (solo se nessuna posizione attiva) =============
+                        if not active_trades:
+                            print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 Nessuna posizione attiva - Analisi condizioni apertura...")
                             socketio.emit('analysis_log', {
-                                'message': f"🟢 LONG - Analisi condizioni:",
-                                'type': 'info'
-                            })
-                            socketio.emit('analysis_log', {
-                                'message': f"  {'✅' if long_conditions['above_ema'] else '❌'} Sopra EMA | {'✅' if long_conditions['enough_candles'] else '❌'} Candele ({candles_above}/{bot_status['open_candles']}) | {'✅' if long_conditions['distance_ok'] else '❌'} Distanza ({distance_percent:.2f}%)",
+                                'message': f"🔍 Nessuna posizione attiva - Analisi condizioni apertura...",
                                 'type': 'info'
                             })
                             
-                            if all(long_conditions.values()):
-                                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 SEGNALE LONG! Tutte le condizioni soddisfatte")
+                            # Condizioni per LONG
+                            if bot_status['operation']:  # True = Long
+                                long_conditions = {
+                                    'above_ema': is_above_ema,
+                                    'enough_candles': candles_above >= bot_status['open_candles'],
+                                    'distance_ok': distance_ok
+                                }
                                 
-                                # Invia segnale al frontend
+                                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🟢 LONG - Condizioni apertura:")
+                                print(f"  ✅ Sopra EMA: {'✅' if long_conditions['above_ema'] else '❌'}")
+                                print(f"  ✅ Candele richieste: {'✅' if long_conditions['enough_candles'] else '❌'} ({candles_above}/{bot_status['open_candles']})")
+                                print(f"  ✅ Distanza OK: {'✅' if long_conditions['distance_ok'] else '❌'} ({distance_percent:.2f}% <= {bot_status['distance']}%)")
+                                
+                                # Invia log delle condizioni al frontend
                                 socketio.emit('analysis_log', {
-                                    'message': f"🚀 SEGNALE LONG! Tutte le condizioni soddisfatte",
-                                    'type': 'success'
+                                    'message': f"🟢 LONG - Analisi condizioni apertura:",
+                                    'type': 'info'
+                                })
+                                socketio.emit('analysis_log', {
+                                    'message': f"  {'✅' if long_conditions['above_ema'] else '❌'} Sopra EMA | {'✅' if long_conditions['enough_candles'] else '❌'} Candele ({candles_above}/{bot_status['open_candles']}) | {'✅' if long_conditions['distance_ok'] else '❌'} Distanza ({distance_percent:.2f}%)",
+                                    'type': 'info'
                                 })
                                 
-                                # Verifica se non abbiamo già posizioni aperte
-                                active_trades = trading_wrapper.get_active_trades()
-                                if not active_trades:
+                                if all(long_conditions.values()):
+                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 SEGNALE LONG! Tutte le condizioni soddisfatte")
+                                    
+                                    # Invia segnale al frontend
+                                    socketio.emit('analysis_log', {
+                                        'message': f"🚀 SEGNALE LONG! Tutte le condizioni soddisfatte",
+                                        'type': 'success'
+                                    })
+                                    
                                     print(f"[{datetime.now().strftime('%H:%M:%S')}] 💰 Apertura posizione LONG...")
                                     
                                     # Apri posizione long
@@ -1419,52 +1427,41 @@ def run_trading_bot():
                                     else:
                                         print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Errore apertura LONG: {result.get('error')}")
                                 else:
-                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Trade già attivi ({len(active_trades)}), attendo chiusura")
+                                    failed_conditions = [k for k, v in long_conditions.items() if not v]
+                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏳ LONG non attivato. Mancano: {', '.join(failed_conditions)}")
                                     
                                     # Invia log al frontend
                                     socketio.emit('analysis_log', {
-                                        'message': f"⚠️ Trade già attivi ({len(active_trades)}), attendo chiusura",
+                                        'message': f"⏳ LONG non attivato. Mancano: {', '.join(failed_conditions)}",
                                         'type': 'warning'
                                     })
-                            else:
-                                failed_conditions = [k for k, v in long_conditions.items() if not v]
-                                print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏳ LONG non attivato. Mancano: {', '.join(failed_conditions)}")
+                            
+                            # Condizioni per SHORT
+                            else:  # False = Short
+                                short_conditions = {
+                                    'below_ema': not is_above_ema,
+                                    'enough_candles': candles_below >= bot_status['open_candles'],
+                                    'distance_ok': distance_ok
+                                }
                                 
-                                # Invia log al frontend
+                                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔴 SHORT - Condizioni apertura:")
+                                print(f"  ✅ Sotto EMA: {'✅' if short_conditions['below_ema'] else '❌'}")
+                                print(f"  ✅ Candele richieste: {'✅' if short_conditions['enough_candles'] else '❌'} ({candles_below}/{bot_status['open_candles']})")
+                                print(f"  ✅ Distanza OK: {'✅' if short_conditions['distance_ok'] else '❌'} ({abs(distance_percent):.2f}% <= {bot_status['distance']}%)")
+                                
+                                # Invia log delle condizioni al frontend
                                 socketio.emit('analysis_log', {
-                                    'message': f"⏳ LONG non attivato. Mancano: {', '.join(failed_conditions)}",
-                                    'type': 'warning'
+                                    'message': f"🔴 SHORT - Analisi condizioni apertura:",
+                                    'type': 'info'
                                 })
-                        
-                        # Condizioni per SHORT
-                        else:  # False = Short
-                            short_conditions = {
-                                'below_ema': not is_above_ema,
-                                'enough_candles': candles_below >= bot_status['open_candles'],
-                                'distance_ok': distance_ok
-                            }
-                            
-                            print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔴 SHORT - Condizioni:")
-                            print(f"  ✅ Sotto EMA: {'✅' if short_conditions['below_ema'] else '❌'}")
-                            print(f"  ✅ Candele richieste: {'✅' if short_conditions['enough_candles'] else '❌'} ({candles_below}/{bot_status['open_candles']})")
-                            print(f"  ✅ Distanza OK: {'✅' if short_conditions['distance_ok'] else '❌'} ({abs(distance_percent):.2f}% <= {bot_status['distance']}%)")
-                            
-                            # Invia log delle condizioni al frontend
-                            socketio.emit('analysis_log', {
-                                'message': f"🔴 SHORT - Analisi condizioni:",
-                                'type': 'info'
-                            })
-                            socketio.emit('analysis_log', {
-                                'message': f"  {'✅' if short_conditions['below_ema'] else '❌'} Sotto EMA | {'✅' if short_conditions['enough_candles'] else '❌'} Candele ({candles_below}/{bot_status['open_candles']}) | {'✅' if short_conditions['distance_ok'] else '❌'} Distanza ({abs(distance_percent):.2f}%)",
-                                'type': 'info'
-                            })
-                            
-                            if all(short_conditions.values()):
-                                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 SEGNALE SHORT! Tutte le condizioni soddisfatte")
+                                socketio.emit('analysis_log', {
+                                    'message': f"  {'✅' if short_conditions['below_ema'] else '❌'} Sotto EMA | {'✅' if short_conditions['enough_candles'] else '❌'} Candele ({candles_below}/{bot_status['open_candles']}) | {'✅' if short_conditions['distance_ok'] else '❌'} Distanza ({abs(distance_percent):.2f}%)",
+                                    'type': 'info'
+                                })
                                 
-                                # Verifica se non abbiamo già posizioni aperte
-                                active_trades = trading_wrapper.get_active_trades()
-                                if not active_trades:
+                                if all(short_conditions.values()):
+                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 SEGNALE SHORT! Tutte le condizioni soddisfatte")
+                                    
                                     print(f"[{datetime.now().strftime('%H:%M:%S')}] 💰 Apertura posizione SHORT...")
                                     
                                     # Apri posizione short
@@ -1495,82 +1492,193 @@ def run_trading_bot():
                                     else:
                                         print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Errore apertura SHORT: {result.get('error')}")
                                 else:
-                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Trade già attivi ({len(active_trades)}), attendo chiusura")
-                            else:
-                                failed_conditions = [k for k, v in short_conditions.items() if not v]
-                                print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏳ SHORT non attivato. Mancano: {', '.join(failed_conditions)}")
+                                    failed_conditions = [k for k, v in short_conditions.items() if not v]
+                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏳ SHORT non attivato. Mancano: {', '.join(failed_conditions)}")
                         
-                        # Controlla se ci sono posizioni da chiudere
-                        active_trades = trading_wrapper.get_active_trades()
-                        if active_trades:
-                            print(f"[{datetime.now().strftime('%H:%M:%S')}] 👀 Controllo {len(active_trades)} posizioni attive per chiusura...")
-                            
-                            # Invia log al frontend
+                        # ============= ANALISI CHIUSURA (solo se ci sono posizioni attive) =============
+                        else:
+                            print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Posizioni attive trovate ({len(active_trades)}) - Analisi condizioni chiusura...")
                             socketio.emit('analysis_log', {
-                                'message': f"👀 Controllo {len(active_trades)} posizioni attive per chiusura...",
+                                'message': f"📊 Posizioni attive trovate ({len(active_trades)}) - Analisi condizioni chiusura...",
                                 'type': 'info'
                             })
-                            
+                        
+                        # Controlla se ci sono posizioni da chiudere (SEMPRE, indipendentemente se stiamo aprendo o meno)
+                        active_trades = trading_wrapper.get_active_trades()
+                        if active_trades:
                             for trade_id, trade_info in active_trades.items():
                                 trade_side = trade_info['side']
                                 trade_symbol = trade_info.get('symbol', bot_status['symbol'])
                                 
-                                # Verifica trailing stop prima delle condizioni EMA
-                                if recovery_manager:
-                                    trailing_stop_result = recovery_manager._check_trailing_stops()
-                                    if trailing_stop_result:
-                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Trailing stop attivato per {trade_symbol}")
-                                        continue  # Salta alle altre posizioni se questa è stata chiusa
+                                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔄 Analizzando posizione {trade_side} {trade_symbol} (ID: {trade_id})")
+                                
+                                # Invia log dettaglio posizione al frontend
+                                socketio.emit('analysis_log', {
+                                    'message': f"🔄 Analizzando posizione {trade_side} {trade_symbol} (ID: {trade_id})",
+                                    'type': 'info'
+                                })
+                                
+                                # Verifica trailing stop prima delle condizioni EMA - DISATTIVATO
+                                # if recovery_manager:
+                                #     print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: Controllo trailing stops...")
+                                #     trailing_stop_result = recovery_manager._check_trailing_stops()
+                                #     print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: Trailing stop result = {trailing_stop_result}")
+                                #     if trailing_stop_result:
+                                #         print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Trailing stop attivato per {trade_symbol}")
+                                #         socketio.emit('analysis_log', {
+                                #             'message': f"🎯 Trailing stop attivato per {trade_symbol}",
+                                #             'type': 'success'
+                                #         })
+                                #         continue  # Salta alle altre posizioni se questa è stata chiusa
+                                #     else:
+                                #         print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: Nessun trailing stop attivato, continuo con analisi EMA...")
+                                # else:
+                                #     print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: Recovery manager non disponibile")
+                                
+                                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 Recovery manager disattivato - Procedo con analisi EMA...")
+                                
+                                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: trade_side = {trade_side}")
+                                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: candles_above = {candles_above}, candles_below = {candles_below}")
+                                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: stop_candles = {bot_status['stop_candles']}")
                                 
                                 # Condizioni di chiusura per LONG
-                                if trade_side == 'BUY':
+                                if trade_side == 'Buy':
+                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: Entrato nel blocco LONG")
                                     close_long = candles_below >= bot_status['stop_candles']
+                                    
+                                    # Log delle condizioni di chiusura LONG
+                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 LONG {trade_symbol} - Analisi chiusura:")
+                                    print(f" 📊  Candele sotto EMA: {candles_below}/{bot_status['stop_candles']} richieste")
+                                    print(f"  🎯 Condizione chiusura: {'✅ SODDISFATTA' if close_long else '❌ NON SODDISFATTA'}")
+                                    
+                                    # Invia log condizioni al frontend
+                                    socketio.emit('analysis_log', {
+                                        'message': f"📊 LONG {trade_symbol} - Analisi chiusura:",
+                                        'type': 'info'
+                                    })
+                                    socketio.emit('analysis_log', {
+                                        'message': f"  📉 Candele sotto EMA: {candles_below}/{bot_status['stop_candles']} | {'✅ CHIUSURA' if close_long else '❌ MANTIENI'}",
+                                        'type': 'success' if close_long else 'warning'
+                                    })
+                                    
                                     if close_long:
-                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔻 Chiusura LONG: {candles_below} candele sotto EMA")
+                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔻 🚨 SEGNALE CHIUSURA LONG! Eseguendo chiusura...")
+                                        
+                                        # Invia segnale chiusura al frontend
+                                        socketio.emit('analysis_log', {
+                                            'message': f"🔻 🚨 SEGNALE CHIUSURA LONG! Eseguendo chiusura...",
+                                            'type': 'warning'
+                                        })
+                                        
                                         result = trading_wrapper.close_position(trade_id, current_price, "EMA_STOP")
                                         if result['success']:
-                                            print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ LONG chiuso con successo!")
+                                            print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ LONG {trade_symbol} chiuso con successo!")
                                             
-                                            # Rimuovi trailing stop dopo chiusura
-                                            if recovery_manager:
-                                                recovery_manager.state_manager.remove_trailing_stop(trade_symbol, 'BUY')
+                                            # Notifica chiusura successo al frontend
+                                            socketio.emit('analysis_log', {
+                                                'message': f"✅ LONG {trade_symbol} chiuso con successo!",
+                                                'type': 'success'
+                                            })
+                                            
+                                            socketio.emit('trade_notification', {
+                                                'type': 'POSITION_CLOSED',
+                                                'side': 'LONG',
+                                                'symbol': trade_symbol,
+                                                'price': current_price,
+                                                'reason': 'EMA_STOP',
+                                                'timestamp': datetime.now().isoformat()
+                                            })
+                                            
+                                            # Rimuovi trailing stop dopo chiusura - DISATTIVATO
+                                            # if recovery_manager:
+                                            #     recovery_manager.state_manager.remove_trailing_stop(trade_symbol, 'BUY')
+                                        else:
+                                            print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Errore chiusura LONG: {result.get('error')}")
+                                            socketio.emit('analysis_log', {
+                                                'message': f"❌ Errore chiusura LONG: {result.get('error')}",
+                                                'type': 'error'
+                                            })
                                     else:
-                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 📈 LONG attivo - Candele sotto EMA: {candles_below}/{bot_status['stop_candles']}")
+                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 📈 LONG {trade_symbol} mantiene posizione - Condizioni chiusura non soddisfatte")
                                         
-                                        # Aggiungi/aggiorna trailing stop se non esiste
-                                        if recovery_manager:
-                                            trailing_stops = recovery_manager.state_manager.get_trailing_stops()
-                                            has_trailing = any(ts['symbol'] == trade_symbol and ts['side'] == 'BUY' for ts in trailing_stops)
-                                            if not has_trailing:
-                                                result = recovery_manager.add_trailing_stop_to_position(trade_symbol, 'BUY', 0.5)
-                                                if result['success']:
-                                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Trailing stop aggiunto a {trade_symbol} LONG")
+                                        # Aggiungi/aggiorna trailing stop se non esiste - DISATTIVATO
+                                        # if recovery_manager:
+                                        #     trailing_stops = recovery_manager.state_manager.get_trailing_stops()
+                                        #     has_trailing = any(ts['symbol'] == trade_symbol and ts['side'] == 'BUY' for ts in trailing_stops)
+                                        #     if not has_trailing:
+                                        #         result = recovery_manager.add_trailing_stop_to_position(trade_symbol, 'BUY', 0.5)
+                                        #         if result['success']:
+                                        #             print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Trailing stop aggiunto a {trade_symbol} LONG")
                                 
-                                # Condizioni di chiusura per SHORT
-                                elif trade_side == 'SELL':
-                                    close_short = candles_above >= bot_status['stop_candles']
+                                # Condizioni di chiusura per SHORT  
+                                elif trade_side == 'Sell':
+                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: Entrato nel blocco SHORT")
+                                    close_short = candles_above >= bot_status['stop_candles']                                    # Log delle condizioni di chiusura SHORT
+                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] SHORT {trade_symbol} - Analisi chiusura:")
+                                    print(f"  📈 Candele sopra EMA: {candles_above}/{bot_status['stop_candles']} richieste")
+                                    print(f"  🎯 Condizione chiusura: {'✅ SODDISFATTA' if close_short else '❌ NON SODDISFATTA'}")
+                                    
+                                    # Invia log condizioni al frontend
+                                    socketio.emit('analysis_log', {
+                                        'message': f"📊 SHORT {trade_symbol} - Analisi chiusura:",
+                                        'type': 'info'
+                                    })
+                                    socketio.emit('analysis_log', {
+                                        'message': f"  📈 Candele sopra EMA: {candles_above}/{bot_status['stop_candles']} | {'✅ CHIUSURA' if close_short else '❌ MANTIENI'}",
+                                        'type': 'success' if close_short else 'warning'
+                                    })
+                                    
                                     if close_short:
-                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔺 Chiusura SHORT: {candles_above} candele sopra EMA")
+                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔺 🚨 SEGNALE CHIUSURA SHORT! Eseguendo chiusura...")
+                                        
+                                        # Invia segnale chiusura al frontend
+                                        socketio.emit('analysis_log', {
+                                            'message': f"🔺 🚨 SEGNALE CHIUSURA SHORT! Eseguendo chiusura...",
+                                            'type': 'warning'
+                                        })
+                                        
                                         result = trading_wrapper.close_position(trade_id, current_price, "EMA_STOP")
                                         if result['success']:
-                                            print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ SHORT chiuso con successo!")
+                                            print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ SHORT {trade_symbol} chiuso con successo!")
                                             
-                                            # Rimuovi trailing stop dopo chiusura
-                                            if recovery_manager:
-                                                recovery_manager.state_manager.remove_trailing_stop(trade_symbol, 'SELL')
+                                            # Notifica chiusura successo al frontend
+                                            socketio.emit('analysis_log', {
+                                                'message': f"✅ SHORT {trade_symbol} chiuso con successo!",
+                                                'type': 'success'
+                                            })
+                                            
+                                            socketio.emit('trade_notification', {
+                                                'type': 'POSITION_CLOSED',
+                                                'side': 'SHORT',
+                                                'symbol': trade_symbol,
+                                                'price': current_price,
+                                                'reason': 'EMA_STOP',
+                                                'timestamp': datetime.now().isoformat()
+                                            })
+                                            
+                                            # Rimuovi trailing stop dopo chiusura - DISATTIVATO
+                                            # if recovery_manager:
+                                            #     recovery_manager.state_manager.remove_trailing_stop(trade_symbol, 'SELL')
+                                        else:
+                                            print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Errore chiusura SHORT: {result.get('error')}")
+                                            socketio.emit('analysis_log', {
+                                                'message': f"❌ Errore chiusura SHORT: {result.get('error')}",
+                                                'type': 'error'
+                                            })
                                     else:
-                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 📉 SHORT attivo - Candele sopra EMA: {candles_above}/{bot_status['stop_candles']}")
+                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 📉 SHORT {trade_symbol} mantiene posizione - Condizioni chiusura non soddisfatte")
                                         
-                                        # Aggiungi/aggiorna trailing stop se non esiste
-                                        if recovery_manager:
-                                            trailing_stops = recovery_manager.state_manager.get_trailing_stops()
-                                            has_trailing = any(ts['symbol'] == trade_symbol and ts['side'] == 'SELL' for ts in trailing_stops)
-                                            if not has_trailing:
-                                                result = recovery_manager.add_trailing_stop_to_position(trade_symbol, 'SELL', 0.5)
-                                                if result['success']:
-                                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Trailing stop aggiunto a {trade_symbol} SHORT")
+                                        # Aggiungi/aggiorna trailing stop se non esiste - DISATTIVATO
+                                        # if recovery_manager:
+                                        #     trailing_stops = recovery_manager.state_manager.get_trailing_stops()
+                                        #     has_trailing = any(ts['symbol'] == trade_symbol and ts['side'] == 'SELL' for ts in trailing_stops)
+                                        #     if not has_trailing:
+                                        #         result = recovery_manager.add_trailing_stop_to_position(trade_symbol, 'SELL', 0.5)
+                                        #         if result['success']:
+                                        #             print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Trailing stop aggiunto a {trade_symbol} SHORT")
                         
                         # Salva analisi di mercato (converti tupla in dizionario)
+                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: Finita analisi per tutte le posizioni attive ({len(active_trades)} posizioni elaborate)")
                         ema_data = {
                             'candles_above_ema': candles_above_ema if 'candles_above_ema' in locals() else 0,
                             'price': current_price,

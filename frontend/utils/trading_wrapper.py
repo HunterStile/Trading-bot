@@ -83,23 +83,26 @@ class TradingWrapper:
             operazione = True if side.lower() == 'buy' else False
             
             try:
-                # La funzione originale probabilmente non restituisce nulla, ma fa il processo completo
-                _original_open_position(
-                    categoria,
-                    symbol,
-                    periodo_ema,
-                    intervallo,
-                    quantity,
-                    candele,
-                    lunghezza,
-                    operazione
-                )
+                # Per catturare il numero di monete, dobbiamo usare direttamente le funzioni bybit
+                from trading_functions import compra_moneta_bybit_by_quantita, vendi_moneta_bybit_by_quantita
+                
+                if side.lower() == 'buy':
+                    # LONG: compra monete
+                    tokens_bought = compra_moneta_bybit_by_quantita(categoria, symbol, quantity)
+                    actual_quantity = tokens_bought
+                else:
+                    # SHORT: vendi monete  
+                    tokens_sold = vendi_moneta_bybit_by_quantita(categoria, symbol, quantity)
+                    actual_quantity = tokens_sold
+                
+                print(f"✅ Operazione completata: {actual_quantity} {symbol} per ${quantity} USD")
                 
                 # Se arriviamo qui senza eccezioni, assumiamo il successo
                 result = {
                     'success': True,
                     'entry_price': price if price else 0,
-                    'order_id': f"BOT_{symbol}_{int(time.time())}"
+                    'order_id': f"BOT_{symbol}_{int(time.time())}",
+                    'actual_quantity': actual_quantity  # Quantità reale in monete
                 }
             except Exception as e:
                 result = {
@@ -108,13 +111,16 @@ class TradingWrapper:
                 }
             
             if result and result.get('success'):
+                # Usa la quantità reale in monete invece che in USD
+                actual_quantity = result.get('actual_quantity', quantity)
+                
                 # Salva trade nel database
                 trade_id = trading_db.add_trade(
                     session_id=self.current_session_id,
                     symbol=symbol,
                     side=side.upper(),
                     entry_price=result.get('entry_price', price),
-                    quantity=quantity,
+                    quantity=actual_quantity,  # Quantità in monete, non USD
                     strategy_signal=kwargs.get('strategy_signal', 'MANUAL')
                 )
                 
@@ -122,7 +128,7 @@ class TradingWrapper:
                 self.active_trades[trade_id] = {
                     'symbol': symbol,
                     'side': side,
-                    'quantity': quantity,
+                    'quantity': actual_quantity,  # Quantità in monete, non USD
                     'entry_price': result.get('entry_price', price),
                     'bybit_order_id': result.get('order_id'),
                     'timestamp': datetime.now().isoformat()
@@ -137,7 +143,8 @@ class TradingWrapper:
                         'trade_id': trade_id,
                         'symbol': symbol,
                         'side': side,
-                        'quantity': quantity,
+                        'quantity_usd': quantity,  # Quantità originale in USD
+                        'quantity_tokens': actual_quantity,  # Quantità reale in monete
                         'entry_price': result.get('entry_price'),
                         'bybit_order_id': result.get('order_id')
                     },
@@ -235,47 +242,30 @@ class TradingWrapper:
                         'error': 'Impossibile ottenere prezzo corrente'
                     }
             
-            # CHIUSURA REALE SU BYBIT
+            # CHIUSURA REALE SU BYBIT usando le funzioni originali
             success_bybit = False
             try:
-                # Import delle API Bybit
-                from pybit.unified_trading import HTTP
-                
-                session = HTTP(
-                    testnet=False,
-                    api_key=api,
-                    api_secret=api_sec,
-                )
+                # Import delle funzioni originali
+                from trading_functions import chiudi_operazione_long, chiudi_operazione_short
                 
                 symbol = trade_info['symbol']
                 quantity = trade_info['quantity']
                 side = trade_info['side']
                 
-                # Per chiudere una posizione, devi fare l'ordine opposto
-                close_side = 'Sell' if side == 'Buy' else 'Buy'
+                print(f"🔄 Chiusura reale Bybit usando funzioni originali: {side} {quantity} {symbol}")
                 
-                print(f"🔄 Chiusura reale Bybit: {close_side} {quantity} {symbol} @ market price")
+                # Usa le funzioni originali per chiudere
+                if side == 'Buy':
+                    # LONG -> chiudi con SELL
+                    print(f"🔴 Chiusura LONG usando chiudi_operazione_long")
+                    chiudi_operazione_long("linear", symbol, quantity)
+                elif side == 'Sell':
+                    # SHORT -> chiudi con BUY  
+                    print(f"🔵 Chiusura SHORT usando chiudi_operazione_short")
+                    chiudi_operazione_short("linear", symbol, quantity)
                 
-                # Chiudi con ordine market opposto
-                response = session.place_order(
-                    category="linear",
-                    symbol=symbol,
-                    side=close_side,
-                    orderType="Market",
-                    qty=str(quantity),
-                    reduceOnly=True  # Importante: solo per chiudere posizioni esistenti
-                )
-                
-                if response['retCode'] == 0:
-                    print(f"✅ Posizione chiusa su Bybit: {response}")
-                    success_bybit = True
-                    order_id = response['result']['orderId']
-                else:
-                    print(f"❌ Errore chiusura Bybit: {response}")
-                    return {
-                        'success': False,
-                        'error': f'Errore Bybit: {response.get("retMsg", "Unknown")}'
-                    }
+                print(f"✅ Posizione chiusa su Bybit con funzioni originali")
+                success_bybit = True
                     
             except Exception as e:
                 print(f"❌ Eccezione durante chiusura Bybit: {e}")
@@ -286,14 +276,23 @@ class TradingWrapper:
             
             # Se la chiusura Bybit è andata bene, aggiorna il database
             if success_bybit:
+                print(f"🔍 DEBUG: Aggiornamento database per trade {trade_id}")
+                
                 # Calcola fee approssimativa (0.1%)
                 fee = (price * trade_info['quantity']) * 0.001
+                
+                print(f"🔍 DEBUG: Chiamo trading_db.close_trade({trade_id}, {price}, {fee})")
                 
                 # Aggiorna il trade nel database
                 trading_db.close_trade(trade_id, price, fee)
                 
+                print(f"🔍 DEBUG: Rimuovo trade {trade_id} da active_trades")
+                print(f"🔍 DEBUG: Active trades prima: {list(self.active_trades.keys())}")
+                
                 # Rimuovi dai trade attivi
                 del self.active_trades[trade_id]
+                
+                print(f"🔍 DEBUG: Active trades dopo: {list(self.active_trades.keys())}")
                 
                 # Log successo
                 trading_db.log_event(
