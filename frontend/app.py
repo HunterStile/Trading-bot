@@ -492,6 +492,132 @@ def get_active_trades():
             'error': str(e)
         })
 
+@app.route('/api/trading/positions')
+def get_bybit_positions():
+    """Ottiene le posizioni attive direttamente da Bybit con PnL"""
+    try:
+        # Import della sessione Bybit
+        from pybit.unified_trading import HTTP
+        
+        session = HTTP(
+            testnet=False,
+            api_key=api,
+            api_secret=api_sec,
+        )
+        
+        # Prova diverse categorie di posizioni
+        debug_info = {
+            'linear_positions': [],
+            'spot_positions': [],
+            'inverse_positions': [],
+            'option_positions': []
+        }
+        
+        # Testa categoria linear con settleCoin USDT (principale)
+        try:
+            linear_response = session.get_positions(category="linear", settleCoin="USDT")
+            debug_info['linear_response'] = linear_response
+            if linear_response['retCode'] == 0:
+                debug_info['linear_positions'] = linear_response['result']['list']
+        except Exception as e:
+            debug_info['linear_exception'] = str(e)
+        
+        # Testa categoria linear con settleCoin BTC
+        try:
+            linear_btc_response = session.get_positions(category="linear", settleCoin="BTC")
+            debug_info['linear_btc_response'] = linear_btc_response
+            if linear_btc_response['retCode'] == 0:
+                debug_info['linear_btc_positions'] = linear_btc_response['result']['list']
+                # Aggiungi a linear_positions se presente
+                if 'linear_positions' not in debug_info:
+                    debug_info['linear_positions'] = []
+                debug_info['linear_positions'].extend(linear_btc_response['result']['list'])
+        except Exception as e:
+            debug_info['linear_btc_exception'] = str(e)
+        
+        # Testa categoria linear con settleCoin ETH
+        try:
+            linear_eth_response = session.get_positions(category="linear", settleCoin="ETH")
+            debug_info['linear_eth_response'] = linear_eth_response
+            if linear_eth_response['retCode'] == 0:
+                debug_info['linear_eth_positions'] = linear_eth_response['result']['list']
+                # Aggiungi a linear_positions se presente
+                if 'linear_positions' not in debug_info:
+                    debug_info['linear_positions'] = []
+                debug_info['linear_positions'].extend(linear_eth_response['result']['list'])
+        except Exception as e:
+            debug_info['linear_eth_exception'] = str(e)
+        
+        # Testa categoria spot - RIMOSSO (non supporta posizioni)
+        # Le posizioni spot non esistono in Bybit, sono solo bilanci
+        debug_info['spot_positions'] = []
+        debug_info['spot_note'] = "Spot non supporta posizioni, solo bilanci wallet"
+        
+        # Testa categoria inverse
+        try:
+            inverse_response = session.get_positions(category="inverse")
+            debug_info['inverse_response'] = inverse_response
+            if inverse_response['retCode'] == 0:
+                debug_info['inverse_positions'] = inverse_response['result']['list']
+        except Exception as e:
+            debug_info['inverse_exception'] = str(e)
+        
+        # Testa categoria option
+        try:
+            option_response = session.get_positions(category="option")
+            debug_info['option_response'] = option_response
+            if option_response['retCode'] == 0:
+                debug_info['option_positions'] = option_response['result']['list']
+        except Exception as e:
+            debug_info['option_exception'] = str(e)
+        
+        # Prova anche senza categoria (tutte) - RIMOSSO perché non supportato
+        debug_info['all_note'] = "API get_positions() senza categoria non supportata"
+        
+        # Combina tutte le posizioni attive
+        active_positions = []
+        all_positions = debug_info.get('linear_positions', []) + debug_info.get('inverse_positions', []) + debug_info.get('option_positions', [])
+        
+        for position in all_positions:
+            # Filtra solo posizioni con size > 0
+            if float(position.get('size', 0)) > 0:
+                try:
+                    current_price = float(vedi_prezzo_moneta('linear', position['symbol']))
+                    entry_price = float(position.get('avgPrice', 0)) if position.get('avgPrice') else 0
+                    size = float(position['size'])
+                    
+                    # Calcola PnL
+                    unrealized_pnl = float(position.get('unrealisedPnl', 0))
+                    pnl_percentage = (unrealized_pnl / (entry_price * size)) * 100 if entry_price > 0 and size > 0 else 0
+                    
+                    active_positions.append({
+                        'symbol': position['symbol'],
+                        'side': position.get('side', 'Unknown'),
+                        'size': size,
+                        'entry_price': entry_price,
+                        'current_price': current_price,
+                        'unrealized_pnl': unrealized_pnl,
+                        'pnl_percentage': round(pnl_percentage, 2),
+                        'leverage': position.get('leverage', 'N/A'),
+                        'created_time': position.get('createdTime', 'N/A'),
+                        'category': position.get('category', 'linear')
+                    })
+                except Exception as e:
+                    print(f"Errore nel processing della posizione {position.get('symbol', 'Unknown')}: {e}")
+        
+        return jsonify({
+            'success': True,
+            'positions': active_positions,
+            'total_positions': len(active_positions),
+            'debug_info': debug_info  # Include info di debug per troubleshooting
+        })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
 @app.route('/api/trading/sync-trades', methods=['POST'])
 def sync_trades():
     """Sincronizza trade con il database"""
@@ -504,6 +630,68 @@ def sync_trades():
             'message': f'Sincronizzati {len(active_trades)} trade attivi',
             'active_trades': len(active_trades)
         })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/trading/positions/debug')
+def debug_bybit_positions():
+    """Debug API per controllare tutte le posizioni Bybit"""
+    try:
+        from pybit.unified_trading import HTTP
+        
+        session = HTTP(
+            testnet=False,
+            api_key=api,
+            api_secret=api_sec,
+        )
+        
+        debug_data = {}
+        
+        # Test diverse categorie
+        categories = ['linear', 'spot', 'inverse', 'option']
+        
+        for category in categories:
+            try:
+                response = session.get_positions(category=category)
+                debug_data[f'{category}_response'] = response
+                
+                if response['retCode'] == 0:
+                    positions = response['result']['list']
+                    debug_data[f'{category}_count'] = len(positions)
+                    debug_data[f'{category}_positions'] = positions
+                    
+                    # Filtra solo posizioni non vuote
+                    active = [p for p in positions if float(p.get('size', 0)) > 0]
+                    debug_data[f'{category}_active'] = active
+                    debug_data[f'{category}_active_count'] = len(active)
+                else:
+                    debug_data[f'{category}_error'] = response.get('retMsg', 'Unknown error')
+                    
+            except Exception as e:
+                debug_data[f'{category}_exception'] = str(e)
+        
+        # Test senza categoria
+        try:
+            all_response = session.get_positions()
+            debug_data['all_positions_response'] = all_response
+        except Exception as e:
+            debug_data['all_positions_exception'] = str(e)
+        
+        # Test balance per vedere se l'API funziona
+        try:
+            balance_response = session.get_wallet_balance(accountType="UNIFIED")
+            debug_data['wallet_balance'] = balance_response
+        except Exception as e:
+            debug_data['wallet_balance_exception'] = str(e)
+        
+        return jsonify({
+            'success': True,
+            'debug_data': debug_data
+        })
+        
     except Exception as e:
         return jsonify({
             'success': False,

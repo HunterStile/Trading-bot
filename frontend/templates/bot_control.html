@@ -69,6 +69,10 @@
                             <div>
                                 <h6 class="mb-0">Stato Bot</h6>
                                 <small class="text-muted" id="bot-status-text">Offline</small>
+                                <div class="mt-1">
+                                    <span class="badge bg-primary me-1" id="active-positions-count">0 Posizioni</span>
+                                    <span class="badge bg-info" id="bot-instances-count">1 Istanza</span>
+                                </div>
                             </div>
                         </div>
                         
@@ -207,6 +211,9 @@
                         <button type="button" class="btn btn-secondary" onclick="resetSettings()">
                             <i class="fas fa-undo"></i> Reset Default
                         </button>
+                        <button type="button" class="btn btn-info" onclick="debugPositions()">
+                            <i class="fas fa-bug"></i> Debug API
+                        </button>
                     </div>
                 </form>
             </div>
@@ -271,6 +278,7 @@ let botRunning = false;
 document.addEventListener('DOMContentLoaded', function() {
     loadBotStatus();
     loadSettings();
+    loadActivePositions(); // Carica posizioni attive
     setupEventListeners();
 });
 
@@ -558,6 +566,262 @@ function addLog(message, type = 'info') {
 function clearLogs() {
     document.getElementById('bot-logs').innerHTML = 
         '<div class="text-muted">Log puliti - In attesa di attività...</div>';
+}
+
+// ==================== GESTIONE POSIZIONI ATTIVE ====================
+
+// Carica e aggiorna posizioni attive
+async function loadActivePositions() {
+    try {
+        const response = await fetch('/api/trading/positions');
+        const data = await response.json();
+        
+        if (data.success) {
+            updatePositionsTable(data.positions, data.debug_info);
+            updatePnLWidget(data.positions, data.debug_info);
+        } else {
+            console.error('Errore nel caricamento posizioni:', data.error);
+            updatePositionsTable([], null);
+            updatePnLWidget([], null);
+        }
+    } catch (error) {
+        console.error('Errore connessione API posizioni:', error);
+        updatePositionsTable([], null);
+    }
+}
+
+// Aggiorna la tabella delle posizioni
+function updatePositionsTable(positions, debugInfo) {
+    const tbody = document.getElementById('active-positions');
+    const positionsCountBadge = document.getElementById('active-positions-count');
+    
+    // Aggiorna il badge del conteggio
+    if (positionsCountBadge) {
+        positionsCountBadge.textContent = `${positions.length} Posizioni`;
+        positionsCountBadge.className = positions.length > 0 ? 'badge bg-success me-1' : 'badge bg-secondary me-1';
+    }
+    
+    if (!positions || positions.length === 0) {
+        let debugText = '';
+        if (debugInfo) {
+            const linearCount = debugInfo.linear_positions ? debugInfo.linear_positions.length : 0;
+            const spotCount = debugInfo.spot_positions ? debugInfo.spot_positions.length : 0;
+            const inverseCount = debugInfo.inverse_positions ? debugInfo.inverse_positions.length : 0;
+            
+            debugText = `<br><small class="text-muted">
+                Debug: Linear(${linearCount}) | Spot(${spotCount}) | Inverse(${inverseCount})
+                <br>Usa il pulsante "Debug API" per dettagli completi
+            </small>`;
+        }
+        
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center text-muted">
+                    <i class="fas fa-chart-line me-2"></i>
+                    Nessuna posizione attiva
+                    ${debugText}
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = positions.map(position => {
+        const pnlClass = position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger';
+        const pnlIcon = position.unrealized_pnl >= 0 ? '📈' : '📉';
+        const sideClass = position.side === 'Buy' ? 'text-success' : 'text-danger';
+        const sideIcon = position.side === 'Buy' ? '🟢' : '🔴';
+        
+        return `
+            <tr>
+                <td>
+                    <strong>${position.symbol}</strong>
+                    <br><small class="text-muted">${position.category || 'linear'}</small>
+                </td>
+                <td>
+                    <span class="${sideClass}">
+                        ${sideIcon} ${position.side}
+                    </span>
+                </td>
+                <td>${position.size}</td>
+                <td>$${position.entry_price.toFixed(4)}</td>
+                <td>$${position.current_price.toFixed(4)}</td>
+                <td class="${pnlClass}">
+                    ${pnlIcon} $${position.unrealized_pnl.toFixed(2)}<br>
+                    <small>(${position.pnl_percentage}%)</small>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" 
+                            onclick="closePosition('${position.symbol}', '${position.side}')"
+                            title="Chiudi posizione">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Aggiorna il widget PnL
+function updatePnLWidget(positions, debugInfo) {
+    try {
+        let totalPnL = 0;
+        let totalWin = 0;
+        let totalLoss = 0;
+        let positionCount = 0;
+        
+        if (positions && positions.length > 0) {
+            positions.forEach(position => {
+                if (position.unrealized_pnl != null) {
+                    totalPnL += parseFloat(position.unrealized_pnl);
+                    positionCount++;
+                    
+                    if (position.unrealized_pnl > 0) {
+                        totalWin += parseFloat(position.unrealized_pnl);
+                    } else {
+                        totalLoss += parseFloat(position.unrealized_pnl);
+                    }
+                }
+            });
+        }
+        
+        // Aggiorna PnL totale
+        const totalPnLElement = document.getElementById('total-pnl');
+        if (totalPnLElement) {
+            const pnlClass = totalPnL >= 0 ? 'text-success' : 'text-danger';
+            const pnlIcon = totalPnL >= 0 ? '📈' : '📉';
+            const sign = totalPnL >= 0 ? '+' : '';
+            
+            totalPnLElement.innerHTML = `
+                <span class="${pnlClass}">
+                    ${pnlIcon} ${sign}$${totalPnL.toFixed(2)}
+                </span>
+            `;
+        }
+        
+        // Aggiorna conteggio posizioni
+        const positionsCountElement = document.getElementById('positions-count');
+        if (positionsCountElement) {
+            positionsCountElement.textContent = positionCount;
+        }
+        
+        // Aggiorna profitti
+        const totalWinElement = document.getElementById('total-win');
+        if (totalWinElement) {
+            totalWinElement.innerHTML = `<span class="text-success">+$${totalWin.toFixed(2)}</span>`;
+        }
+        
+        // Aggiorna perdite
+        const totalLossElement = document.getElementById('total-loss');
+        if (totalLossElement) {
+            totalLossElement.innerHTML = `<span class="text-danger">$${totalLoss.toFixed(2)}</span>`;
+        }
+        
+        // Debug info se disponibile
+        if (debugInfo && positionCount === 0) {
+            const linearCount = debugInfo.linear_positions ? debugInfo.linear_positions.length : 0;
+            const spotCount = debugInfo.spot_positions ? debugInfo.spot_positions.length : 0;
+            const inverseCount = debugInfo.inverse_positions ? debugInfo.inverse_positions.length : 0;
+            
+            console.log('Debug PnL - Nessuna posizione mostrata, ma API ha:', {
+                linear: linearCount,
+                spot: spotCount,
+                inverse: inverseCount,
+                total_api_positions: linearCount + spotCount + inverseCount
+            });
+        }
+        
+        console.log('PnL Widget aggiornato:', {
+            positionCount,
+            totalPnL: totalPnL.toFixed(2),
+            totalWin: totalWin.toFixed(2),
+            totalLoss: totalLoss.toFixed(2)
+        });
+        
+    } catch (error) {
+        console.error('Errore nell\'aggiornamento del widget PnL:', error);
+    }
+}
+
+// Chiudi una posizione specifica
+async function closePosition(symbol, side) {
+    if (!confirm(`Vuoi chiudere la posizione ${side} su ${symbol}?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/trading/close-position', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                symbol: symbol,
+                side: side
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Posizione ${side} su ${symbol} chiusa con successo`, 'success');
+            loadActivePositions(); // Ricarica le posizioni
+            setTimeout(loadActivePositions, 2000); // Ricarica di nuovo dopo 2 secondi per assicurarsi
+        } else {
+            showAlert(`Errore nella chiusura: ${data.error}`, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Aggiorna posizioni ogni 5 secondi
+setInterval(loadActivePositions, 5000);
+
+// Debug delle posizioni Bybit
+async function debugPositions() {
+    try {
+        const response = await fetch('/api/trading/positions/debug');
+        const data = await response.json();
+        
+        if (data.success) {
+            // Mostra i dati di debug in una finestra popup
+            const debugWindow = window.open('', 'debug', 'width=800,height=600,scrollbars=yes');
+            debugWindow.document.write(`
+                <html>
+                <head>
+                    <title>Debug API Bybit - Posizioni</title>
+                    <style>
+                        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #fff; }
+                        pre { background: #2a2a2a; padding: 15px; border-radius: 5px; overflow: auto; }
+                        h2 { color: #4CAF50; }
+                        .error { color: #f44336; }
+                        .success { color: #4CAF50; }
+                        .warning { color: #ff9800; }
+                    </style>
+                </head>
+                <body>
+                    <h1>🐛 Debug API Bybit - Posizioni</h1>
+                    <h2>Dati Completi:</h2>
+                    <pre>${JSON.stringify(data.debug_data, null, 2)}</pre>
+                    
+                    <h2>Analisi Rapida:</h2>
+                    <div>
+                        <p><strong>Linear Positions:</strong> ${data.debug_data.linear_active_count || 0} attive</p>
+                        <p><strong>Spot Positions:</strong> ${data.debug_data.spot_active_count || 0} attive</p>
+                        <p><strong>Inverse Positions:</strong> ${data.debug_data.inverse_active_count || 0} attive</p>
+                    </div>
+                    
+                    <button onclick="window.close()" style="padding: 10px; margin: 10px 0;">Chiudi</button>
+                </body>
+                </html>
+            `);
+        } else {
+            showAlert(`Errore debug: ${data.error}`, 'danger');
+        }
+    } catch (error) {
+        showAlert('Errore di connessione per debug', 'danger');
+    }
 }
 
 // Reset impostazioni
