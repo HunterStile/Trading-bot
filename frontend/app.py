@@ -15,6 +15,15 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.database import trading_db
 from utils.trading_wrapper import trading_wrapper
 
+# Import AI modules
+try:
+    from ai_modules.ai_trading_manager import AITradingManager
+    print("✅ AI Trading Manager importato")
+    ai_manager = None  # Will be initialized later
+except ImportError as e:
+    print(f"⚠️ AI Trading Manager non disponibile: {e}")
+    ai_manager = None
+
 # Import sistema di recovery
 try:
     from utils.bot_state import BotStateManager
@@ -43,7 +52,9 @@ except ImportError as e:
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'trading_bot_secret_key_2024'
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", 
+                   engineio_logger=True, 
+                   async_mode='threading')
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -106,13 +117,41 @@ bot_status = {
     'session_pnl': 0
 }
 
+# Variabili globali per l'AI
+ai_status = {
+    'running': False,
+    'symbol': 'BTCUSDT',
+    'interval': 15,
+    'min_confidence': 70,
+    'auto_execute': False,
+    'last_analysis': None,
+    'total_analyses': 0,
+    'total_signals': 0,
+    'config': {
+        'max_position': 50,
+        'stop_loss': 3,
+        'weights': {
+            'technical': 0.4,
+            'news': 0.3,
+            'macro': 0.3
+        }
+    }
+}
+
 bot_thread = None
+ai_thread = None
 stop_bot_flag = False
+stop_ai_flag = False
 
 @app.route('/')
 def dashboard():
     """Dashboard principale"""
     return render_template('dashboard.html')
+
+@app.route('/ai-trading')
+def ai_trading():
+    """Pagina AI Trading"""
+    return render_template('ai_trading.html')
 
 @app.route('/control')
 def bot_control():
@@ -1085,6 +1124,216 @@ def get_symbols():
         'symbols': get_all_symbols()
     })
 
+# ==================== AI TRADING API ====================
+
+@app.route('/api/ai/status')
+def get_ai_status():
+    """Ottieni stato del sistema AI"""
+    try:
+        global ai_manager, ai_status
+        
+        # Initialize AI manager if not done
+        if ai_manager is None and ai_status.get('running', False):
+            ai_manager = AITradingManager(trading_bot_instance=trading_bot_ai)
+        
+        status_data = {
+            'success': True,
+            'status': ai_status.copy(),
+            'performance': {
+                'total_analyses': ai_status.get('total_analyses', 0),
+                'total_signals': ai_status.get('total_signals', 0),
+                'accuracy_rate': 0,  # TODO: Calculate from database
+                'last_analysis': ai_status.get('last_analysis')
+            }
+        }
+        
+        if ai_manager:
+            ai_system_status = ai_manager.get_ai_status()
+            status_data['ai_system'] = ai_system_status
+        
+        return jsonify(status_data)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/ai/start', methods=['POST'])
+def start_ai_trading():
+    """Avvia il sistema AI di trading"""
+    global ai_manager, ai_thread, stop_ai_flag, ai_status
+    
+    if ai_status['running']:
+        return jsonify({'success': False, 'error': 'Il sistema AI è già in esecuzione'})
+    
+    try:
+        # Aggiorna configurazione AI
+        data = request.get_json() or {}
+        ai_status.update({
+            'symbol': data.get('symbol', 'BTCUSDT'),
+            'interval': data.get('interval', 15),
+            'min_confidence': data.get('min_confidence', 70),
+            'auto_execute': data.get('auto_execute', False),
+            'config': data.get('config', ai_status['config'])
+        })
+        
+        # Inizializza AI Manager
+        if ai_manager is None:
+            ai_manager = AITradingManager(trading_bot_instance=trading_bot_ai)
+        
+        # Valida configurazione
+        config_validation = ai_manager.validate_configuration()
+        if not config_validation['is_valid']:
+            return jsonify({
+                'success': False, 
+                'error': f'Configurazione AI incompleta: {config_validation["missing_keys"]}'
+            })
+        
+        ai_status['running'] = True
+        ai_status['last_update'] = datetime.now().isoformat()
+        stop_ai_flag = False
+        
+        # Avvia AI in thread separato
+        ai_thread = threading.Thread(target=run_ai_trading)
+        ai_thread.daemon = True
+        ai_thread.start()
+        
+        return jsonify({'success': True, 'message': 'Sistema AI avviato con successo'})
+    except Exception as e:
+        ai_status['running'] = False
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/ai/stop', methods=['POST'])
+def stop_ai_trading():
+    """Ferma il sistema AI di trading"""
+    global stop_ai_flag, ai_status, ai_manager
+    
+    stop_ai_flag = True
+    ai_status['running'] = False
+    ai_status['last_update'] = datetime.now().isoformat()
+    
+    if ai_manager:
+        ai_manager.stop_background_analysis()
+    
+    return jsonify({'success': True, 'message': 'Sistema AI fermato'})
+
+@app.route('/api/ai/analyze/<symbol>', methods=['POST'])
+def analyze_symbol(symbol):
+    """Esegui analisi AI manuale per un simbolo"""
+    try:
+        global ai_manager
+        
+        if ai_manager is None:
+            return jsonify({'success': False, 'error': 'Sistema AI non inizializzato'})
+        
+        # Ottieni analisi AI
+        analysis = ai_manager.analyze_market_conditions(symbol)
+        
+        # Aggiorna contatori
+        ai_status['total_analyses'] = ai_status.get('total_analyses', 0) + 1
+        ai_status['last_analysis'] = datetime.now().isoformat()
+        
+        final_decision = analysis.get('final_decision', {})
+        if final_decision.get('action', 'HOLD') != 'HOLD':
+            ai_status['total_signals'] = ai_status.get('total_signals', 0) + 1
+            
+            # Emit signal via WebSocket
+            socketio.emit('ai_signal', {
+                'signal': final_decision,
+                'symbol': symbol,
+                'timestamp': datetime.now().isoformat()
+            })
+        
+        # Emit analysis complete
+        socketio.emit('ai_analysis_complete', {
+            'analysis': analysis,
+            'symbol': symbol,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        return jsonify({
+            'success': True,
+            'analysis': analysis,
+            'symbol': symbol
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/ai/config', methods=['GET', 'POST'])
+def ai_configuration():
+    """Gestisci configurazione AI"""
+    global ai_status
+    
+    if request.method == 'GET':
+        return jsonify({
+            'success': True,
+            'config': ai_status
+        })
+    else:
+        try:
+            data = request.get_json()
+            ai_status.update(data)
+            ai_status['last_update'] = datetime.now().isoformat()
+            
+            return jsonify({'success': True, 'message': 'Configurazione AI aggiornata'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/ai/execute/<symbol>', methods=['POST'])
+def execute_ai_signal(symbol):
+    """Esegui segnale AI per un simbolo"""
+    try:
+        global ai_manager
+        
+        if ai_manager is None:
+            return jsonify({'success': False, 'error': 'Sistema AI non inizializzato'})
+        
+        # Ottieni analisi AI
+        analysis = ai_manager.analyze_market_conditions(symbol)
+        final_decision = analysis.get('final_decision', {})
+        
+        action = final_decision.get('action', 'HOLD')
+        confidence = final_decision.get('confidence', 0)
+        
+        # Controlla soglia confidenza
+        if confidence < ai_status.get('min_confidence', 70):
+            return jsonify({
+                'success': False,
+                'error': f'Confidenza troppo bassa ({confidence}% < {ai_status["min_confidence"]}%)',
+                'analysis': analysis
+            })
+        
+        # Esegui azione se non è HOLD
+        if action == 'BUY':
+            # TODO: Implementa logica di acquisto
+            result = {'action': 'BUY', 'executed': False, 'reason': 'Implementazione acquisto in corso'}
+        elif action == 'SELL':
+            # TODO: Implementa logica di vendita
+            result = {'action': 'SELL', 'executed': False, 'reason': 'Implementazione vendita in corso'}
+        else:
+            result = {'action': 'HOLD', 'executed': False, 'reason': 'Nessuna azione richiesta'}
+        
+        return jsonify({
+            'success': True,
+            'analysis': analysis,
+            'execution': result
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/ai/signals/history')
+def get_ai_signals_history():
+    """Ottieni storico segnali AI"""
+    try:
+        # TODO: Implementa recupero da database
+        signals = []
+        
+        return jsonify({
+            'success': True,
+            'signals': signals
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+# ==================== FINE AI TRADING API ====================
+
 @app.route('/api/symbols/verify/<symbol>')
 def verify_symbol(symbol):
     """Verifica se un simbolo esiste su Bybit"""
@@ -1207,6 +1456,156 @@ def remove_custom_symbol(symbol):
         })
 
 # ==================== FUNZIONI BOT ====================
+
+def run_ai_trading():
+    """Esegue il sistema AI di trading"""
+    global stop_ai_flag, ai_status, ai_manager
+    
+    try:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 Avvio sistema AI Trading...")
+        
+        if ai_manager is None:
+            ai_manager = AITradingManager(trading_bot_instance=trading_bot_ai)
+        
+        symbol = ai_status.get('symbol', 'BTCUSDT')
+        interval = ai_status.get('interval', 15)
+        
+        # Avvia analisi background
+        ai_manager.start_background_analysis(symbol, interval)
+        
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 AI Trading avviato per {symbol} (ogni {interval} min)")
+        
+        while not stop_ai_flag and ai_status['running']:
+            try:
+                # Esegui analisi periodica
+                analysis = ai_manager.analyze_market_conditions(symbol)
+                
+                # Aggiorna contatori
+                ai_status['total_analyses'] = ai_status.get('total_analyses', 0) + 1
+                ai_status['last_analysis'] = datetime.now().isoformat()
+                
+                final_decision = analysis.get('final_decision', {})
+                action = final_decision.get('action', 'HOLD')
+                confidence = final_decision.get('confidence', 0)
+                
+                # Log decisione
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 AI Decision: {action} {symbol} ({confidence}%)")
+                
+                if action != 'HOLD':
+                    ai_status['total_signals'] = ai_status.get('total_signals', 0) + 1
+                    
+                    # Emit WebSocket signal
+                    socketio.emit('ai_signal', {
+                        'signal': final_decision,
+                        'symbol': symbol,
+                        'timestamp': datetime.now().isoformat()
+                    })
+                    
+                    # Auto-execute se abilitato
+                    if ai_status.get('auto_execute', False) and confidence >= ai_status.get('min_confidence', 70):
+                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 Auto-executing {action} per {symbol}")
+                        # TODO: Implementa auto-execution
+                
+                # Emit analysis complete
+                socketio.emit('ai_analysis_complete', {
+                    'analysis': analysis,
+                    'symbol': symbol,
+                    'timestamp': datetime.now().isoformat()
+                })
+                
+                # Attendi prossimo ciclo
+                time.sleep(interval * 60)
+                
+            except Exception as e:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Errore AI: {e}")
+                socketio.emit('ai_error', {
+                    'error': str(e),
+                    'timestamp': datetime.now().isoformat()
+                })
+                time.sleep(60)  # Attesa ridotta in caso di errore
+                
+    except Exception as e:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Errore fatale AI: {e}")
+        ai_status['running'] = False
+        socketio.emit('ai_error', {
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        })
+    finally:
+        if ai_manager:
+            ai_manager.stop_background_analysis()
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 Sistema AI fermato")
+
+class TradingBotAIIntegration:
+    """Classe per integrare il bot classico con l'AI"""
+    
+    def __init__(self):
+        self.current_price = 0
+        self.ema_trend = 'unknown'
+        self.candles_above_ema = 0
+        self.candles_below_ema = 0
+        
+    def get_technical_analysis(self, symbol):
+        """Metodo che l'AI Manager chiamerà per ottenere dati tecnici"""
+        try:
+            # Ottieni prezzo corrente
+            current_price = vedi_prezzo_moneta('linear', symbol)
+            
+            # Ottieni dati candele per calcolare EMA
+            kline_data = get_kline_data('linear', symbol, '30', 50)
+            
+            if kline_data and len(kline_data) > 0:
+                # Calcola EMA
+                closes = [float(candle[4]) for candle in kline_data]  # closing prices
+                ema_value = media_esponenziale(closes, 10)  # EMA 10
+                
+                # Determina trend
+                current_price_float = float(current_price) if current_price else 0
+                ema_trend = 'bullish' if current_price_float > ema_value else 'bearish' if current_price_float < ema_value else 'neutral'
+                
+                # Conta candele sopra/sotto EMA
+                candles_above = sum(1 for close in closes[-10:] if close > ema_value)
+                candles_below = sum(1 for close in closes[-10:] if close < ema_value)
+                
+                # Calcola volatilità semplice
+                recent_closes = closes[-20:]
+                if len(recent_closes) > 1:
+                    volatility = (max(recent_closes) - min(recent_closes)) / max(recent_closes) * 100
+                else:
+                    volatility = 0
+                
+                return {
+                    'ema_trend': ema_trend,
+                    'current_price': current_price_float,
+                    'ema_value': ema_value,
+                    'candles_above_ema': candles_above,
+                    'candles_below_ema': candles_below,
+                    'volatility': round(volatility, 2),
+                    'volume_analysis': 'N/A',  # TODO: Implementa analisi volumi
+                    'last_updated': datetime.now().isoformat(),
+                    'symbol': symbol
+                }
+            else:
+                return {
+                    'error': 'Dati insufficienti',
+                    'ema_trend': 'unknown',
+                    'current_price': current_price or 0,
+                    'symbol': symbol,
+                    'last_updated': datetime.now().isoformat()
+                }
+                
+        except Exception as e:
+            logging.error(f"Errore nel recupero dati tecnici per AI: {e}")
+            return {
+                'error': str(e),
+                'ema_trend': 'unknown',
+                'current_price': 0,
+                'symbol': symbol,
+                'last_updated': datetime.now().isoformat()
+            }
+
+# Istanza globale per integrazione AI
+trading_bot_ai = TradingBotAIIntegration()
 
 def run_trading_bot():
     """Esegue il bot di trading"""
