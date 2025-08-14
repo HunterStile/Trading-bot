@@ -1407,13 +1407,13 @@ def calculate_adx(klines, period=14):
         return 0.0
 
 def calculate_rsi(klines, period=14):
-    """Calcola RSI (Relative Strength Index) in-house"""
+    """Calcola RSI (Relative Strength Index) in-house - VERSIONE MIGLIORATA"""
     try:
         if len(klines) < period + 1:
             return 50.0
             
-        # Estrai i prezzi di chiusura
-        closes = [float(k[4]) for k in klines[-(period*2):]]
+        # Estrai i prezzi di chiusura (usa più candele per accuratezza)
+        closes = [float(k[4]) for k in klines[-60:]]  # Usa 60 candele invece di period*2
         
         if len(closes) < 2:
             return 50.0
@@ -1441,7 +1441,7 @@ def calculate_rsi(klines, period=14):
         avg_gain = sum(gains[:period]) / period
         avg_loss = sum(losses[:period]) / period
         
-        # Applica smoothing (EMA) per i valori successivi
+        # Applica smoothing (EMA) per i valori successivi - FORMULA CORRETTA
         for i in range(period, len(gains)):
             avg_gain = ((avg_gain * (period - 1)) + gains[i]) / period
             avg_loss = ((avg_loss * (period - 1)) + losses[i]) / period
@@ -1652,28 +1652,36 @@ def check_cooldown_period(symbol, cooldown_minutes=30):
         return True
 
 def enhanced_confirmation(symbol, interval, required_confirmations=2):
-    """Richiede candele di conferma aggiuntive"""
+    """Richiede candele di conferma aggiuntive - MIGLIORATA"""
     try:
-        klines = get_kline_data('linear', symbol, interval, required_confirmations + 2)
+        klines = get_kline_data('linear', symbol, interval, required_confirmations + 5)
         if not klines or len(klines) < required_confirmations:
             return False
             
         signal_strength = 0
+        candle_details = []
         
-        for i in range(required_confirmations):
-            candle = klines[-(i+1)]
+        # Analizza le ultime N candele (esclusa quella corrente)
+        for i in range(1, required_confirmations + 1):
+            candle = klines[-i]  # Candela i-esima dal fondo
             open_price = float(candle[1])
             close_price = float(candle[4])
             
-            if bot_status['operation']:  # LONG
-                if close_price > open_price:  # Candela verde
+            candle_type = "🟢" if close_price > open_price else "🔴"
+            candle_details.append(f"{candle_type}")
+            
+            if bot_status['operation']:  # LONG - cerchiamo candele verdi
+                if close_price > open_price:  # Candela verde (bullish)
                     signal_strength += 1
-            else:  # SHORT
-                if close_price < open_price:  # Candela rossa
+            else:  # SHORT - cerchiamo candele rosse
+                if close_price < open_price:  # Candela rossa (bearish)
                     signal_strength += 1
         
         confirmation_pct = signal_strength / required_confirmations
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Conferma candele: {signal_strength}/{required_confirmations} ({confirmation_pct:.0%})")
+        direction = "LONG (🟢)" if bot_status['operation'] else "SHORT (🔴)"
+        
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Conferma candele ({direction}): {signal_strength}/{required_confirmations} ({confirmation_pct:.0%})")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🕯️ Candele: {' '.join(reversed(candle_details))} (più recente a destra)")
         
         return signal_strength >= required_confirmations
     except Exception as e:
