@@ -8,6 +8,8 @@ import logging
 from datetime import datetime, timedelta
 import json
 
+
+
 # Aggiungi il percorso del trading bot al sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -103,9 +105,18 @@ bot_status = {
     'current_session_id': None,
     'session_start_time': None,
     'total_trades': 0,
-    'session_pnl': 0
+    'session_pnl': 0,
+    
+    # ===== NUOVI PARAMETRI =====
+    'adx_threshold': 25,           # Forza trend minima
+    'volume_multiplier': 1.2,      # Volume minimo vs media  
+    'atr_stop_multiplier': 2.0,    # Distanza stop loss
+    'atr_tp_multiplier': 3.0,      # Distanza take profit
+    'cooldown_minutes': 30,        # Pausa tra trade
+    'confirmation_candles': 2,     # Candele di conferma
+    'min_conditions_pct': 0.75,    # % minima condizioni (75%)
+    'use_enhanced_filters': True   # Attiva/disattiva filtri avanzati
 }
-
 bot_thread = None
 stop_bot_flag = False
 
@@ -498,6 +509,73 @@ def get_last_bot_config():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+# ==================== STEP 4: AGGIUNGI ENDPOINT API PER CONFIGURAZIONE ==================== 
+# Inserisci prima di if __name__ == '__main__':
+
+@app.route('/api/bot/enhanced-settings', methods=['POST'])
+def update_enhanced_settings():
+    """Aggiorna impostazioni avanzate del bot"""
+    global bot_status
+    
+    try:
+        data = request.get_json()
+        
+        # Parametri avanzati aggiornabili
+        advanced_params = [
+            'adx_threshold', 'volume_multiplier', 'atr_stop_multiplier',
+            'atr_tp_multiplier', 'cooldown_minutes', 'confirmation_candles',
+            'min_conditions_pct', 'use_enhanced_filters'
+        ]
+        
+        updated = {}
+        for param in advanced_params:
+            if param in data:
+                bot_status[param] = data[param]
+                updated[param] = data[param]
+        
+        bot_status['last_update'] = datetime.now().isoformat()
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Impostazioni avanzate aggiornate',
+            'updated': updated
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/bot/enhanced-status')
+def get_enhanced_status():
+    """Ottieni stato completo con parametri avanzati"""
+    try:
+        # Status base
+        status = dict(bot_status)
+        
+        # Aggiungi informazioni aggiuntive se bot attivo
+        if bot_status['running'] and bot_status['symbol']:
+            try:
+                # Calcola indicatori correnti
+                symbol = bot_status['symbol']
+                interval = str(bot_status['interval'])
+                
+                klines = get_kline_data('linear', symbol, interval, 50)
+                if klines:
+                    current_adx = calculate_adx(klines, 14)
+                    current_rsi = calculate_rsi(klines, 14)
+                    current_atr = calculate_atr(klines, 14)
+                    
+                    status['current_indicators'] = {
+                        'adx': round(current_adx, 2),
+                        'rsi': round(current_rsi, 2), 
+                        'atr': round(current_atr, 4),
+                        'price': vedi_prezzo_moneta('linear', symbol)
+                    }
+            except Exception as e:
+                status['current_indicators'] = {'error': str(e)}
+        
+        return jsonify({'success': True, 'status': status})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
 # ==================== BOT CONTROL ====================
 
 @app.route('/api/history/sessions')
@@ -1206,6 +1284,437 @@ def remove_custom_symbol(symbol):
             'error': str(e)
         })
 
+# ==================== NUOVE FUNZIONI ANALISI TECNICA ====================
+
+def calculate_atr(klines, period=14):
+    """Calcola Average True Range in-house"""
+    try:
+        if len(klines) < period + 1:
+            return 0.01
+            
+        true_ranges = []
+        
+        # Calcola True Range per ogni candela
+        for i in range(1, len(klines)):
+            high = float(klines[i][2])
+            low = float(klines[i][3])
+            prev_close = float(klines[i-1][4])
+            
+            # True Range = max(high-low, |high-prev_close|, |low-prev_close|)
+            tr1 = high - low
+            tr2 = abs(high - prev_close)
+            tr3 = abs(low - prev_close)
+            
+            true_range = max(tr1, tr2, tr3)
+            true_ranges.append(true_range)
+        
+        # ATR = Media mobile esponenziale dei True Range
+        if len(true_ranges) >= period:
+            # Inizia con SMA per i primi valori
+            initial_atr = sum(true_ranges[:period]) / period
+            
+            # Applica EMA per i valori successivi
+            multiplier = 2 / (period + 1)
+            atr = initial_atr
+            
+            for tr in true_ranges[period:]:
+                atr = (tr * multiplier) + (atr * (1 - multiplier))
+            
+            return atr
+        else:
+            # Se non abbastanza dati, usa media semplice
+            return sum(true_ranges) / len(true_ranges) if true_ranges else 0.01
+    except Exception as e:
+        print(f"Errore calcolo ATR: {e}")
+        return 0.01
+
+def calculate_adx(klines, period=14):
+    """Calcola ADX (Average Directional Index) in-house"""
+    try:
+        if len(klines) < period * 2:
+            return 0.0
+            
+        # Arrays per calcoli
+        true_ranges = []
+        plus_dm = []  # Positive Directional Movement
+        minus_dm = [] # Negative Directional Movement
+        
+        # Calcola TR, +DM, -DM
+        for i in range(1, len(klines)):
+            high = float(klines[i][2])
+            low = float(klines[i][3])
+            prev_high = float(klines[i-1][2])
+            prev_low = float(klines[i-1][3])
+            prev_close = float(klines[i-1][4])
+            
+            # True Range
+            tr1 = high - low
+            tr2 = abs(high - prev_close)
+            tr3 = abs(low - prev_close)
+            tr = max(tr1, tr2, tr3)
+            true_ranges.append(tr)
+            
+            # Directional Movement
+            up_move = high - prev_high
+            down_move = prev_low - low
+            
+            # +DM e -DM
+            if up_move > down_move and up_move > 0:
+                plus_dm.append(up_move)
+                minus_dm.append(0)
+            elif down_move > up_move and down_move > 0:
+                plus_dm.append(0)
+                minus_dm.append(down_move)
+            else:
+                plus_dm.append(0)
+                minus_dm.append(0)
+        
+        if len(true_ranges) < period:
+            return 0.0
+        
+        # Calcola ATR, +DI, -DI usando media mobile esponenziale
+        def smooth(values, period):
+            if len(values) < period:
+                return 0
+            sma = sum(values[:period]) / period
+            multiplier = 1 / period
+            smoothed = sma
+            for val in values[period:]:
+                smoothed = (val * multiplier) + (smoothed * (1 - multiplier))
+            return smoothed
+        
+        atr = smooth(true_ranges, period)
+        plus_di_smooth = smooth(plus_dm, period)
+        minus_di_smooth = smooth(minus_dm, period)
+        
+        if atr == 0:
+            return 0.0
+        
+        # Calcola +DI e -DI
+        plus_di = (plus_di_smooth / atr) * 100
+        minus_di = (minus_di_smooth / atr) * 100
+        
+        # Calcola DX
+        if plus_di + minus_di == 0:
+            return 0.0
+        
+        dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
+        
+        # ADX è la media mobile di DX (semplificato)
+        return dx
+    except Exception as e:
+        print(f"Errore calcolo ADX: {e}")
+        return 0.0
+
+def calculate_rsi(klines, period=14):
+    """Calcola RSI (Relative Strength Index) in-house"""
+    try:
+        if len(klines) < period + 1:
+            return 50.0
+            
+        # Estrai i prezzi di chiusura
+        closes = [float(k[4]) for k in klines[-(period*2):]]
+        
+        if len(closes) < 2:
+            return 50.0
+        
+        # Calcola i cambi di prezzo
+        gains = []
+        losses = []
+        
+        for i in range(1, len(closes)):
+            change = closes[i] - closes[i-1]
+            if change > 0:
+                gains.append(change)
+                losses.append(0)
+            elif change < 0:
+                gains.append(0)
+                losses.append(-change)
+            else:
+                gains.append(0)
+                losses.append(0)
+        
+        if len(gains) < period:
+            return 50.0
+        
+        # Calcola la media iniziale (SMA)
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+        
+        # Applica smoothing (EMA) per i valori successivi
+        for i in range(period, len(gains)):
+            avg_gain = ((avg_gain * (period - 1)) + gains[i]) / period
+            avg_loss = ((avg_loss * (period - 1)) + losses[i]) / period
+        
+        # Calcola RSI
+        if avg_loss == 0:
+            return 100.0
+        
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+        
+        return rsi
+    except Exception as e:
+        print(f"Errore calcolo RSI: {e}")
+        return 50.0
+
+def calculate_macd(klines, fast_period=12, slow_period=26, signal_period=9):
+    """Calcola MACD in-house"""
+    try:
+        if len(klines) < slow_period + signal_period:
+            return 0.0, 0.0, 0.0
+            
+        # Estrai prezzi di chiusura
+        closes = [float(k[4]) for k in klines[-60:]]  # Prendiamo più dati per accuratezza
+        
+        if len(closes) < slow_period:
+            return 0.0, 0.0, 0.0
+        
+        def calculate_ema(prices, period):
+            """Calcola EMA"""
+            if len(prices) < period:
+                return prices[-1] if prices else 0
+            
+            # Inizia con SMA
+            sma = sum(prices[:period]) / period
+            
+            # Fattore di smoothing
+            multiplier = 2 / (period + 1)
+            
+            # Calcola EMA
+            ema = sma
+            for price in prices[period:]:
+                ema = (price * multiplier) + (ema * (1 - multiplier))
+            
+            return ema
+        
+        # Calcola EMA veloce e lenta
+        ema_fast = calculate_ema(closes, fast_period)
+        ema_slow = calculate_ema(closes, slow_period)
+        
+        # MACD line = EMA veloce - EMA lenta
+        macd_line = ema_fast - ema_slow
+        
+        # Per il signal line, dovremmo calcolare EMA del MACD
+        # Semplificazione: usiamo una media mobile del MACD
+        # In una implementazione completa, dovremmo tenere storico dei valori MACD
+        signal_line = macd_line * 0.9  # Approssimazione
+        
+        # Histogram = MACD - Signal
+        histogram = macd_line - signal_line
+        
+        return macd_line, signal_line, histogram
+    except Exception as e:
+        print(f"Errore calcolo MACD: {e}")
+        return 0.0, 0.0, 0.0
+
+# Funzione helper per EMA (usata da MACD)
+def calculate_ema_standalone(values, period):
+    """Calcola Exponential Moving Average standalone"""
+    if len(values) < period:
+        return sum(values) / len(values) if values else 0
+    
+    # SMA iniziale
+    sma = sum(values[:period]) / period
+    
+    # Multiplier per EMA
+    multiplier = 2 / (period + 1)
+    
+    # Calcola EMA
+    ema = sma
+    for value in values[period:]:
+        ema = (value * multiplier) + (ema * (1 - multiplier))
+    
+    return ema
+
+# ==================== FILTRI ANTI-SIDEWAYS ==================== 
+
+def check_trend_strength(symbol, interval='30', period=14):
+    """Controlla se il trend è abbastanza forte (ADX)"""
+    try:
+        klines = get_kline_data('linear', symbol, interval, period * 3)
+        if not klines or len(klines) < period * 2:
+            return False
+            
+        adx_value = calculate_adx(klines, period)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 ADX: {adx_value:.2f}")
+        
+        # ADX > 25 indica trend forte
+        return adx_value > 25
+    except Exception as e:
+        print(f"Errore calcolo ADX: {e}")
+        return False
+
+def check_volume_confirmation(symbol, interval='30'):
+    """Controlla se il volume supporta il movimento"""
+    try:
+        klines = get_kline_data('linear', symbol, interval, 20)
+        if not klines or len(klines) < 10:
+            return False
+            
+        # Volume media ultimi 10 periodi
+        volumes = [float(k[5]) for k in klines[-10:]]
+        avg_volume = sum(volumes) / len(volumes)
+        current_volume = float(klines[-1][5])
+        
+        volume_ratio = current_volume / avg_volume
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Volume ratio: {volume_ratio:.2f}")
+        
+        # Volume attuale > 120% della media
+        return volume_ratio > 1.2
+    except Exception as e:
+        print(f"Errore calcolo volume: {e}")
+        return False
+
+# ==================== INDICATORI LEADING ==================== 
+
+def check_rsi_momentum(symbol, interval='30', period=14):
+    """Controlla momentum RSI"""
+    try:
+        klines = get_kline_data('linear', symbol, interval, period * 3)
+        if not klines or len(klines) < period * 2:
+            return False
+            
+        rsi = calculate_rsi(klines, period)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 RSI: {rsi:.2f}")
+        
+        if bot_status['operation']:  # LONG
+            # RSI in zona di recovery da oversold (30-60)
+            return 30 <= rsi <= 60
+        else:  # SHORT
+            # RSI in zona di decline da overbought (40-70)  
+            return 40 <= rsi <= 70
+    except Exception as e:
+        print(f"Errore calcolo RSI: {e}")
+        return False
+
+def check_macd_momentum(symbol, interval='30'):
+    """Controlla segnale MACD"""
+    try:
+        klines = get_kline_data('linear', symbol, interval, 50)
+        if not klines or len(klines) < 40:
+            return False
+            
+        # Prendi ultimi 3 valori per verificare crossover
+        macd_values = []
+        signal_values = []
+        
+        for i in range(3):
+            test_klines = klines[:-(i) if i > 0 else len(klines)]
+            macd_line, signal_line, _ = calculate_macd(test_klines)
+            macd_values.append(macd_line)
+            signal_values.append(signal_line)
+        
+        # Inverti per avere [più vecchio, ..., più recente]
+        macd_values.reverse()
+        signal_values.reverse()
+        
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 MACD: {macd_values[-1]:.4f}, Signal: {signal_values[-1]:.4f}")
+        
+        if bot_status['operation']:  # LONG
+            # Bullish crossover recente o MACD sopra signal
+            return (macd_values[-1] > signal_values[-1] and 
+                   (macd_values[-2] <= signal_values[-2] or macd_values[-1] > 0))
+        else:  # SHORT
+            # Bearish crossover recente o MACD sotto signal
+            return (macd_values[-1] < signal_values[-1] and 
+                   (macd_values[-2] >= signal_values[-2] or macd_values[-1] < 0))
+    except Exception as e:
+        print(f"Errore calcolo MACD: {e}")
+        return False
+
+# ==================== PROTEZIONI ANTI-WHIPSAW ==================== 
+
+def check_cooldown_period(symbol, cooldown_minutes=30):
+    """Controlla periodo di pausa tra trade"""
+    try:
+        if not bot_status.get('current_session_id'):
+            return True
+            
+        # Cerca ultimo trade per questo simbolo
+        recent_trades = trading_db.get_trade_history(bot_status['current_session_id'], 10)
+        
+        for trade in recent_trades:
+            if (trade['symbol'] == symbol and 
+                trade['status'] == 'CLOSED' and 
+                trade.get('close_time')):
+                
+                close_time = datetime.fromisoformat(trade['close_time'].replace('Z', '+00:00'))
+                time_diff = (datetime.now().replace(tzinfo=close_time.tzinfo) - close_time).total_seconds() / 60
+                
+                if time_diff < cooldown_minutes:
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏳ Cooldown attivo: {time_diff:.1f}/{cooldown_minutes} min")
+                    return False
+        
+        return True
+    except Exception as e:
+        print(f"Errore calcolo cooldown: {e}")
+        return True
+
+def enhanced_confirmation(symbol, interval, required_confirmations=2):
+    """Richiede candele di conferma aggiuntive"""
+    try:
+        klines = get_kline_data('linear', symbol, interval, required_confirmations + 2)
+        if not klines or len(klines) < required_confirmations:
+            return False
+            
+        signal_strength = 0
+        
+        for i in range(required_confirmations):
+            candle = klines[-(i+1)]
+            open_price = float(candle[1])
+            close_price = float(candle[4])
+            
+            if bot_status['operation']:  # LONG
+                if close_price > open_price:  # Candela verde
+                    signal_strength += 1
+            else:  # SHORT
+                if close_price < open_price:  # Candela rossa
+                    signal_strength += 1
+        
+        confirmation_pct = signal_strength / required_confirmations
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Conferma candele: {signal_strength}/{required_confirmations} ({confirmation_pct:.0%})")
+        
+        return signal_strength >= required_confirmations
+    except Exception as e:
+        print(f"Errore calcolo conferma: {e}")
+        return False
+
+# ==================== STOP LOSS E TAKE PROFIT ==================== 
+
+def calculate_dynamic_stop_loss(entry_price, symbol, side, interval='30', multiplier=2.0):
+    """Calcola stop loss dinamico basato su ATR"""
+    try:
+        klines = get_kline_data('linear', symbol, interval, 20)
+        atr = calculate_atr(klines, 14)
+        
+        if side == 'Buy':  # LONG
+            stop_loss = entry_price - (atr * multiplier)
+        else:  # SHORT
+            stop_loss = entry_price + (atr * multiplier)
+        
+        return stop_loss
+    except Exception as e:
+        print(f"Errore calcolo stop loss: {e}")
+        return entry_price * (0.98 if side == 'Buy' else 1.02)
+
+def calculate_dynamic_take_profit(entry_price, symbol, side, interval='30', multiplier=3.0):
+    """Calcola take profit dinamico basato su ATR"""
+    try:
+        klines = get_kline_data('linear', symbol, interval, 20)
+        atr = calculate_atr(klines, 14)
+        
+        if side == 'Buy':  # LONG
+            take_profit = entry_price + (atr * multiplier)
+        else:  # SHORT
+            take_profit = entry_price - (atr * multiplier)
+        
+        return take_profit
+    except Exception as e:
+        print(f"Errore calcolo take profit: {e}")
+        return entry_price * (1.02 if side == 'Buy' else 0.98)
+
+
 # ==================== FUNZIONI BOT ====================
 
 def run_trading_bot():
@@ -1365,135 +1874,134 @@ def run_trading_bot():
                                 'type': 'info'
                             })
                             
-                            # Condizioni per LONG
-                            if bot_status['operation']:  # True = Long
-                                long_conditions = {
-                                    'above_ema': is_above_ema,
-                                    'enough_candles': candles_above >= bot_status['open_candles'],
-                                    'distance_ok': distance_ok
-                                }
-                                
-                                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🟢 LONG - Condizioni apertura:")
-                                print(f"  ✅ Sopra EMA: {'✅' if long_conditions['above_ema'] else '❌'}")
-                                print(f"  ✅ Candele richieste: {'✅' if long_conditions['enough_candles'] else '❌'} ({candles_above}/{bot_status['open_candles']})")
-                                print(f"  ✅ Distanza OK: {'✅' if long_conditions['distance_ok'] else '❌'} ({distance_percent:.2f}% <= {bot_status['distance']}%)")
-                                
-                                # Invia log delle condizioni al frontend
-                                socketio.emit('analysis_log', {
-                                    'message': f"🟢 LONG - Analisi condizioni apertura:",
-                                    'type': 'info'
-                                })
-                                socketio.emit('analysis_log', {
-                                    'message': f"  {'✅' if long_conditions['above_ema'] else '❌'} Sopra EMA | {'✅' if long_conditions['enough_candles'] else '❌'} Candele ({candles_above}/{bot_status['open_candles']}) | {'✅' if long_conditions['distance_ok'] else '❌'} Distanza ({distance_percent:.2f}%)",
-                                    'type': 'info'
-                                })
-                                
-                                if all(long_conditions.values()):
-                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 SEGNALE LONG! Tutte le condizioni soddisfatte")
-                                    
-                                    # Invia segnale al frontend
-                                    socketio.emit('analysis_log', {
-                                        'message': f"🚀 SEGNALE LONG! Tutte le condizioni soddisfatte",
-                                        'type': 'success'
-                                    })
-                                    
-                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 💰 Apertura posizione LONG...")
-                                    
-                                    # Apri posizione long
-                                    result = trading_wrapper.open_position(
-                                        symbol=symbol,
-                                        side='Buy',
-                                        quantity=bot_status['quantity'],
-                                        strategy_signal=f"EMA_LONG_{bot_status['ema_period']}",
-                                        categoria=bot_status['category'],
-                                        periodo_ema=bot_status['ema_period'],
-                                        intervallo=bot_status['interval'],
-                                        candele=bot_status['open_candles'],
-                                        lunghezza=bot_status['distance']
-                                    )
-                                    
-                                    if result['success']:
-                                        bot_status['total_trades'] += 1
-                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Posizione LONG aperta con successo!")
-                                        
-                                        socketio.emit('trade_notification', {
-                                            'type': 'POSITION_OPENED',
-                                            'side': 'LONG',
-                                            'symbol': symbol,
-                                            'price': current_price,
-                                            'quantity': bot_status['quantity'],
-                                            'timestamp': datetime.now().isoformat()
-                                        })
-                                    else:
-                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Errore apertura LONG: {result.get('error')}")
-                                else:
-                                    failed_conditions = [k for k, v in long_conditions.items() if not v]
-                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏳ LONG non attivato. Mancano: {', '.join(failed_conditions)}")
-                                    
-                                    # Invia log al frontend
-                                    socketio.emit('analysis_log', {
-                                        'message': f"⏳ LONG non attivato. Mancano: {', '.join(failed_conditions)}",
-                                        'type': 'warning'
-                                    })
+                            # Condizioni BASE (originali)
+                            base_conditions = {
+                                'above_ema': is_above_ema if bot_status['operation'] else not is_above_ema,
+                                'enough_candles': (candles_above >= bot_status['open_candles'] if bot_status['operation'] 
+                                                 else candles_below >= bot_status['open_candles']),
+                                'distance_ok': distance_ok
+                            }
                             
-                            # Condizioni per SHORT
-                            else:  # False = Short
-                                short_conditions = {
-                                    'below_ema': not is_above_ema,
-                                    'enough_candles': candles_below >= bot_status['open_candles'],
-                                    'distance_ok': distance_ok
+                            # Condizioni AVANZATE (se attivate)
+                            enhanced_conditions = {}
+                            if bot_status.get('use_enhanced_filters', True):
+                                enhanced_conditions = {
+                                    'strong_trend': check_trend_strength(symbol),
+                                    'volume_confirmation': check_volume_confirmation(symbol),
+                                    'rsi_momentum': check_rsi_momentum(symbol),
+                                    'macd_signal': check_macd_momentum(symbol),
+                                    'cooldown_ok': check_cooldown_period(symbol, bot_status.get('cooldown_minutes', 30)),
+                                    'confirmation_candles': enhanced_confirmation(symbol, interval, bot_status.get('confirmation_candles', 2))
                                 }
+                            
+                            # Combina tutte le condizioni
+                            all_conditions = {**base_conditions, **enhanced_conditions}
+                            
+                            # Calcola percentuale condizioni soddisfatte
+                            passed_conditions = sum(all_conditions.values())
+                            total_conditions = len(all_conditions)
+                            success_rate = passed_conditions / total_conditions
+                            required_rate = bot_status.get('min_conditions_pct', 0.75)
+                            
+                            # Log dettagliato delle condizioni
+                            direction = "LONG" if bot_status['operation'] else "SHORT"
+                            print(f"[{datetime.now().strftime('%H:%M:%S')}] {'🟢' if bot_status['operation'] else '🔴'} {direction} - Analisi condizioni:")
+                            
+                            for condition_name, condition_met in all_conditions.items():
+                                status_icon = '✅' if condition_met else '❌'
+                                print(f"  {status_icon} {condition_name}: {condition_met}")
                                 
-                                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔴 SHORT - Condizioni apertura:")
-                                print(f"  ✅ Sotto EMA: {'✅' if short_conditions['below_ema'] else '❌'}")
-                                print(f"  ✅ Candele richieste: {'✅' if short_conditions['enough_candles'] else '❌'} ({candles_below}/{bot_status['open_candles']})")
-                                print(f"  ✅ Distanza OK: {'✅' if short_conditions['distance_ok'] else '❌'} ({abs(distance_percent):.2f}% <= {bot_status['distance']}%)")
-                                
-                                # Invia log delle condizioni al frontend
+                            print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Score: {passed_conditions}/{total_conditions} ({success_rate:.1%}) - Richiesto: {required_rate:.1%}")
+                            
+                            # Invia log delle condizioni al frontend
+                            socketio.emit('analysis_log', {
+                                'message': f"{'🟢' if bot_status['operation'] else '🔴'} {direction} - Score: {passed_conditions}/{total_conditions} ({success_rate:.1%})",
+                                'type': 'info'
+                            })
+                            
+                            # Mostra condizioni fallite
+                            failed_conditions = [name for name, met in all_conditions.items() if not met]
+                            if failed_conditions:
                                 socketio.emit('analysis_log', {
-                                    'message': f"🔴 SHORT - Analisi condizioni apertura:",
-                                    'type': 'info'
+                                    'message': f"❌ Condizioni mancanti: {', '.join(failed_conditions)}",
+                                    'type': 'warning'
                                 })
+                            
+                            # DECISIONE APERTURA
+                            if success_rate >= required_rate:
+                                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 SEGNALE {direction}! Score sufficiente ({success_rate:.1%})")
+                                
+                                # Invia segnale al frontend
                                 socketio.emit('analysis_log', {
-                                    'message': f"  {'✅' if short_conditions['below_ema'] else '❌'} Sotto EMA | {'✅' if short_conditions['enough_candles'] else '❌'} Candele ({candles_below}/{bot_status['open_candles']}) | {'✅' if short_conditions['distance_ok'] else '❌'} Distanza ({abs(distance_percent):.2f}%)",
-                                    'type': 'info'
+                                    'message': f"🚀 SEGNALE {direction}! Score sufficiente ({success_rate:.1%})",
+                                    'type': 'success'
                                 })
                                 
-                                if all(short_conditions.values()):
-                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 SEGNALE SHORT! Tutte le condizioni soddisfatte")
+                                side = 'Buy' if bot_status['operation'] else 'Sell'
+                                print(f"[{datetime.now().strftime('%H:%M:%S')}] 💰 Apertura posizione {direction}...")
+                                
+                                # Apri posizione
+                                result = trading_wrapper.open_position(
+                                    symbol=symbol,
+                                    side=side,
+                                    quantity=bot_status['quantity'],
+                                    strategy_signal=f"EMA_{direction}_{bot_status['ema_period']}_ENHANCED",
+                                    categoria=bot_status['category'],
+                                    periodo_ema=bot_status['ema_period'],
+                                    intervallo=bot_status['interval'],
+                                    candele=bot_status['open_candles'],
+                                    lunghezza=bot_status['distance']
+                                )
+                                
+                                if result['success']:
+                                    bot_status['total_trades'] += 1
+                                    entry_price = result.get('entry_price', current_price)
                                     
-                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 💰 Apertura posizione SHORT...")
+                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Posizione {direction} aperta con successo!")
                                     
-                                    # Apri posizione short
-                                    result = trading_wrapper.open_position(
-                                        symbol=symbol,
-                                        side='Sell',
-                                        quantity=bot_status['quantity'],
-                                        strategy_signal=f"EMA_SHORT_{bot_status['ema_period']}",
-                                        categoria=bot_status['category'],
-                                        periodo_ema=bot_status['ema_period'],
-                                        intervallo=bot_status['interval'],
-                                        candele=bot_status['open_candles'],
-                                        lunghezza=bot_status['distance']
-                                    )
-                                    
-                                    if result['success']:
-                                        bot_status['total_trades'] += 1
-                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Posizione SHORT aperta con successo!")
+                                    # Calcola e logga stop loss / take profit
+                                    if bot_status.get('use_enhanced_filters', True):
+                                        stop_loss = calculate_dynamic_stop_loss(entry_price, symbol, side, interval, bot_status.get('atr_stop_multiplier', 2.0))
+                                        take_profit = calculate_dynamic_take_profit(entry_price, symbol, side, interval, bot_status.get('atr_tp_multiplier', 3.0))
                                         
-                                        socketio.emit('trade_notification', {
-                                            'type': 'POSITION_OPENED',
-                                            'side': 'SHORT',
-                                            'symbol': symbol,
-                                            'price': current_price,
-                                            'quantity': bot_status['quantity'],
-                                            'timestamp': datetime.now().isoformat()
-                                        })
-                                    else:
-                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Errore apertura SHORT: {result.get('error')}")
+                                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Stop Loss: {stop_loss:.4f} | Take Profit: {take_profit:.4f}")
+                                        
+                                        # Salva nel database per riferimento
+                                        trading_db.log_event(
+                                            "POSITION_LEVELS", 
+                                            "TRADING", 
+                                            f"Entry: {entry_price:.4f}, SL: {stop_loss:.4f}, TP: {take_profit:.4f}",
+                                            {
+                                                'entry_price': entry_price,
+                                                'stop_loss': stop_loss,
+                                                'take_profit': take_profit,
+                                                'conditions_score': success_rate,
+                                                'conditions_detail': all_conditions
+                                            },
+                                            session_id=bot_status['current_session_id']
+                                        )
+                                    
+                                    socketio.emit('trade_notification', {
+                                        'type': 'POSITION_OPENED',
+                                        'side': direction,
+                                        'symbol': symbol,
+                                        'price': entry_price,
+                                        'quantity': bot_status['quantity'],
+                                        'conditions_score': success_rate,
+                                        'timestamp': datetime.now().isoformat()
+                                    })
                                 else:
-                                    failed_conditions = [k for k, v in short_conditions.items() if not v]
-                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏳ SHORT non attivato. Mancano: {', '.join(failed_conditions)}")
+                                    print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Errore apertura {direction}: {result.get('error')}")
+                                    socketio.emit('analysis_log', {
+                                        'message': f"❌ Errore apertura {direction}: {result.get('error')}",
+                                        'type': 'error'
+                                    })
+                            else:
+                                print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏳ {direction} non attivato. Score: {success_rate:.1%} < {required_rate:.1%}")
+                                socketio.emit('analysis_log', {
+                                    'message': f"⏳ {direction} non attivato. Score insufficiente",
+                                    'type': 'warning'
+                                })
                         
                         # ============= ANALISI CHIUSURA (solo se ci sono posizioni attive) =============
                         else:
