@@ -1,0 +1,37 @@
+import ccxt
+
+# Sostituisci con le tue API key MEXC
+api_key = 'mx0vgld31Qfn2iJDl1'
+api_secret = 'df7669bbd5dc48f681831fe39f58e54f'
+
+# Per il mercato spot
+exchange = ccxt.mexc3({
+    'apiKey': api_key,
+    'secret': api_secret,
+})
+markets = exchange.load_markets()
+for symbol in markets:
+    print(symbol)
+
+# Per il mercato futures (MEXC Global)
+# exchange = ccxt.mexc3({
+#     'apiKey': api_key,
+#     'secret': api_secret,
+# })
+
+# 1. Leggere il saldo
+balance = exchange.fetch_balance()
+print("Saldo:", balance['total'])
+
+# 2. Leggere il prezzo di una coppia
+symbol = 'TIA/USDT'
+ticker = exchange.fetch_ticker(symbol)
+print(f"Prezzo {symbol}:", ticker['last'])
+
+# 3. Aprire un ordine di acquisto (market)
+order = exchange.create_market_buy_order(symbol, 1)  # 0.001 BTC
+print("Ordine market buy:", order)
+
+# 4. Aprire un ordine limite di vendita
+# order = exchange.create_limit_sell_order(symbol, 0.001, 70000)
+# print("Ordine limit sell:", order)
