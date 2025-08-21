@@ -179,39 +179,51 @@
                     const trades = data.data || [];
                     console.log(`✅ ${trades.length} trade caricati`);
                     
-                    let html = '<table><tr><th>Trade ID</th><th>Simbolo</th><th>Tipo</th><th>Prezzo</th><th>Quantità</th><th>PnL</th><th>Stato</th></tr>';
+                    let html = `<table><tr>
+                        <th>Trade ID</th>
+                        <th>Simbolo</th>
+                        <th>Tipo</th>
+                        <th>Quantità</th>
+                        <th>Prezzo Entrata</th>
+                        <th>Prezzo Uscita</th>
+                        <th>PnL</th>
+                        <th>Fee</th>
+                        <th>Stato</th>
+                        <th>Entry Time</th>
+                        <th>Exit Time</th>
+                    </tr>`;
                     
                     let totalPnl = 0;
                     let openTrades = 0;
                     
                     if (trades.length === 0) {
-                        html += '<tr><td colspan="7" style="text-align:center; color:#ffc107;">Nessun trade trovato</td></tr>';
+                        html += '<tr><td colspan="11" style="text-align:center; color:#ffc107;">Nessun trade trovato</td></tr>';
                     } else {
                         trades.forEach(trade => {
                             const sideBadge = trade.side === 'BUY' ? 
                                 `<span class="badge bg-success">LONG</span>` : 
                                 `<span class="badge bg-danger">SHORT</span>`;
-                            
                             const statusBadge = trade.status === 'OPEN' ? 
                                 `<span class="badge bg-warning">Aperto</span>` : 
                                 `<span class="badge bg-secondary">Chiuso</span>`;
-                            
                             const currentPnl = trade.current_pnl || trade.pnl || 0;
                             const pnlClass = currentPnl >= 0 ? 'text-success' : 'text-danger';
-                            
                             if (trade.status === 'OPEN') {
                                 openTrades++;
                                 totalPnl += currentPnl;
                             }
-                            
                             html += `<tr>
                                 <td>${trade.trade_id}</td>
                                 <td><span class="badge bg-info">${trade.symbol}</span></td>
                                 <td>${sideBadge}</td>
-                                <td>$${(trade.entry_price || 0).toFixed(4)}</td>
                                 <td>${trade.quantity || 0}</td>
-                                <td class="${pnlClass}">$${currentPnl.toFixed(2)}</td>
+                                <td>$${(trade.entry_price ?? 0).toFixed(6)}</td>
+                                <td>$${(trade.exit_price ?? 0).toFixed(6)}</td>
+                                <td class="${pnlClass}">$${(trade.pnl ?? 0).toFixed(6)}</td>
+                                <td>$${(trade.fee ?? 0).toFixed(6)}</td>
                                 <td>${statusBadge}</td>
+                                <td>${trade.entry_time ? new Date(trade.entry_time).toLocaleString() : '-'}</td>
+                                <td>${trade.exit_time ? new Date(trade.exit_time).toLocaleString() : '-'}</td>
                             </tr>`;
                         });
                     }
