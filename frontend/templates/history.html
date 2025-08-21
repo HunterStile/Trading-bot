@@ -449,9 +449,11 @@ async function loadSessions() {
         const data = await response.json();
         
         if (data.success) {
-            historyData.sessions = data.data;
-            renderSessionsTable(data.data);
-            updateSessionFilter(data.data);
+            // L'API restituisce 'sessions' non 'data'
+            const sessions = data.sessions || data.data || [];
+            historyData.sessions = sessions;
+            renderSessionsTable(sessions);
+            updateSessionFilter(sessions);
         }
     } catch (error) {
         console.error('Errore nel caricamento sessioni:', error);

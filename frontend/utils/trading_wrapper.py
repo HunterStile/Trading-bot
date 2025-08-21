@@ -10,8 +10,9 @@ from datetime import datetime
 import json
 
 # Aggiungi il percorso del bot principale
-bot_path = Path(__file__).parent.parent
+bot_path = Path(__file__).parent.parent.parent  # Vai alla root del progetto
 sys.path.append(str(bot_path))
+print(f"[TRADING_WRAPPER] Aggiunto path: {bot_path}")
 
 # Import database
 from utils.database import trading_db
@@ -19,18 +20,21 @@ from utils.database import trading_db
 # Import funzioni originali del bot
 try:
     from trading_functions import (
-        bot_open_position as _original_open_position,
-        bot_trailing_stop as _original_trailing_stop,
-        mostra_saldo as _original_show_balance,
-        vedi_prezzo_moneta as _original_get_price
+        bot_open_position,
+        bot_trailing_stop,
+        mostra_saldo,
+        vedi_prezzo_moneta
     )
     from config import api, api_sec
+    print("[TRADING_WRAPPER] ✅ Funzioni di trading importate con successo")
+    TRADING_FUNCTIONS_AVAILABLE = True
 except ImportError as e:
-    print(f"Errore nell'importazione delle funzioni del trading bot: {e}")
-    _original_open_position = None
-    _original_trailing_stop = None
-    _original_show_balance = None
-    _original_get_price = None
+    print(f"[TRADING_WRAPPER] ❌ Errore nell'importazione delle funzioni del trading bot: {e}")
+    bot_open_position = None
+    bot_trailing_stop = None
+    mostra_saldo = None
+    vedi_prezzo_moneta = None
+    TRADING_FUNCTIONS_AVAILABLE = False
 
 class TradingWrapper:
     """Wrapper per le funzioni di trading con integrazione database"""
@@ -54,7 +58,7 @@ class TradingWrapper:
             price: Prezzo (None per market order)
             **kwargs: Altri parametri per la funzione originale
         """
-        if not _original_open_position:
+        if not TRADING_FUNCTIONS_AVAILABLE or not bot_open_position:
             raise Exception("Funzione di apertura posizione non disponibile")
         
         try:
@@ -344,7 +348,7 @@ class TradingWrapper:
         """
         Gestisce il trailing stop e registra le azioni
         """
-        if not _original_trailing_stop:
+        if not TRADING_FUNCTIONS_AVAILABLE or not bot_trailing_stop:
             return {
                 'success': False,
                 'error': 'Funzione trailing stop non disponibile'
@@ -364,7 +368,7 @@ class TradingWrapper:
             )
             
             # Chiama funzione originale
-            result = _original_trailing_stop(symbol, **kwargs)
+            result = bot_trailing_stop(symbol, **kwargs)
             
             if result:
                 trading_db.log_event(
@@ -400,14 +404,14 @@ class TradingWrapper:
     
     def get_balance(self):
         """Ottiene il saldo e registra la query"""
-        if not _original_show_balance:
+        if not TRADING_FUNCTIONS_AVAILABLE or not mostra_saldo:
             return {
                 'success': False,
                 'error': 'Funzione saldo non disponibile'
             }
         
         try:
-            result = _original_show_balance()
+            result = mostra_saldo()
             
             if result:
                 trading_db.log_event(
@@ -441,11 +445,11 @@ class TradingWrapper:
     
     def get_current_price(self, symbol):
         """Ottiene il prezzo corrente"""
-        if not _original_get_price:
+        if not TRADING_FUNCTIONS_AVAILABLE or not vedi_prezzo_moneta:
             return None
         
         try:
-            price = _original_get_price('linear', symbol)
+            price = vedi_prezzo_moneta('linear', symbol)
             return price
         except Exception as e:
             trading_db.log_event(

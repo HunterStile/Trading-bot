@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storico Trading - Ultra Simple</title>
+    <style>
+        body {
+            background: #0a0e1a;
+            color: white;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .card {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .badge {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        .bg-success { background: #28a745; }
+        .bg-danger { background: #dc3545; }
+        .bg-warning { background: #ffc107; color: black; }
+        .bg-info { background: #17a2b8; }
+        .bg-primary { background: #007bff; }
+        .bg-secondary { background: #6c757d; }
+        .text-success { color: #28a745; }
+        .text-danger { color: #dc3545; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            text-align: left;
+        }
+        th {
+            background: rgba(255,255,255,0.1);
+        }
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        .loading {
+            text-align: center;
+            color: #ffc107;
+        }
+        .error {
+            background: rgba(220, 53, 69, 0.2);
+            border: 1px solid #dc3545;
+            border-radius: 5px;
+            padding: 10px;
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <h1>📊 Storico Trading - Ultra Simple</h1>
+    
+    <button class="btn" onclick="loadAllData()">🔄 Aggiorna Tutto</button>
+    
+    <div id="status" class="loading">Caricamento dati...</div>
+    
+    <!-- Statistiche veloci -->
+    <div class="card">
+        <h3>📈 Statistiche Rapide</h3>
+        <p>Sessioni: <span id="stat-sessions">-</span> | Trade: <span id="stat-trades">-</span> | Aperti: <span id="stat-open">-</span> | PnL: <span id="stat-pnl">-</span></p>
+    </div>
+    
+    <!-- Sessioni -->
+    <div class="card">
+        <h3>📋 Sessioni</h3>
+        <div id="sessions-data">
+            <p class="loading">Caricamento sessioni...</p>
+        </div>
+    </div>
+    
+    <!-- Trade -->
+    <div class="card">
+        <h3>💼 Trade</h3>
+        <div id="trades-data">
+            <p class="loading">Caricamento trade...</p>
+        </div>
+    </div>
+
+    <script>
+        console.log('🚀 Ultra Simple History - Script avviato');
+        
+        function updateStatus(message, isError = false) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = isError ? 'error' : 'loading';
+        }
+
+        async function loadSessions() {
+            console.log('📋 Caricamento sessioni...');
+            updateStatus('Caricamento sessioni...');
+            
+            try {
+                const response = await fetch('/api/history/sessions?limit=10');
+                console.log('Sessions response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Sessions data received:', data);
+                
+                if (data.success) {
+                    const sessions = data.sessions || data.data || [];
+                    console.log(`✅ ${sessions.length} sessioni caricate`);
+                    
+                    let html = '<table><tr><th>Session ID</th><th>Simbolo</th><th>Trade</th><th>Stato</th></tr>';
+                    
+                    if (sessions.length === 0) {
+                        html += '<tr><td colspan="4" style="text-align:center; color:#ffc107;">Nessuna sessione trovata</td></tr>';
+                    } else {
+                        sessions.forEach(session => {
+                            const statusBadge = session.status === 'ACTIVE' ? 
+                                `<span class="badge bg-success">Attiva</span>` : 
+                                `<span class="badge bg-secondary">Completata</span>`;
+                            
+                            html += `<tr>
+                                <td>${session.session_id}</td>
+                                <td><span class="badge bg-info">${session.symbol}</span></td>
+                                <td><span class="badge bg-primary">${session.total_trades || 0}</span></td>
+                                <td>${statusBadge}</td>
+                            </tr>`;
+                        });
+                    }
+                    
+                    html += '</table>';
+                    document.getElementById('sessions-data').innerHTML = html;
+                    document.getElementById('stat-sessions').textContent = sessions.length;
+                    
+                    return sessions.length;
+                } else {
+                    throw new Error(data.error || 'Errore sconosciuto dall\'API');
+                }
+            } catch (error) {
+                console.error('❌ Errore sessioni:', error);
+                document.getElementById('sessions-data').innerHTML = 
+                    `<div class="error">Errore nel caricamento sessioni: ${error.message}</div>`;
+                return 0;
+            }
+        }
+
+        async function loadTrades() {
+            console.log('💼 Caricamento trade...');
+            updateStatus('Caricamento trade...');
+            
+            try {
+                const response = await fetch('/api/history/trades?limit=20');
+                console.log('Trades response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Trades data received:', data);
+                
+                if (data.success) {
+                    const trades = data.data || [];
+                    console.log(`✅ ${trades.length} trade caricati`);
+                    
+                    let html = '<table><tr><th>Trade ID</th><th>Simbolo</th><th>Tipo</th><th>Prezzo</th><th>Quantità</th><th>PnL</th><th>Stato</th></tr>';
+                    
+                    let totalPnl = 0;
+                    let openTrades = 0;
+                    
+                    if (trades.length === 0) {
+                        html += '<tr><td colspan="7" style="text-align:center; color:#ffc107;">Nessun trade trovato</td></tr>';
+                    } else {
+                        trades.forEach(trade => {
+                            const sideBadge = trade.side === 'BUY' ? 
+                                `<span class="badge bg-success">LONG</span>` : 
+                                `<span class="badge bg-danger">SHORT</span>`;
+                            
+                            const statusBadge = trade.status === 'OPEN' ? 
+                                `<span class="badge bg-warning">Aperto</span>` : 
+                                `<span class="badge bg-secondary">Chiuso</span>`;
+                            
+                            const currentPnl = trade.current_pnl || trade.pnl || 0;
+                            const pnlClass = currentPnl >= 0 ? 'text-success' : 'text-danger';
+                            
+                            if (trade.status === 'OPEN') {
+                                openTrades++;
+                                totalPnl += currentPnl;
+                            }
+                            
+                            html += `<tr>
+                                <td>${trade.trade_id}</td>
+                                <td><span class="badge bg-info">${trade.symbol}</span></td>
+                                <td>${sideBadge}</td>
+                                <td>$${(trade.entry_price || 0).toFixed(4)}</td>
+                                <td>${trade.quantity || 0}</td>
+                                <td class="${pnlClass}">$${currentPnl.toFixed(2)}</td>
+                                <td>${statusBadge}</td>
+                            </tr>`;
+                        });
+                    }
+                    
+                    html += '</table>';
+                    document.getElementById('trades-data').innerHTML = html;
+                    document.getElementById('stat-trades').textContent = trades.length;
+                    document.getElementById('stat-open').textContent = openTrades;
+                    
+                    const pnlEl = document.getElementById('stat-pnl');
+                    pnlEl.textContent = `$${totalPnl.toFixed(2)}`;
+                    pnlEl.className = totalPnl >= 0 ? 'text-success' : 'text-danger';
+                    
+                    return { total: trades.length, open: openTrades, pnl: totalPnl };
+                } else {
+                    throw new Error(data.error || 'Errore sconosciuto dall\'API');
+                }
+            } catch (error) {
+                console.error('❌ Errore trade:', error);
+                document.getElementById('trades-data').innerHTML = 
+                    `<div class="error">Errore nel caricamento trade: ${error.message}</div>`;
+                return { total: 0, open: 0, pnl: 0 };
+            }
+        }
+
+        async function loadAllData() {
+            console.log('🔄 Caricamento completo...');
+            updateStatus('Caricamento dati...');
+            
+            try {
+                const sessionsCount = await loadSessions();
+                const tradesInfo = await loadTrades();
+                
+                updateStatus(`✅ Caricati ${sessionsCount} sessioni e ${tradesInfo.total} trade`);
+                console.log('🎉 Caricamento completato!');
+            } catch (error) {
+                console.error('💥 Errore generale:', error);
+                updateStatus(`❌ Errore: ${error.message}`, true);
+            }
+        }
+
+        // Avvia quando la pagina è pronta
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadAllData);
+        } else {
+            loadAllData();
+        }
+        
+        // Auto-refresh ogni 30 secondi
+        setInterval(() => {
+            console.log('🔄 Auto-refresh...');
+            loadAllData();
+        }, 30000);
+    </script>
+</body>
+</html>

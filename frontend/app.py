@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory
 from flask_socketio import SocketIO, emit
 import sys
 import os
@@ -512,11 +512,35 @@ def get_session_history():
 
 @app.route('/api/history/trades')
 def get_trade_history():
-    """Ottieni storico trades"""
+    """Ottieni storico trades con PnL calcolato in tempo reale"""
     try:
         session_id = request.args.get('session_id')
         limit = request.args.get('limit', 100, type=int)
         trades = trading_db.get_trade_history(session_id, limit)
+        
+        # Calcola PnL in tempo reale per trade aperti
+        for trade in trades:
+            if trade.get('status') == 'OPEN' and trade.get('entry_price') and trade.get('symbol'):
+                try:
+                    current_price = vedi_prezzo_moneta('linear', trade['symbol'])
+                    if current_price and trade['entry_price']:
+                        quantity = trade.get('quantity', 0)
+                        entry_price = trade['entry_price']
+                        
+                        if trade.get('side') == 'BUY':
+                            # LONG: PnL = (current_price - entry_price) * quantity
+                            trade['current_pnl'] = (current_price - entry_price) * quantity
+                        else:
+                            # SHORT: PnL = (entry_price - current_price) * quantity  
+                            trade['current_pnl'] = (entry_price - current_price) * quantity
+                        
+                        trade['current_price'] = current_price
+                        trade['pnl_percentage'] = ((current_price - entry_price) / entry_price) * 100 if trade.get('side') == 'BUY' else ((entry_price - current_price) / entry_price) * 100
+                except Exception as e:
+                    print(f"Errore calcolo PnL per {trade.get('trade_id')}: {e}")
+                    trade['current_pnl'] = 0
+                    trade['current_price'] = trade.get('entry_price', 0)
+        
         return jsonify({'success': True, 'data': trades})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -602,6 +626,21 @@ def export_trading_data():
 def history_page():
     """Pagina storico trading"""
     return render_template('history.html')
+
+@app.route('/history-simple')
+def history_simple_page():
+    """Pagina storico trading semplificata"""
+    return render_template('history_simple.html')
+
+@app.route('/debug')
+def debug_page():
+    """Pagina debug per testare API"""
+    return send_from_directory('.', 'debug_history.html')
+
+@app.route('/ultra')
+def ultra_simple_page():
+    """Pagina ultra semplice per storico"""
+    return send_from_directory('.', 'ultra_simple_history.html')
 
 @app.route('/api/history/sessions')
 def get_trading_sessions():

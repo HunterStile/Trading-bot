@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}Storico Trading - Simple{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="text-gradient-primary mb-0">📊 Storico Trading</h2>
+            <p class="text-muted">Sessioni e trade del bot</p>
+            <button class="btn btn-primary" onclick="loadData()">🔄 Aggiorna Dati</button>
+        </div>
+    </div>
+
+    <!-- Sessioni -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card glass-card">
+                <div class="card-header">
+                    <h5 class="text-white mb-0">📋 Sessioni di Trading</h5>
+                </div>
+                <div class="card-body">
+                    <div id="sessions-content">
+                        <p class="text-muted">Caricamento sessioni...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trade -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card glass-card">
+                <div class="card-header">
+                    <h5 class="text-white mb-0">💼 Trade Eseguiti</h5>
+                </div>
+                <div class="card-body">
+                    <div id="trades-content">
+                        <p class="text-muted">Caricamento trade...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiche -->
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card glass-card text-center">
+                <div class="card-body">
+                    <h6 class="text-white">Sessioni Totali</h6>
+                    <h3 class="text-gradient-info" id="total-sessions">0</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card glass-card text-center">
+                <div class="card-body">
+                    <h6 class="text-white">Trade Totali</h6>
+                    <h3 class="text-gradient-success" id="total-trades">0</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card glass-card text-center">
+                <div class="card-body">
+                    <h6 class="text-white">Trade Aperti</h6>
+                    <h3 class="text-gradient-warning" id="open-trades">0</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card glass-card text-center">
+                <div class="card-body">
+                    <h6 class="text-white">PnL Stimato</h6>
+                    <h3 class="text-gradient-primary" id="estimated-pnl">$0.00</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+console.log('History Simple - Script caricato');
+
+function loadData() {
+    console.log('Caricamento dati...');
+    loadSessions();
+    loadTrades();
+}
+
+function loadSessions() {
+    console.log('Caricamento sessioni...');
+    
+    fetch('/api/history/sessions?limit=20')
+        .then(response => {
+            console.log('Response sessions:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Sessions data:', data);
+            
+            if (data.success) {
+                const sessions = data.sessions || data.data || [];
+                console.log('Sessioni trovate:', sessions.length);
+                
+                let html = `<div class="table-responsive">
+                    <table class="table table-dark table-hover">
+                        <thead>
+                            <tr>
+                                <th>Session ID</th>
+                                <th>Simbolo</th>
+                                <th>Inizio</th>
+                                <th>Trade</th>
+                                <th>Stato</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+                
+                if (sessions.length === 0) {
+                    html += '<tr><td colspan="5" class="text-center text-muted">Nessuna sessione trovata</td></tr>';
+                } else {
+                    sessions.forEach(session => {
+                        const startTime = new Date(session.start_time).toLocaleString();
+                        const statusBadge = session.status === 'ACTIVE' ? 
+                            '<span class="badge bg-success">Attiva</span>' : 
+                            '<span class="badge bg-secondary">Completata</span>';
+                        
+                        html += `<tr>
+                            <td><code>${session.session_id}</code></td>
+                            <td><span class="badge bg-info">${session.symbol}</span></td>
+                            <td><small>${startTime}</small></td>
+                            <td><span class="badge bg-primary">${session.total_trades || 0}</span></td>
+                            <td>${statusBadge}</td>
+                        </tr>`;
+                    });
+                }
+                
+                html += '</tbody></table></div>';
+                
+                document.getElementById('sessions-content').innerHTML = html;
+                document.getElementById('total-sessions').textContent = sessions.length;
+            } else {
+                document.getElementById('sessions-content').innerHTML = 
+                    `<div class="alert alert-danger">Errore: ${data.error}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Errore sessioni:', error);
+            document.getElementById('sessions-content').innerHTML = 
+                `<div class="alert alert-danger">Errore nel caricamento: ${error}</div>`;
+        });
+}
+
+function loadTrades() {
+    console.log('Caricamento trade...');
+    
+    fetch('/api/history/trades?limit=50')
+        .then(response => {
+            console.log('Response trades:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Trades data:', data);
+            
+            if (data.success) {
+                const trades = data.data || [];
+                console.log('Trade trovati:', trades.length);
+                
+                let html = `<div class="table-responsive">
+                    <table class="table table-dark table-hover">
+                        <thead>
+                            <tr>
+                                <th>Trade ID</th>
+                                <th>Simbolo</th>
+                                <th>Tipo</th>
+                                <th>Prezzo Entrata</th>
+                                <th>Prezzo Corrente</th>
+                                <th>Quantità</th>
+                                <th>PnL Stimato</th>
+                                <th>Stato</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+                
+                let totalPnl = 0;
+                let openTrades = 0;
+                
+                if (trades.length === 0) {
+                    html += '<tr><td colspan="8" class="text-center text-muted">Nessun trade trovato</td></tr>';
+                } else {
+                    trades.forEach(trade => {
+                        const sideBadge = trade.side === 'BUY' ? 
+                            '<span class="badge bg-success">LONG</span>' : 
+                            '<span class="badge bg-danger">SHORT</span>';
+                        
+                        const statusBadge = trade.status === 'OPEN' ? 
+                            '<span class="badge bg-warning">Aperto</span>' : 
+                            '<span class="badge bg-secondary">Chiuso</span>';
+                        
+                        const currentPnl = trade.current_pnl || trade.pnl || 0;
+                        const pnlClass = currentPnl >= 0 ? 'text-success' : 'text-danger';
+                        
+                        if (trade.status === 'OPEN') {
+                            openTrades++;
+                            totalPnl += currentPnl;
+                        }
+                        
+                        html += `<tr>
+                            <td><code>${trade.trade_id}</code></td>
+                            <td><span class="badge bg-info">${trade.symbol}</span></td>
+                            <td>${sideBadge}</td>
+                            <td>$${(trade.entry_price || 0).toFixed(4)}</td>
+                            <td>$${(trade.current_price || trade.entry_price || 0).toFixed(4)}</td>
+                            <td>${trade.quantity || 0}</td>
+                            <td class="${pnlClass}">$${currentPnl.toFixed(2)}</td>
+                            <td>${statusBadge}</td>
+                        </tr>`;
+                    });
+                }
+                
+                html += '</tbody></table></div>';
+                
+                document.getElementById('trades-content').innerHTML = html;
+                document.getElementById('total-trades').textContent = trades.length;
+                document.getElementById('open-trades').textContent = openTrades;
+                
+                const pnlElement = document.getElementById('estimated-pnl');
+                pnlElement.textContent = `$${totalPnl.toFixed(2)}`;
+                pnlElement.className = totalPnl >= 0 ? 'text-gradient-success' : 'text-gradient-danger';
+                
+            } else {
+                document.getElementById('trades-content').innerHTML = 
+                    `<div class="alert alert-danger">Errore: ${data.error}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Errore trade:', error);
+            document.getElementById('trades-content').innerHTML = 
+                `<div class="alert alert-danger">Errore nel caricamento: ${error}</div>`;
+        });
+}
+
+// Carica dati automaticamente quando la pagina è pronta
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Pagina caricata, avvio caricamento dati...');
+    loadData();
+    
+    // Auto-refresh ogni 30 secondi
+    setInterval(loadData, 30000);
+});
+</script>
+{% endblock %}
