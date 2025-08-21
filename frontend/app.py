@@ -293,9 +293,10 @@ def stop_bot():
             try:
                 balance_response = mostra_saldo()
                 final_balance = balance_response.get('total_equity', 0) if balance_response else 0
-            except:
+            except Exception as e:
+                print(f"[DEBUG] Errore mostra_saldo per final_balance: {e}")
                 final_balance = 0
-            
+            print(f"[DEBUG] Saldo finale da salvare: {final_balance}")
             trading_db.end_session(bot_status['current_session_id'], final_balance)
             trading_db.log_event(
                 "BOT_STOP", 
@@ -1275,9 +1276,10 @@ def run_trading_bot():
             try:
                 balance_response = mostra_saldo()
                 initial_balance = balance_response.get('total_equity', 0) if balance_response else 0
-            except:
+            except Exception as e:
+                print(f"[DEBUG] Errore mostra_saldo per initial_balance: {e}")
                 initial_balance = 0
-            
+            print(f"[DEBUG] Saldo iniziale da salvare: {initial_balance}")
             bot_status['current_session_id'] = trading_db.start_session(
                 bot_status['symbol'], 
                 strategy_config, 
