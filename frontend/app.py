@@ -1559,22 +1559,6 @@ def run_trading_bot():
                                     'type': 'info'
                                 })
                                 
-                                # Verifica trailing stop prima delle condizioni EMA - DISATTIVATO
-                                # if recovery_manager:
-                                #     print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: Controllo trailing stops...")
-                                #     trailing_stop_result = recovery_manager._check_trailing_stops()
-                                #     print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: Trailing stop result = {trailing_stop_result}")
-                                #     if trailing_stop_result:
-                                #         print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Trailing stop attivato per {trade_symbol}")
-                                #         socketio.emit('analysis_log', {
-                                #             'message': f"🎯 Trailing stop attivato per {trade_symbol}",
-                                #             'type': 'success'
-                                #         })
-                                #         continue  # Salta alle altre posizioni se questa è stata chiusa
-                                #     else:
-                                #         print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: Nessun trailing stop attivato, continuo con analisi EMA...")
-                                # else:
-                                #     print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: Recovery manager non disponibile")
                                 
                                 print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 Recovery manager disattivato - Procedo con analisi EMA...")
                                 
@@ -1630,9 +1614,7 @@ def run_trading_bot():
                                                 'timestamp': datetime.now().isoformat()
                                             })
                                             
-                                            # Rimuovi trailing stop dopo chiusura - DISATTIVATO
-                                            # if recovery_manager:
-                                            #     recovery_manager.state_manager.remove_trailing_stop(trade_symbol, 'BUY')
+                                        
                                         else:
                                             print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Errore chiusura LONG: {result.get('error')}")
                                             socketio.emit('analysis_log', {
@@ -1642,14 +1624,7 @@ def run_trading_bot():
                                     else:
                                         print(f"[{datetime.now().strftime('%H:%M:%S')}] 📈 LONG {trade_symbol} mantiene posizione - Condizioni chiusura non soddisfatte")
                                         
-                                        # Aggiungi/aggiorna trailing stop se non esiste - DISATTIVATO
-                                        # if recovery_manager:
-                                        #     trailing_stops = recovery_manager.state_manager.get_trailing_stops()
-                                        #     has_trailing = any(ts['symbol'] == trade_symbol and ts['side'] == 'BUY' for ts in trailing_stops)
-                                        #     if not has_trailing:
-                                        #         result = recovery_manager.add_trailing_stop_to_position(trade_symbol, 'BUY', 0.5)
-                                        #         if result['success']:
-                                        #             print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Trailing stop aggiunto a {trade_symbol} LONG")
+                                    
                                 
                                 # Condizioni di chiusura per SHORT  
                                 elif trade_side == 'Sell':
@@ -1697,9 +1672,7 @@ def run_trading_bot():
                                                 'timestamp': datetime.now().isoformat()
                                             })
                                             
-                                            # Rimuovi trailing stop dopo chiusura - DISATTIVATO
-                                            # if recovery_manager:
-                                            #     recovery_manager.state_manager.remove_trailing_stop(trade_symbol, 'SELL')
+                                            
                                         else:
                                             print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Errore chiusura SHORT: {result.get('error')}")
                                             socketio.emit('analysis_log', {
@@ -1709,14 +1682,7 @@ def run_trading_bot():
                                     else:
                                         print(f"[{datetime.now().strftime('%H:%M:%S')}] 📉 SHORT {trade_symbol} mantiene posizione - Condizioni chiusura non soddisfatte")
                                         
-                                        # Aggiungi/aggiorna trailing stop se non esiste - DISATTIVATO
-                                        # if recovery_manager:
-                                        #     trailing_stops = recovery_manager.state_manager.get_trailing_stops()
-                                        #     has_trailing = any(ts['symbol'] == trade_symbol and ts['side'] == 'SELL' for ts in trailing_stops)
-                                        #     if not has_trailing:
-                                        #         result = recovery_manager.add_trailing_stop_to_position(trade_symbol, 'SELL', 0.5)
-                                        #         if result['success']:
-                                        #             print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Trailing stop aggiunto a {trade_symbol} SHORT")
+    
                         
                         # Salva analisi di mercato (converti tupla in dizionario)
                         print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: Finita analisi per tutte le posizioni attive ({len(active_trades)} posizioni elaborate)")
