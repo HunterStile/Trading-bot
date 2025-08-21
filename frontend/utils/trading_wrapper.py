@@ -102,9 +102,17 @@ class TradingWrapper:
                 print(f"✅ Operazione completata: {actual_quantity} {symbol} per ${quantity} USD")
                 
                 # Se arriviamo qui senza eccezioni, assumiamo il successo
+                # Recupera il prezzo di mercato corrente come entry_price se non fornito
+                if price:
+                    entry_price = price
+                else:
+                    try:
+                        entry_price = vedi_prezzo_moneta('linear', symbol)
+                    except Exception:
+                        entry_price = 0
                 result = {
                     'success': True,
-                    'entry_price': price if price else 0,
+                    'entry_price': entry_price,
                     'order_id': f"BOT_{symbol}_{int(time.time())}",
                     'actual_quantity': actual_quantity  # Quantità reale in monete
                 }
