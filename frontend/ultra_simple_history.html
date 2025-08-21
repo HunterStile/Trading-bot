@@ -87,13 +87,22 @@
         <div id="sessions-data">
             <p class="loading">Caricamento sessioni...</p>
         </div>
+        <div style="text-align:center; margin-top:10px;">
+            <button class="btn" id="sessions-prev" onclick="changeSessionPage(-1)">⬅️ Precedente</button>
+            <span id="sessions-page-info" style="margin:0 10px;"></span>
+            <button class="btn" id="sessions-next" onclick="changeSessionPage(1)">Successivo ➡️</button>
+        </div>
     </div>
-    
     <!-- Trade -->
     <div class="card">
         <h3>💼 Trade</h3>
         <div id="trades-data">
             <p class="loading">Caricamento trade...</p>
+        </div>
+        <div style="text-align:center; margin-top:10px;">
+            <button class="btn" id="trades-prev" onclick="changeTradePage(-1)">⬅️ Precedente</button>
+            <span id="trades-page-info" style="margin:0 10px;"></span>
+            <button class="btn" id="trades-next" onclick="changeTradePage(1)">Successivo ➡️</button>
         </div>
     </div>
 
@@ -106,176 +115,190 @@
             statusEl.className = isError ? 'error' : 'loading';
         }
 
+        // --- PAGINAZIONE SESSIONI ---
+        let allSessions = [];
+        let sessionPage = 1;
+        const sessionPerPage = 10;
+
         async function loadSessions() {
             console.log('📋 Caricamento sessioni...');
             updateStatus('Caricamento sessioni...');
-            
             try {
-                const response = await fetch('/api/history/sessions?limit=10');
-                console.log('Sessions response status:', response.status);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
+                // Carica tutte le sessioni (rimuovi limit)
+                const response = await fetch('/api/history/sessions');
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 const data = await response.json();
-                console.log('Sessions data received:', data);
-                
                 if (data.success) {
-                    const sessions = data.sessions || data.data || [];
-                    console.log(`✅ ${sessions.length} sessioni caricate`);
-                    
-                    let html = `<table><tr>
-                        <th>Session ID</th>
-                        <th>Simbolo</th>
-                        <th>Inizio</th>
-                        <th>Fine</th>
-                        <th>Saldo Iniziale</th>
-                        <th>Saldo Finale</th>
-                        <th>Trade Totali</th>
-                        <th>Vinti</th>
-                        <th>Persi</th>
-                        <th>PnL Totale</th>
-                        <th>Drawdown Max</th>
-                        <th>Stato</th>
-                    </tr>`;
-                    if (sessions.length === 0) {
-                        html += '<tr><td colspan="12" style="text-align:center; color:#ffc107;">Nessuna sessione trovata</td></tr>';
-                    } else {
-                        sessions.forEach(session => {
-                            const statusBadge = session.status === 'ACTIVE' ? 
-                                `<span class="badge bg-success">Attiva</span>` : 
-                                `<span class="badge bg-secondary">Completata</span>`;
-                            html += `<tr>
-                                <td>${session.session_id}</td>
-                                <td><span class="badge bg-info">${session.symbol}</span></td>
-                                <td>${session.start_time ? new Date(session.start_time).toLocaleString() : '-'}</td>
-                                <td>${session.end_time ? new Date(session.end_time).toLocaleString() : '-'}</td>
-                                <td>$${(session.initial_balance ?? 0).toFixed(2)}</td>
-                                <td>$${(session.final_balance ?? 0).toFixed(2)}</td>
-                                <td>${session.total_trades ?? 0}</td>
-                                <td>${session.winning_trades ?? 0}</td>
-                                <td>${session.losing_trades ?? 0}</td>
-                                <td>$${(session.total_pnl ?? 0).toFixed(2)}</td>
-                                <td>$${(session.max_drawdown ?? 0).toFixed(2)}</td>
-                                <td>${statusBadge}</td>
-                            </tr>`;
-                        });
-                    }
-                    
-                    html += '</table>';
-                    document.getElementById('sessions-data').innerHTML = html;
-                    document.getElementById('stat-sessions').textContent = sessions.length;
-                    
-                    return sessions.length;
+                    allSessions = data.sessions || data.data || [];
+                    sessionPage = 1;
+                    renderSessionPage();
+                    document.getElementById('stat-sessions').textContent = allSessions.length;
+                    return allSessions.length;
                 } else {
                     throw new Error(data.error || 'Errore sconosciuto dall\'API');
                 }
             } catch (error) {
                 console.error('❌ Errore sessioni:', error);
-                document.getElementById('sessions-data').innerHTML = 
-                    `<div class="error">Errore nel caricamento sessioni: ${error.message}</div>`;
+                document.getElementById('sessions-data').innerHTML = `<div class="error">Errore nel caricamento sessioni: ${error.message}</div>`;
                 return 0;
             }
         }
 
+        function renderSessionPage() {
+            const start = (sessionPage - 1) * sessionPerPage;
+            const end = start + sessionPerPage;
+            const sessions = allSessions.slice(start, end);
+            let html = `<table><tr>
+                <th>Session ID</th>
+                <th>Simbolo</th>
+                <th>Inizio</th>
+                <th>Fine</th>
+                <th>Saldo Iniziale</th>
+                <th>Saldo Finale</th>
+                <th>Trade Totali</th>
+                <th>Vinti</th>
+                <th>Persi</th>
+                <th>PnL Totale</th>
+                <th>Drawdown Max</th>
+                <th>Stato</th>
+            </tr>`;
+            if (sessions.length === 0) {
+                html += '<tr><td colspan="12" style="text-align:center; color:#ffc107;">Nessuna sessione trovata</td></tr>';
+            } else {
+                sessions.forEach(session => {
+                    const statusBadge = session.status === 'ACTIVE' ? `<span class="badge bg-success">Attiva</span>` : `<span class="badge bg-secondary">Completata</span>`;
+                    html += `<tr>
+                        <td>${session.session_id}</td>
+                        <td><span class="badge bg-info">${session.symbol}</span></td>
+                        <td>${session.start_time ? new Date(session.start_time).toLocaleString() : '-'}</td>
+                        <td>${session.end_time ? new Date(session.end_time).toLocaleString() : '-'}</td>
+                        <td>$${(session.initial_balance ?? 0).toFixed(2)}</td>
+                        <td>$${(session.final_balance ?? 0).toFixed(2)}</td>
+                        <td>${session.total_trades ?? 0}</td>
+                        <td>${session.winning_trades ?? 0}</td>
+                        <td>${session.losing_trades ?? 0}</td>
+                        <td>$${(session.total_pnl ?? 0).toFixed(2)}</td>
+                        <td>$${(session.max_drawdown ?? 0).toFixed(2)}</td>
+                        <td>${statusBadge}</td>
+                    </tr>`;
+                });
+            }
+            html += '</table>';
+            document.getElementById('sessions-data').innerHTML = html;
+            // Aggiorna info paginazione
+            const totalPages = Math.ceil(allSessions.length / sessionPerPage) || 1;
+            document.getElementById('sessions-page-info').textContent = `Pagina ${sessionPage} di ${totalPages}`;
+            document.getElementById('sessions-prev').disabled = sessionPage === 1;
+            document.getElementById('sessions-next').disabled = sessionPage === totalPages;
+        }
+
+        function changeSessionPage(delta) {
+            const totalPages = Math.ceil(allSessions.length / sessionPerPage) || 1;
+            sessionPage = Math.max(1, Math.min(sessionPage + delta, totalPages));
+            renderSessionPage();
+        }
+
+        // --- PAGINAZIONE TRADE ---
+        let allTrades = [];
+        let tradePage = 1;
+        const tradePerPage = 10;
+
         async function loadTrades() {
             console.log('💼 Caricamento trade...');
             updateStatus('Caricamento trade...');
-            
             try {
-                const response = await fetch('/api/history/trades?limit=20');
-                console.log('Trades response status:', response.status);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
+                // Carica tutti i trade (rimuovi limit)
+                const response = await fetch('/api/history/trades');
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 const data = await response.json();
-                console.log('Trades data received:', data);
-                
                 if (data.success) {
-                    const trades = data.data || [];
-                    console.log(`✅ ${trades.length} trade caricati`);
-                    
-                    let html = `<table><tr>
-                        <th>Trade ID</th>
-                        <th>Simbolo</th>
-                        <th>Tipo</th>
-                        <th>Quantità</th>
-                        <th>Prezzo Entrata</th>
-                        <th>Prezzo Uscita</th>
-                        <th>PnL</th>
-                        <th>Fee</th>
-                        <th>Stato</th>
-                        <th>Entry Time</th>
-                        <th>Exit Time</th>
-                    </tr>`;
-                    
-                    let totalPnl = 0;
-                    let openTrades = 0;
-                    
-                    if (trades.length === 0) {
-                        html += '<tr><td colspan="11" style="text-align:center; color:#ffc107;">Nessun trade trovato</td></tr>';
-                    } else {
-                        trades.forEach(trade => {
-                            const sideBadge = trade.side === 'BUY' ? 
-                                `<span class="badge bg-success">LONG</span>` : 
-                                `<span class="badge bg-danger">SHORT</span>`;
-                            const statusBadge = trade.status === 'OPEN' ? 
-                                `<span class="badge bg-warning">Aperto</span>` : 
-                                `<span class="badge bg-secondary">Chiuso</span>`;
-                            const currentPnl = trade.current_pnl || trade.pnl || 0;
-                            const pnlClass = currentPnl >= 0 ? 'text-success' : 'text-danger';
-                            if (trade.status === 'OPEN') {
-                                openTrades++;
-                                totalPnl += currentPnl;
-                            }
-                            html += `<tr>
-                                <td>${trade.trade_id}</td>
-                                <td><span class="badge bg-info">${trade.symbol}</span></td>
-                                <td>${sideBadge}</td>
-                                <td>${trade.quantity || 0}</td>
-                                <td>$${(trade.entry_price ?? 0).toFixed(6)}</td>
-                                <td>$${(trade.exit_price ?? 0).toFixed(6)}</td>
-                                <td class="${pnlClass}">$${(trade.pnl ?? 0).toFixed(6)}</td>
-                                <td>$${(trade.fee ?? 0).toFixed(6)}</td>
-                                <td>${statusBadge}</td>
-                                <td>${trade.entry_time ? new Date(trade.entry_time).toLocaleString() : '-'}</td>
-                                <td>${trade.exit_time ? new Date(trade.exit_time).toLocaleString() : '-'}</td>
-                            </tr>`;
-                        });
-                    }
-                    
-                    html += '</table>';
-                    document.getElementById('trades-data').innerHTML = html;
-                    document.getElementById('stat-trades').textContent = trades.length;
-                    document.getElementById('stat-open').textContent = openTrades;
-                    
-                    const pnlEl = document.getElementById('stat-pnl');
-                    pnlEl.textContent = `$${totalPnl.toFixed(2)}`;
-                    pnlEl.className = totalPnl >= 0 ? 'text-success' : 'text-danger';
-                    
-                    return { total: trades.length, open: openTrades, pnl: totalPnl };
+                    allTrades = data.data || [];
+                    tradePage = 1;
+                    renderTradePage();
+                    return { total: allTrades.length, open: 0, pnl: 0 };
                 } else {
                     throw new Error(data.error || 'Errore sconosciuto dall\'API');
                 }
             } catch (error) {
                 console.error('❌ Errore trade:', error);
-                document.getElementById('trades-data').innerHTML = 
-                    `<div class="error">Errore nel caricamento trade: ${error.message}</div>`;
+                document.getElementById('trades-data').innerHTML = `<div class="error">Errore nel caricamento trade: ${error.message}</div>`;
                 return { total: 0, open: 0, pnl: 0 };
             }
+        }
+
+        function renderTradePage() {
+            const start = (tradePage - 1) * tradePerPage;
+            const end = start + tradePerPage;
+            const trades = allTrades.slice(start, end);
+            let html = `<table><tr>
+                <th>Trade ID</th>
+                <th>Simbolo</th>
+                <th>Tipo</th>
+                <th>Quantità</th>
+                <th>Prezzo Entrata</th>
+                <th>Prezzo Uscita</th>
+                <th>PnL</th>
+                <th>Fee</th>
+                <th>Stato</th>
+                <th>Entry Time</th>
+                <th>Exit Time</th>
+            </tr>`;
+            let totalPnl = 0;
+            let openTrades = 0;
+            if (trades.length === 0) {
+                html += '<tr><td colspan="11" style="text-align:center; color:#ffc107;">Nessun trade trovato</td></tr>';
+            } else {
+                trades.forEach(trade => {
+                    const sideBadge = trade.side === 'BUY' ? `<span class="badge bg-success">LONG</span>` : `<span class="badge bg-danger">SHORT</span>`;
+                    const statusBadge = trade.status === 'OPEN' ? `<span class="badge bg-warning">Aperto</span>` : `<span class="badge bg-secondary">Chiuso</span>`;
+                    const currentPnl = trade.current_pnl || trade.pnl || 0;
+                    const pnlClass = currentPnl >= 0 ? 'text-success' : 'text-danger';
+                    if (trade.status === 'OPEN') {
+                        openTrades++;
+                        totalPnl += currentPnl;
+                    }
+                    html += `<tr>
+                        <td>${trade.trade_id}</td>
+                        <td><span class="badge bg-info">${trade.symbol}</span></td>
+                        <td>${sideBadge}</td>
+                        <td>${trade.quantity || 0}</td>
+                        <td>$${(trade.entry_price ?? 0).toFixed(6)}</td>
+                        <td>$${(trade.exit_price ?? 0).toFixed(6)}</td>
+                        <td class="${pnlClass}">$${(trade.pnl ?? 0).toFixed(6)}</td>
+                        <td>$${(trade.fee ?? 0).toFixed(6)}</td>
+                        <td>${statusBadge}</td>
+                        <td>${trade.entry_time ? new Date(trade.entry_time).toLocaleString() : '-'}</td>
+                        <td>${trade.exit_time ? new Date(trade.exit_time).toLocaleString() : '-'}</td>
+                    </tr>`;
+                });
+            }
+            html += '</table>';
+            document.getElementById('trades-data').innerHTML = html;
+            // Aggiorna info paginazione
+            const totalPages = Math.ceil(allTrades.length / tradePerPage) || 1;
+            document.getElementById('trades-page-info').textContent = `Pagina ${tradePage} di ${totalPages}`;
+            document.getElementById('trades-prev').disabled = tradePage === 1;
+            document.getElementById('trades-next').disabled = tradePage === totalPages;
+            // Aggiorna statistiche
+            document.getElementById('stat-trades').textContent = allTrades.length;
+            document.getElementById('stat-open').textContent = openTrades;
+            const pnlEl = document.getElementById('stat-pnl');
+            pnlEl.textContent = `$${totalPnl.toFixed(2)}`;
+            pnlEl.className = totalPnl >= 0 ? 'text-success' : 'text-danger';
+        }
+
+        function changeTradePage(delta) {
+            const totalPages = Math.ceil(allTrades.length / tradePerPage) || 1;
+            tradePage = Math.max(1, Math.min(tradePage + delta, totalPages));
+            renderTradePage();
         }
 
         async function loadAllData() {
             console.log('🔄 Caricamento completo...');
             updateStatus('Caricamento dati...');
-            
             try {
                 const sessionsCount = await loadSessions();
                 const tradesInfo = await loadTrades();
-                
                 updateStatus(`✅ Caricati ${sessionsCount} sessioni e ${tradesInfo.total} trade`);
                 console.log('🎉 Caricamento completato!');
             } catch (error) {
