@@ -370,8 +370,8 @@ def mostra_saldo():
 
     # Stampa o fai ciò che vuoi con 'total_equity'
     print(f'Total Equity: {total_equity}')
-
-    from datetime import datetime, timedelta
+    
+    return {"total_equity": float(total_equity)}
 
 def ottieni_prezzi(categoria,simbolo):
     session = HTTP(testnet=False, api_key=api, api_secret=api_sec)
