@@ -15,6 +15,16 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.database import trading_db
 from utils.trading_wrapper import trading_wrapper
 
+# Import dei nuovi moduli core
+try:
+    from core.trading import TradingService
+    from core.notifications import WebSocketManager
+    print("✅ Moduli core importati con successo")
+except ImportError as e:
+    print(f"⚠️ Errore importazione moduli core: {e}")
+    TradingService = None
+    WebSocketManager = None
+
 # Import sistema di recovery
 try:
     from utils.bot_state import BotStateManager
@@ -87,7 +97,33 @@ def get_all_symbols():
     custom_symbols = load_custom_symbols()
     return DEFAULT_SYMBOLS + custom_symbols
 
-# Variabili globali per lo stato del bot
+# Inizializza i servizi modularizzati
+websocket_manager = None
+trading_service = None
+
+def initialize_services():
+    """Inizializza i servizi modularizzati"""
+    global websocket_manager, trading_service
+    
+    if WebSocketManager and TradingService:
+        # Crea WebSocket Manager
+        websocket_manager = WebSocketManager(socketio, logger)
+        
+        # Crea Trading Service
+        trading_service = TradingService(
+            trading_wrapper=trading_wrapper,
+            trading_db=trading_db,
+            websocket_manager=websocket_manager,
+            logger=logger
+        )
+        
+        logger.info("✅ Servizi modularizzati inizializzati")
+        return True
+    else:
+        logger.warning("⚠️ Usando fallback per compatibilità")
+        return False
+
+# Variabili globali per lo stato del bot (DEPRECATE - da rimuovere gradualmente)
 bot_status = {
     'running': False,
     'symbol': 'AVAXUSDT',
@@ -224,6 +260,54 @@ def test_connection():
 @app.route('/api/bot/start', methods=['POST'])
 def start_bot():
     """Avvia il bot di trading"""
+    global bot_status  # Mantengo per compatibilità temporanea
+    
+    # Usa il nuovo TradingService se disponibile
+    if trading_service:
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'success': False, 'error': 'Nessuna configurazione fornita'})
+            
+            # Salva configurazione bot per recovery
+            if state_manager:
+                bot_config = {
+                    'symbol': data.get('symbol'),
+                    'quantity': data.get('quantity'),
+                    'operation': data.get('operation'),
+                    'ema_period': data.get('ema_period'),
+                    'interval': data.get('interval'),
+                    'open_candles': data.get('open_candles'),
+                    'stop_candles': data.get('stop_candles'),
+                    'distance': data.get('distance'),
+                    'timestamp': datetime.now().isoformat(),
+                    'auto_restart': True,
+                    'was_running': True
+                }
+                state_manager.save_bot_state('bot_config', bot_config)
+                logger.info("💾 Configurazione bot salvata per recovery")
+            
+            # Avvia il trading service
+            result = trading_service.start_bot(data)
+            
+            if result['success']:
+                # Aggiorna bot_status per compatibilità
+                bot_status.update(data)
+                bot_status['running'] = True
+                bot_status['last_update'] = datetime.now().isoformat()
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            logger.error(f"Errore nell'avvio del bot: {e}")
+            return jsonify({'success': False, 'error': str(e)})
+    
+    # Fallback al vecchio sistema per compatibilità
+    else:
+        return _start_bot_legacy()
+
+def _start_bot_legacy():
+    """Fallback al vecchio sistema di avvio bot"""
     global bot_thread, stop_bot_flag, bot_status
     
     if bot_status['running']:
@@ -270,6 +354,46 @@ def start_bot():
 @app.route('/api/bot/stop', methods=['POST'])
 def stop_bot():
     """Ferma il bot di trading"""
+    global bot_status  # Mantengo per compatibilità temporanea
+    
+    # Usa il nuovo TradingService se disponibile
+    if trading_service:
+        try:
+            # Aggiorna stato nel recovery (bot fermato manualmente)
+            if state_manager:
+                bot_config = state_manager.get_bot_state('bot_config')
+                if bot_config:
+                    bot_config['was_running'] = False
+                    bot_config['stopped_manually'] = True
+                    bot_config['stop_timestamp'] = datetime.now().isoformat()
+                    state_manager.save_bot_state('bot_config', bot_config)
+                    logger.info("💾 Stato bot aggiornato: fermato manualmente")
+            
+            result = trading_service.stop_bot()
+            
+            if result['success']:
+                # Aggiorna bot_status per compatibilità
+                bot_status['running'] = False
+                bot_status['last_update'] = datetime.now().isoformat()
+                
+                # Reset session data
+                bot_status['current_session_id'] = None
+                bot_status['session_start_time'] = None
+                bot_status['total_trades'] = 0
+                bot_status['session_pnl'] = 0
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            logger.error(f"Errore nel fermare il bot: {e}")
+            return jsonify({'success': False, 'error': str(e)})
+    
+    # Fallback al vecchio sistema per compatibilità
+    else:
+        return _stop_bot_legacy()
+
+def _stop_bot_legacy():
+    """Fallback al vecchio sistema di stop bot"""
     global stop_bot_flag, bot_status
     
     stop_bot_flag = True
@@ -324,7 +448,22 @@ def stop_bot():
 @app.route('/api/bot/status')
 def get_bot_status():
     """Ottieni lo stato del bot"""
-    return jsonify(bot_status)
+    # Usa il nuovo TradingService se disponibile
+    if trading_service:
+        try:
+            service_status = trading_service.get_status()
+            # Combina con bot_status per compatibilità
+            combined_status = {
+                **bot_status,
+                'service_status': service_status,
+                'is_running': service_status.get('is_running', bot_status.get('running', False))
+            }
+            return jsonify(combined_status)
+        except Exception as e:
+            logger.error(f"Errore nel recupero stato: {e}")
+            return jsonify(bot_status)  # Fallback
+    else:
+        return jsonify(bot_status)
 
 @app.route('/api/bot/settings', methods=['POST'])
 def update_bot_settings():
@@ -333,10 +472,21 @@ def update_bot_settings():
     
     try:
         data = request.get_json()
-        bot_status.update(data)
-        bot_status['last_update'] = datetime.now().isoformat()
         
-        return jsonify({'success': True, 'message': 'Impostazioni aggiornate'})
+        # Usa il nuovo TradingService se disponibile
+        if trading_service:
+            result = trading_service.update_settings(data)
+            if result['success']:
+                # Aggiorna anche bot_status per compatibilità
+                bot_status.update(data)
+                bot_status['last_update'] = datetime.now().isoformat()
+            return jsonify(result)
+        else:
+            # Fallback al vecchio sistema
+            bot_status.update(data)
+            bot_status['last_update'] = datetime.now().isoformat()
+            return jsonify({'success': True, 'message': 'Impostazioni aggiornate'})
+            
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
@@ -1776,37 +1926,50 @@ def run_trading_bot():
             'timestamp': datetime.now().isoformat()
         })
 
-# WebSocket Events
+# WebSocket Events (LEGACY - gestiti ora da WebSocketManager)
+# I WebSocket events sono ora gestiti automaticamente da WebSocketManager
+# Questi rimangono come fallback per compatibilità
+
 @socketio.on('connect')
 def handle_connect():
-    print('Client connesso')
-    emit('status', {'msg': 'Connesso al server di trading'})
+    if not websocket_manager:  # Solo se WebSocketManager non è disponibile
+        print('Client connesso (legacy handler)')
+        emit('status', {'msg': 'Connesso al server di trading'})
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    print('Client disconnesso')
+    if not websocket_manager:  # Solo se WebSocketManager non è disponibile
+        print('Client disconnesso (legacy handler)')
 
 @socketio.on('request_update')
 def handle_request_update():
     """Invia aggiornamenti in tempo reale"""
-    try:
-        # Ottieni dati di mercato
-        if bot_status['symbol']:
-            price = vedi_prezzo_moneta('linear', bot_status['symbol'])
-            emit('price_update', {
-                'symbol': bot_status['symbol'],
-                'price': price,
-                'timestamp': datetime.now().isoformat()
-            })
-    except Exception as e:
-        emit('error', {'message': str(e)})
+    if not websocket_manager:  # Solo se WebSocketManager non è disponibile
+        try:
+            # Ottieni dati di mercato
+            if bot_status['symbol']:
+                price = vedi_prezzo_moneta('linear', bot_status['symbol'])
+                emit('price_update', {
+                    'symbol': bot_status['symbol'],
+                    'price': price,
+                    'timestamp': datetime.now().isoformat()
+                })
+        except Exception as e:
+            emit('error', {'message': str(e)})
 
 if __name__ == '__main__':
     print("🚀 Avvio Trading Bot Dashboard...")
     
+    # Inizializza i servizi modularizzati
+    services_initialized = initialize_services()
+    if services_initialized:
+        print("✅ Servizi modularizzati attivi")
+    else:
+        print("⚠️ Usando sistema legacy per compatibilità")
+    
     # Avvia recovery automatico se disponibile
     if recovery_manager:
-        print("� Controllo recovery automatico...")
+        print("🔄 Controllo recovery automatico...")
         try:
             recovery_result = recovery_manager.perform_initial_recovery()
             
@@ -1823,7 +1986,7 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"⚠️ Errore durante recovery: {e}")
     
-    print("�📊 Dashboard disponibile su: http://localhost:5000")
+    print("📊 Dashboard disponibile su: http://localhost:5000")
     print("🔧 Controllo Bot: http://localhost:5000/control")
     print("🧪 Test API: http://localhost:5000/api-test")
     
@@ -1831,9 +1994,13 @@ if __name__ == '__main__':
         socketio.run(app, debug=True, host='0.0.0.0', port=5000)
     except KeyboardInterrupt:
         print("\n👋 Server fermato dall'utente")
+        if trading_service:
+            trading_service.stop_bot()
         if recovery_manager:
             recovery_manager.stop_recovery_check()
     except Exception as e:
         print(f"❌ Errore nell'avvio del server: {e}")
+        if trading_service:
+            trading_service.stop_bot()
         if recovery_manager:
             recovery_manager.stop_recovery_check()
