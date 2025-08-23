@@ -239,7 +239,7 @@
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container-fluid">
-            <a class="navbar-brand fw-bold" href="{{ url_for('dashboard') }}">
+            <a class="navbar-brand fw-bold" href="{{ url_for('main.dashboard') }}">
                 <i class="fas fa-chart-line me-2"></i>Trading Bot Dashboard
             </a>
             
@@ -250,27 +250,27 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                        <a class="nav-link" href="{{ url_for('main.dashboard') }}">
                             <i class="fas fa-tachometer-alt me-1"></i>Dashboard
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('bot_control') }}">
+                        <a class="nav-link" href="{{ url_for('main.bot_control') }}">
                             <i class="fas fa-robot me-1"></i>Controllo Bot
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('history_page') }}">
+                        <a class="nav-link" href="{{ url_for('main.history_page') }}">
                             <i class="fas fa-history me-1"></i>Storico
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('api_test') }}">
+                        <a class="nav-link" href="{{ url_for('main.api_test') }}">
                             <i class="fas fa-cog me-1"></i>Test API
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('settings') }}">
+                        <a class="nav-link" href="{{ url_for('main.settings') }}">
                             <i class="fas fa-sliders-h me-1"></i>Impostazioni
                         </a>
                     </li>
@@ -313,6 +313,56 @@
         socket.on('status', function(data) {
             console.log('Status:', data.msg);
         });
+        
+        // Funzioni utility per API calls con i nuovi blueprint
+        function callAPI(endpoint, method = 'GET', data = null) {
+            const config = {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            };
+            
+            if (data && method !== 'GET') {
+                config.body = JSON.stringify(data);
+            }
+            
+            return fetch(endpoint, config)
+                .then(response => response.json())
+                .catch(error => {
+                    console.error('API Error:', error);
+                    showAlert('Errore di connessione API', 'danger');
+                    throw error;
+                });
+        }
+        
+        // Funzioni specifiche per i vari blueprint
+        const BotAPI = {
+            start: () => callAPI('/api/bot/start', 'POST'),
+            stop: () => callAPI('/api/bot/stop', 'POST'),
+            status: () => callAPI('/api/bot/status'),
+            restart: () => callAPI('/api/bot/restart', 'POST')
+        };
+        
+        const TradingAPI = {
+            getBalance: () => callAPI('/api/trading/balance'),
+            getPositions: () => callAPI('/api/trading/positions'),
+            getOrders: () => callAPI('/api/trading/orders'),
+            cancelOrder: (orderId) => callAPI(`/api/trading/orders/${orderId}`, 'DELETE'),
+            closePosition: (symbol) => callAPI('/api/trading/positions/close', 'POST', { symbol })
+        };
+        
+        const HistoryAPI = {
+            getTrades: (limit = 50) => callAPI(`/api/history/trades?limit=${limit}`),
+            getPerformance: () => callAPI('/api/history/performance'),
+            getStats: () => callAPI('/api/history/stats')
+        };
+        
+        const SymbolsAPI = {
+            getAll: () => callAPI('/api/symbols'),
+            getActive: () => callAPI('/api/symbols/active'),
+            updateActive: (symbols) => callAPI('/api/symbols/active', 'POST', { symbols })
+        };
         
         // Funzioni utility
         function formatCurrency(value, currency = 'USDT') {

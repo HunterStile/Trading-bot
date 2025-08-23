@@ -331,32 +331,158 @@ class TradingDatabase:
             
             return sessions
     
-    def get_trade_history(self, session_id: str = None, limit: int = 100) -> List[Dict]:
-        """Ottieni storico trades"""
+    def get_trade_history(self, session_id: str = None, limit: int = 100, days: int = None) -> List[Dict]:
+        """Ottieni storico trades con filtri migliorati"""
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             
+            # Costruisci query dinamica
+            query = "SELECT * FROM trades"
+            params = []
+            conditions = []
+            
             if session_id:
-                cursor.execute('''
-                    SELECT * FROM trades 
-                    WHERE session_id = ?
-                    ORDER BY entry_time DESC 
-                    LIMIT ?
-                ''', (session_id, limit))
-            else:
-                cursor.execute('''
-                    SELECT * FROM trades 
-                    ORDER BY entry_time DESC 
-                    LIMIT ?
-                ''', (limit,))
+                conditions.append("session_id = ?")
+                params.append(session_id)
             
-            trades = []
-            for row in cursor.fetchall():
-                trade = dict(row)
-                trades.append(trade)
+            if days:
+                conditions.append("entry_time >= datetime('now', '-{} days')".format(days))
             
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            
+            query += " ORDER BY entry_time DESC"
+            
+            if limit:
+                query += " LIMIT ?"
+                params.append(limit)
+            
+            self.logger.info(f"Eseguendo query: {query} con parametri: {params}")
+            
+            cursor.execute(query, params)
+            trades = [dict(row) for row in cursor.fetchall()]
+            
+            self.logger.info(f"Trovati {len(trades)} trades nel database")
             return trades
+    
+    # AGGIUNTI METODI DI DEBUG
+    def debug_database_content(self):
+        """Metodo per debug - mostra tutto il contenuto del database"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            print("=== DEBUG DATABASE CONTENT ===")
+            
+            # Sessioni
+            cursor.execute("SELECT COUNT(*) as count FROM trading_sessions")
+            session_count = cursor.fetchone()[0]
+            print(f"Sessioni totali: {session_count}")
+            
+            if session_count > 0:
+                cursor.execute("SELECT session_id, symbol, start_time, status FROM trading_sessions ORDER BY start_time DESC LIMIT 5")
+                print("Ultime 5 sessioni:")
+                for row in cursor.fetchall():
+                    print(f"  - {dict(row)}")
+            
+            # Trades
+            cursor.execute("SELECT COUNT(*) as count FROM trades")
+            trade_count = cursor.fetchone()[0]
+            print(f"Trades totali: {trade_count}")
+            
+            if trade_count > 0:
+                cursor.execute("SELECT trade_id, session_id, symbol, side, entry_price, status FROM trades ORDER BY entry_time DESC LIMIT 5")
+                print("Ultimi 5 trades:")
+                for row in cursor.fetchall():
+                    print(f"  - {dict(row)}")
+            
+            # Verifica connessioni session-trade
+            cursor.execute('''
+                SELECT ts.session_id, ts.symbol, COUNT(t.trade_id) as trade_count
+                FROM trading_sessions ts
+                LEFT JOIN trades t ON ts.session_id = t.session_id
+                GROUP BY ts.session_id
+            ''')
+            print("Sessioni e relativi trades:")
+            for row in cursor.fetchall():
+                print(f"  - {dict(row)}")
+    
+    def verify_data_integrity(self):
+        """Verifica integrità dei dati"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            print("=== VERIFICA INTEGRITÀ DATI ===")
+            
+            # Trades orfani (senza sessione)
+            cursor.execute('''
+                SELECT COUNT(*) as orphaned_trades
+                FROM trades t
+                LEFT JOIN trading_sessions ts ON t.session_id = ts.session_id
+                WHERE ts.session_id IS NULL
+            ''')
+            orphaned = cursor.fetchone()[0]
+            if orphaned > 0:
+                print(f"⚠️  Trovati {orphaned} trades orfani (senza sessione)")
+                cursor.execute('''
+                    SELECT trade_id, session_id FROM trades t
+                    LEFT JOIN trading_sessions ts ON t.session_id = ts.session_id
+                    WHERE ts.session_id IS NULL
+                    LIMIT 5
+                ''')
+                for row in cursor.fetchall():
+                    print(f"    Trade orfano: {dict(row)}")
+            else:
+                print("✅ Nessun trade orfano trovato")
+            
+            # Sessioni senza trades
+            cursor.execute('''
+                SELECT COUNT(*) as empty_sessions
+                FROM trading_sessions ts
+                LEFT JOIN trades t ON ts.session_id = t.session_id
+                WHERE t.session_id IS NULL
+            ''')
+            empty = cursor.fetchone()[0]
+            if empty > 0:
+                print(f"ℹ️  Trovate {empty} sessioni senza trades")
+            else:
+                print("✅ Tutte le sessioni hanno trades")
+    
+    def fix_database_issues(self):
+        """Corregge problemi comuni del database"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            print("=== CORREZIONE PROBLEMI DATABASE ===")
+            
+            # Aggiorna contatori sessioni
+            cursor.execute('''
+                UPDATE trading_sessions 
+                SET total_trades = (
+                    SELECT COUNT(*) FROM trades 
+                    WHERE trades.session_id = trading_sessions.session_id
+                ),
+                winning_trades = (
+                    SELECT COUNT(*) FROM trades 
+                    WHERE trades.session_id = trading_sessions.session_id 
+                    AND trades.pnl > 0
+                ),
+                losing_trades = (
+                    SELECT COUNT(*) FROM trades 
+                    WHERE trades.session_id = trading_sessions.session_id 
+                    AND trades.pnl < 0
+                ),
+                total_pnl = (
+                    SELECT COALESCE(SUM(pnl), 0) FROM trades 
+                    WHERE trades.session_id = trading_sessions.session_id
+                )
+            ''')
+            
+            updated = cursor.rowcount
+            conn.commit()
+            print(f"✅ Aggiornate {updated} sessioni con statistiche corrette")
     
     def get_performance_stats(self, days: int = 30) -> Dict:
         """Ottieni statistiche performance"""
@@ -548,6 +674,21 @@ class TradingDatabase:
             
             conn.commit()
             self.logger.info(f"Dati più vecchi di {days} giorni rimossi")
+
+
+# Script di test/debug
+if __name__ == "__main__":
+    # Crea istanza database
+    db = TradingDatabase()
+    
+    # Debug contenuto database
+    db.debug_database_content()
+    
+    # Verifica integrità
+    db.verify_data_integrity()
+    
+    # Correggi problemi
+    db.fix_database_issues()
 
 # Istanza globale del database
 trading_db = TradingDatabase()
