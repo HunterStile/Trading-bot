@@ -3,6 +3,9 @@ from flask_socketio import SocketIO
 import sys
 import os
 import logging
+import threading
+import time
+import requests
 
 # Aggiungi il percorso del trading bot al sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -11,19 +14,17 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.database import trading_db
 from utils.trading_wrapper import trading_wrapper
 
-# Import sistema di recovery
+# Import sistema avanzato di crash recovery
 try:
-    from utils.bot_state import BotStateManager
-    from utils.bot_recovery import BotRecoveryManager
+    from utils.simple_bot_state import EnhancedBotState
+    from utils.crash_recovery import create_crash_recovery_system
     
-    # Inizializza recovery system
-    state_manager = BotStateManager()
-    recovery_manager = BotRecoveryManager(trading_wrapper, state_manager)
-    print("✅ Recovery system inizializzato")
+    # Inizializza enhanced state manager
+    bot_state_manager = EnhancedBotState()
+    print("✅ Enhanced Bot State Manager inizializzato")
 except ImportError as e:
-    print(f"⚠️ Recovery system non disponibile: {e}")
-    state_manager = None
-    recovery_manager = None
+    print(f"⚠️ Enhanced State Manager non disponibile: {e}")
+    bot_state_manager = None
 
 # Import delle funzioni del trading bot
 try:
@@ -80,32 +81,79 @@ app.config.update({
     'BOT_STATUS': bot_status,
     'TRADING_WRAPPER': trading_wrapper,
     'TRADING_DB': trading_db,
-    'STATE_MANAGER': state_manager,
-    'RECOVERY_MANAGER': recovery_manager,
+    'BOT_STATE_MANAGER': bot_state_manager,
     'SOCKETIO': socketio
 })
 
 if __name__ == '__main__':
     print("🚀 Avvio Trading Bot Dashboard...")
     
-    # Avvia recovery automatico se disponibile
-    if recovery_manager:
-        print("🔄 Controllo recovery automatico...")
-        try:
-            recovery_result = recovery_manager.perform_initial_recovery()
+    # Controlla se il bot dovrebbe riavviarsi automaticamente
+    if bot_state_manager:
+        print("🔄 Controllo stato precedente...")
+        
+        if bot_state_manager.should_auto_restart():
+            recovery_config = bot_state_manager.get_recovery_config()
             
-            if recovery_result.get('success'):
-                recovered_strategies = recovery_result.get('recovered_strategies', [])
-                recovered_trailing = recovery_result.get('recovered_trailing_stops', [])
+            if recovery_config:
+                print(f"✅ Bot era in esecuzione prima del crash - configurazione trovata:")
+                print(f"   Simbolo: {recovery_config['symbol']}")
+                print(f"   Quantità: {recovery_config['quantity']}")
+                print(f"   Operazione: {'LONG' if recovery_config['operation'] else 'SHORT'}")
+                print(f"   Trades precedenti: {recovery_config['previous_trades']}")
                 
-                if recovered_strategies or recovered_trailing:
-                    print(f"✅ Recovery completato: {len(recovered_strategies)} strategie, {len(recovered_trailing)} trailing stops")
-                else:
-                    print("ℹ️ Nessun recovery necessario")
-            else:
-                print(f"⚠️ Errore nel recovery: {recovery_result.get('error', 'Unknown')}")
-        except Exception as e:
-            print(f"⚠️ Errore durante recovery: {e}")
+                # Aggiorna bot_status con la configurazione precedente
+                bot_status.update({
+                    'symbol': recovery_config['symbol'],
+                    'quantity': recovery_config['quantity'],
+                    'operation': recovery_config['operation'],
+                    'ema_period': recovery_config['ema_period'],
+                    'interval': recovery_config['interval'],
+                    'open_candles': recovery_config['open_candles'],
+                    'stop_candles': recovery_config['stop_candles'],
+                    'distance': recovery_config['distance'],
+                    'category': recovery_config['category']
+                })
+                
+                # Programma auto-restart dopo che il server è avviato
+                def auto_restart_bot():
+                    time.sleep(5)  # Aspetta che il server sia completamente avviato
+                    
+                    try:
+                        print("🔄 Tentativo auto-restart del bot...")
+                        
+                        response = requests.post(
+                            'http://localhost:5000/api/bot/start',
+                            json={
+                                'symbol': recovery_config['symbol'],
+                                'quantity': recovery_config['quantity'],
+                                'operation': 'true' if recovery_config['operation'] else 'false',
+                                'ema_period': recovery_config['ema_period'],
+                                'interval': recovery_config['interval'],
+                                'open_candles': recovery_config['open_candles'],
+                                'stop_candles': recovery_config['stop_candles'],
+                                'distance': recovery_config['distance']
+                            },
+                            timeout=15
+                        )
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            if result.get('success'):
+                                print(f"✅ Bot riavviato automaticamente: {recovery_config['symbol']}")
+                            else:
+                                print(f"❌ Errore nel riavvio: {result.get('error')}")
+                        else:
+                            print(f"❌ Errore HTTP nel riavvio: {response.status_code}")
+                            
+                    except Exception as e:
+                        print(f"❌ Errore nell'auto-restart: {e}")
+                
+                # Avvia auto-restart in thread separato
+                restart_thread = threading.Thread(target=auto_restart_bot, daemon=True)
+                restart_thread.start()
+        else:
+            print("ℹ️ Nessun auto-restart necessario")
     
     print("📊 Dashboard disponibile su: http://localhost:5000")
     print("🔧 Controllo Bot: http://localhost:5000/control")
@@ -115,9 +163,9 @@ if __name__ == '__main__':
         socketio.run(app, debug=True, host='0.0.0.0', port=5000)
     except KeyboardInterrupt:
         print("\n👋 Server fermato dall'utente")
-        if recovery_manager:
-            recovery_manager.stop_recovery_check()
+        # Salva che il bot è stato fermato manualmente
+        if bot_state_manager:
+            bot_state_manager.save_bot_stopped_state()
     except Exception as e:
         print(f"❌ Errore nell'avvio del server: {e}")
-        if recovery_manager:
-            recovery_manager.stop_recovery_check()
+        # Non salviamo nulla in caso di errore di startup

@@ -139,3 +139,9 @@ local_config.py
 
 trading_data.db
 bot_state.db
+custom_symbols.json
+bot_state.json
+enhanced_bot_state.json
+recovery_log.json
+
+sqlite3.exe

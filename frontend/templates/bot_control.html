@@ -60,6 +60,7 @@
         <div class="card mb-4">
             <div class="card-header">
                 <h5 class="mb-0">🤖 Pannello di Controllo Bot</h5>
+                <span id="bot-status" class="badge bg-danger">Fermo</span>
             </div>
             <div class="card-body">
                 <div class="row">
@@ -137,6 +138,8 @@
                                     <input type="text" class="form-control" id="symbol-search" 
                                            placeholder="Cerca simbolo..." autocomplete="off">
                                     <input type="hidden" id="symbol" name="symbol" value="AVAXUSDT">
+                                    <!-- Aggiungi questo somewhere nel form -->
+                                    <input type="hidden" id="bot-status-hidden" value="stopped">
                                     <div id="symbol-dropdown" class="dropdown-menu w-100" style="max-height: 200px; overflow-y: auto;"></div>
                                 </div>
                                 <div class="form-text">
@@ -481,61 +484,125 @@ function saveSettings() {
 }
 
 // Avvia il bot
-function startBot() {
+async function startBot() {
+    console.log('🚀 Tentativo avvio bot - Stato corrente:', botRunning);
+    
     if (botRunning) {
         showAlert('Il bot è già in esecuzione', 'warning');
         return;
     }
     
     const settings = getFormSettings();
+    console.log('📋 Configurazione bot:', settings);
     
-    fetch('/api/bot/start', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(settings)
-    })
-    .then(response => response.json())
-    .then(data => {
+    // Disabilita il pulsante immediatamente per prevenire doppi click
+    const startBtn = document.getElementById('start-bot-btn');
+    const originalText = startBtn.innerHTML;
+    startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Avvio...';
+    startBtn.disabled = true;
+    
+    try {
+        addLog(`[${new Date().toLocaleTimeString()}] 🚀 Avvio bot in corso...`, 'info');
+        
+        const response = await fetch('/api/bot/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(settings)
+        });
+        
+        console.log('📡 Risposta API start:', response.status);
+        const data = await response.json();
+        console.log('📄 Dati risposta:', data);
+        
         if (data.success) {
             showAlert(data.message, 'success');
-            addLog(`[${new Date().toLocaleTimeString()}] Bot avviato`, 'success');
+            addLog(`[${new Date().toLocaleTimeString()}] ✅ ${data.message}`, 'success');
+            
+            // FORZA aggiornamento stato UI immediatamente
             updateBotStatus(true);
+            botRunning = true;
+            
+            console.log('✅ Bot avviato con successo, stato aggiornato');
+            
+            // Verifica stato dopo 2 secondi per sicurezza
+            setTimeout(() => {
+                console.log('🔍 Verifica stato bot dopo avvio...');
+                loadBotStatus();
+            }, 2000);
+            
         } else {
+            console.error('❌ Errore dal backend:', data.error);
             showAlert('Errore: ' + data.error, 'danger');
-            addLog(`[${new Date().toLocaleTimeString()}] Errore avvio: ${data.error}`, 'error');
+            addLog(`[${new Date().toLocaleTimeString()}] ❌ Errore avvio: ${data.error}`, 'error');
+            
+            // Ripristina pulsante
+            startBtn.innerHTML = originalText;
+            startBtn.disabled = false;
         }
-    })
-    .catch(error => {
+    } catch (error) {
+        console.error('💥 Errore connessione:', error);
         showAlert('Errore di connessione', 'danger');
-        addLog(`[${new Date().toLocaleTimeString()}] Errore connessione`, 'error');
-    });
+        addLog(`[${new Date().toLocaleTimeString()}] 💥 Errore connessione: ${error.message}`, 'error');
+        
+        // Ripristina pulsante
+        startBtn.innerHTML = originalText;
+        startBtn.disabled = false;
+    }
 }
 
-// Ferma il bot
-function stopBot() {
+// Sostituisci la funzione stopBot() esistente:
+async function stopBot() {
+    console.log('🛑 Tentativo stop bot - Stato corrente:', botRunning);
+    
     if (!botRunning) {
         showAlert('Il bot non è in esecuzione', 'warning');
         return;
     }
     
-    fetch('/api/bot/stop', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
+    const stopBtn = document.getElementById('stop-bot-btn');
+    const originalText = stopBtn.innerHTML;
+    stopBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Stop...';
+    stopBtn.disabled = true;
+    
+    try {
+        addLog(`[${new Date().toLocaleTimeString()}] 🛑 Arresto bot in corso...`, 'warning');
+        
+        const response = await fetch('/api/bot/stop', {
+            method: 'POST'
+        });
+        
+        console.log('📡 Risposta API stop:', response.status);
+        const data = await response.json();
+        console.log('📄 Dati risposta:', data);
+        
         if (data.success) {
             showAlert(data.message, 'warning');
-            addLog(`[${new Date().toLocaleTimeString()}] Bot fermato`, 'warning');
+            addLog(`[${new Date().toLocaleTimeString()}] 🛑 ${data.message}`, 'warning');
+            
+            // FORZA aggiornamento stato UI
             updateBotStatus(false);
+            botRunning = false;
+            
+            console.log('🛑 Bot fermato con successo, stato aggiornato');
+            
         } else {
+            console.error('❌ Errore stop backend:', data.error);
             showAlert('Errore: ' + data.error, 'danger');
+            
+            // Ripristina pulsante
+            stopBtn.innerHTML = originalText;
+            stopBtn.disabled = false;
         }
-    })
-    .catch(error => {
+    } catch (error) {
+        console.error('💥 Errore connessione stop:', error);
         showAlert('Errore di connessione', 'danger');
-    });
+        
+        // Ripristina pulsante
+        stopBtn.innerHTML = originalText;
+        stopBtn.disabled = false;
+    }
 }
 
 // Riavvia il bot
@@ -572,17 +639,26 @@ function updateBotStatus(isRunning) {
     const text = document.getElementById('bot-status-text');
     const startBtn = document.getElementById('start-bot-btn');
     const stopBtn = document.getElementById('stop-bot-btn');
+    const statusBadge = document.getElementById('bot-status');
     
     if (isRunning) {
-        indicator.className = 'status-indicator status-online me-3';
-        text.textContent = 'Online - Bot in esecuzione';
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
+        if (indicator) indicator.className = 'status-indicator status-online me-3';
+        if (text) text.textContent = 'Online - Bot in esecuzione';
+        if (startBtn) startBtn.disabled = true;
+        if (stopBtn) stopBtn.disabled = false;
+        if (statusBadge) {
+            statusBadge.textContent = 'In Esecuzione';
+            statusBadge.className = 'badge bg-success';
+        }
     } else {
-        indicator.className = 'status-indicator status-offline me-3';
-        text.textContent = 'Offline - Bot fermo';
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
+        if (indicator) indicator.className = 'status-indicator status-offline me-3';
+        if (text) text.textContent = 'Offline - Bot fermo';
+        if (startBtn) startBtn.disabled = false;
+        if (stopBtn) stopBtn.disabled = true;
+        if (statusBadge) {
+            statusBadge.textContent = 'Fermo';
+            statusBadge.className = 'badge bg-danger';
+        }
     }
 }
 
@@ -983,43 +1059,98 @@ function resetSettings() {
 
 // ==================== RECOVERY SYSTEM ====================
 
-// Controlla stato recovery
+// Controlla stato recovery - NUOVO SISTEMA AVANZATO
 async function checkRecoveryStatus() {
     try {
-        const response = await fetch('/api/bot/recovery/status');
+        const response = await fetch('/api/bot/recovery-status');
         const data = await response.json();
         
         if (data.success) {
-            const summary = data.recovery_summary;
             const statusEl = document.getElementById('recovery-status');
+            const summary = data.summary;
             
-            if (summary.needs_recovery) {
+            if (summary.can_restart && summary.has_state) {
+                const phaseText = summary.operational_phase === 'MANAGING_POSITIONS' ? 
+                    '🔄 Monitoraggio posizioni' : '🔍 Ricerca entry';
+                    
                 statusEl.innerHTML = `
                     <span class="text-warning">
                         <i class="fas fa-exclamation-triangle"></i> 
-                        Recovery necessario: ${summary.active_strategies_count} strategie, ${summary.trailing_stops_count} trailing stops
+                        Recovery disponibile: ${phaseText}
                     </span>
+                    <br>
+                    <small class="text-muted">
+                        Posizioni attive: ${summary.active_trades_count} | 
+                        Fase: ${summary.operational_phase}<br>
+                        Ultimo salvataggio: ${summary.last_save_time ? new Date(summary.last_save_time).toLocaleString() : 'N/A'}
+                    </small>
+                `;
+            } else if (summary.has_state && summary.stopped_manually) {
+                statusEl.innerHTML = `
+                    <span class="text-info">
+                        <i class="fas fa-info-circle"></i> 
+                        Bot fermato manualmente (stato salvato)
+                    </span>
+                    <br>
+                    <small class="text-muted">
+                        Fase: ${summary.operational_phase} | 
+                        Posizioni: ${summary.active_trades_count}
+                    </small>
+                `;
+            } else if (summary.crash_recovery) {
+                statusEl.innerHTML = `
+                    <span class="text-danger">
+                        <i class="fas fa-exclamation-circle"></i> 
+                        ⚠️ CRASH RECOVERY NECESSARIO!
+                    </span>
+                    <br>
+                    <small class="text-muted">
+                        Il bot è crashato e necessita recovery.
+                    </small>
                 `;
             } else {
                 statusEl.innerHTML = `
                     <span class="text-success">
                         <i class="fas fa-check"></i> 
-                        Nessun recovery necessario
+                        Sistema recovery normale
                     </span>
+                    <br>
+                    <small class="text-muted">
+                        Nessun recovery necessario
+                    </small>
                 `;
             }
             
             // Aggiorna status trailing
-            updateTrailingStatus(summary.trailing_stops_count);
-            
-            // Controlla se il bot dovrebbe auto-riavviare
-            checkAutoRestartStatus();
+            updateTrailingStatus(summary.active_trades_count);
             
         } else {
-            showAlert('Errore nel controllo recovery: ' + data.error, 'danger');
+            const statusEl = document.getElementById('recovery-status');
+            statusEl.innerHTML = `
+                <span class="text-muted">
+                    <i class="fas fa-question-circle"></i> 
+                    Sistema recovery avanzato non disponibile
+                </span>
+                <br>
+                <small class="text-muted">
+                    Errore: ${data.error || 'Sistema non configurato'}
+                </small>
+            `;
+            console.warn('Recovery system error:', data.error);
         }
     } catch (error) {
-        showAlert('Errore connessione recovery: ' + error.message, 'danger');
+        const statusEl = document.getElementById('recovery-status');
+        statusEl.innerHTML = `
+            <span class="text-danger">
+                <i class="fas fa-times-circle"></i> 
+                Errore connessione recovery
+            </span>
+            <br>
+            <small class="text-muted">
+                ${error.message}
+            </small>
+        `;
+        console.error('Recovery status check failed:', error);
     }
 }
 
@@ -1051,7 +1182,7 @@ async function checkAutoRestartStatus() {
 // Trigger auto-restart manuale
 async function triggerAutoRestart() {
     try {
-        const response = await fetch('/api/bot/recovery/auto-restart', {
+        const response = await fetch('/api/bot/simple-recovery/auto-restart', {
             method: 'POST'
         });
         const data = await response.json();
@@ -1079,7 +1210,7 @@ async function startBotRecovery() {
     try {
         showAlert('Avvio recovery in corso...', 'info');
         
-        const response = await fetch('/api/bot/recovery/start', {
+        const response = await fetch('/api/bot/simple-recovery/start', {
             method: 'POST'
         });
         const data = await response.json();
@@ -1487,6 +1618,201 @@ async function addNewSymbol() {
 document.addEventListener('DOMContentLoaded', () => {
     loadSymbols();
 });
+
+// Aggiungi questo JavaScript al tuo file del control panel
+
+// Funzione per caricare configurazione salvata (recovery)
+
+
+function updateSelectedSymbolInfo(symbol) {
+    // Aggiorna le informazioni del simbolo selezionato
+    console.log('Simbolo selezionato:', symbol);
+    
+    // Se hai un elemento per mostrare info sul simbolo
+    const symbolInfoElement = document.getElementById('symbol-info');
+    if (symbolInfoElement) {
+        symbolInfoElement.textContent = `Simbolo: ${symbol}`;
+    }
+    
+    // Aggiorna eventuali altri elementi dell'interfaccia
+    const selectedSymbolDisplay = document.querySelector('.selected-symbol');
+    if (selectedSymbolDisplay) {
+        selectedSymbolDisplay.textContent = symbol;
+    }
+}
+
+
+async function loadSavedConfig() {
+    try {
+        const response = await fetch('/api/bot/config');
+        const data = await response.json();
+        
+        if (data.success && data.saved_config && data.can_auto_restart) {
+            // Mostra notifica che c'è una config salvata
+            showRecoveryNotification(data.saved_config);
+        }
+        
+        // Aggiorna form con configurazione corrente
+        if (data.current_config) {
+            populateForm(data.current_config);
+        }
+        
+    } catch (error) {
+        console.error('Errore nel caricamento configurazione:', error);
+    }
+}
+
+// Popola il form con una configurazione
+function populateForm(config) {
+    document.getElementById('symbol').value = config.symbol || 'AVAXUSDT';
+    document.getElementById('symbol-search').value = config.symbol || 'AVAXUSDT';
+    document.getElementById('quantity').value = config.quantity || 50;
+    document.getElementById('operation').value = config.operation ? 'true' : 'false';
+    document.getElementById('ema_period').value = config.ema_period || 10;
+    document.getElementById('interval').value = config.interval || 30;
+    document.getElementById('open_candles').value = config.open_candles || 3;
+    document.getElementById('stop_candles').value = config.stop_candles || 3;
+    document.getElementById('distance').value = config.distance || 1;
+    
+    // Aggiorna info simbolo
+    updateSelectedSymbolInfo();
+}
+
+// Mostra notifica di recovery disponibile
+function showRecoveryNotification(savedConfig) {
+    const notification = document.createElement('div');
+    notification.className = 'alert alert-info alert-dismissible fade show';
+    notification.innerHTML = `
+        <i class="fas fa-info-circle"></i>
+        <strong>Configurazione Recovery Disponibile</strong><br>
+        Il bot era in esecuzione prima del crash con: <strong>${savedConfig.symbol}</strong> 
+        (${savedConfig.operation ? 'LONG' : 'SHORT'}) - 
+        ${savedConfig.quantity} USDT - EMA${savedConfig.ema_period}
+        <br>
+        <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="applyRecoveryConfig()">
+            <i class="fas fa-undo"></i> Ripristina Configurazione
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="clearRecoveryState()">
+            <i class="fas fa-times"></i> Ignora Recovery
+        </button>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    // Inserisci la notifica prima del form
+    const form = document.querySelector('.card');
+    form.parentNode.insertBefore(notification, form);
+    
+    // Salva config per uso successivo
+    window.savedRecoveryConfig = savedConfig;
+}
+
+// Applica configurazione di recovery
+async function applyRecoveryConfig() {
+    if (window.savedRecoveryConfig) {
+        populateForm(window.savedRecoveryConfig);
+        
+        // Nascondi notifica
+        document.querySelector('.alert-info').remove();
+        
+        // Opzionalmente, avvia automaticamente il bot
+        if (confirm('Vuoi avviare automaticamente il bot con la configurazione di recovery?')) {
+            document.getElementById('bot-settings-form').dispatchEvent(new Event('submit'));
+        }
+    }
+}
+
+// Cancella stato di recovery
+async function clearRecoveryState() {
+    try {
+        // Chiamata per pulire lo stato salvato
+        const response = await fetch('/api/bot/clear-recovery', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            document.querySelector('.alert-info').remove();
+            showToast('Stato di recovery cancellato', 'success');
+        }
+        
+    } catch (error) {
+        console.error('Errore nella cancellazione recovery:', error);
+    }
+}
+
+// Funzione per mostrare toast notifications
+function showToast(message, type = 'info') {
+    // Crea toast dinamicamente (richiede Bootstrap Toast)
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${message}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    // Aggiungi al container dei toast
+    let toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        document.body.appendChild(toastContainer);
+    }
+    
+    toastContainer.appendChild(toast);
+    
+    // Mostra toast
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    // Rimuovi dopo che si nasconde
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
+}
+
+// Carica configurazione all'avvio della pagina
+document.addEventListener('DOMContentLoaded', function() {
+    loadSavedConfig();
+});
+
+// Aggiorna form submission per includere feedback
+document.getElementById('bot-settings-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+    
+    try {
+        const response = await fetch('/api/bot/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(`Bot avviato: ${result.config.symbol}`, 'success');
+            
+            // Aggiorna UI
+            updateBotStatus(true, result.config);
+        } else {
+            showToast(`Errore: ${result.error}`, 'danger');
+        }
+        
+    } catch (error) {
+        showToast(`Errore di connessione: ${error.message}`, 'danger');
+    }
+});
+
 </script>
 
 <!-- Modal Aggiungi Simbolo -->

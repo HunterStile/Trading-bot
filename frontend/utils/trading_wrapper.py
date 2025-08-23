@@ -601,5 +601,136 @@ class TradingWrapper:
                 'error': str(e)
             }
 
+    def sync_with_exchange_positions(self):
+        """Sincronizza il wrapper con le posizioni reali dell'exchange per crash recovery"""
+        try:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔄 Sincronizzazione posizioni exchange per recovery...")
+            
+            # Prima sincronizza con il database
+            self.sync_with_database()
+            
+            # Poi sincronizza con Bybit
+            result = self.sync_with_bybit()
+            
+            if result['success']:
+                positions_count = len(self.active_trades)
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Sincronizzazione completata: {positions_count} posizioni attive")
+                
+                # Log evento
+                trading_db.log_event(
+                    "EXCHANGE_SYNC_RECOVERY",
+                    "RECOVERY",
+                    f"Sincronizzazione exchange per recovery: {positions_count} posizioni",
+                    {
+                        'positions_count': positions_count,
+                        'active_trades': list(self.active_trades.keys())
+                    },
+                    session_id=self.current_session_id
+                )
+                
+                return True
+            else:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Errore sincronizzazione: {result.get('error')}")
+                return False
+                
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Eccezione durante sincronizzazione: {e}")
+            
+            # Log eccezione
+            trading_db.log_event(
+                "EXCHANGE_SYNC_RECOVERY_ERROR",
+                "ERROR",
+                f"Errore sincronizzazione recovery: {str(e)}",
+                {
+                    'exception': str(e)
+                },
+                severity="ERROR",
+                session_id=self.current_session_id
+            )
+            
+            return False
+    
+    def cleanup_closed_positions(self):
+        """Pulisce le posizioni chiuse dal tracking"""
+        try:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] 🧹 Pulizia posizioni chiuse...")
+            
+            # Sincronizza con Bybit per vedere le posizioni realmente attive
+            sync_result = self.sync_with_bybit()
+            
+            if not sync_result['success']:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Impossibile verificare posizioni su Bybit")
+                return
+            
+            # Se non ci sono posizioni attive, pulisci tutto
+            active_positions_count = len([t for t in self.active_trades.values() if t.get('bybit_sync')])
+            
+            if active_positions_count == 0:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🧹 Nessuna posizione attiva - Pulizia completa")
+                self.active_trades.clear()
+            else:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 {active_positions_count} posizioni ancora attive")
+            
+            # Log evento
+            trading_db.log_event(
+                "POSITIONS_CLEANUP",
+                "SYSTEM",
+                f"Pulizia posizioni completata: {len(self.active_trades)} rimaste attive",
+                {
+                    'remaining_positions': len(self.active_trades),
+                    'active_trades': list(self.active_trades.keys())
+                },
+                session_id=self.current_session_id
+            )
+            
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Errore pulizia posizioni: {e}")
+            
+            # Log eccezione
+            trading_db.log_event(
+                "POSITIONS_CLEANUP_ERROR",
+                "ERROR",
+                f"Errore pulizia posizioni: {str(e)}",
+                {
+                    'exception': str(e)
+                },
+                severity="ERROR",
+                session_id=self.current_session_id
+            )
+    
+    def get_positions_summary(self):
+        """Ottieni riassunto delle posizioni per debugging"""
+        summary = {
+            'total_positions': len(self.active_trades),
+            'positions_by_symbol': {},
+            'positions_by_side': {'Buy': 0, 'Sell': 0},
+            'positions_detail': []
+        }
+        
+        for trade_id, trade_info in self.active_trades.items():
+            symbol = trade_info['symbol']
+            side = trade_info['side']
+            
+            # Conta per simbolo
+            if symbol not in summary['positions_by_symbol']:
+                summary['positions_by_symbol'][symbol] = 0
+            summary['positions_by_symbol'][symbol] += 1
+            
+            # Conta per lato
+            summary['positions_by_side'][side] += 1
+            
+            # Dettaglio posizione
+            summary['positions_detail'].append({
+                'trade_id': trade_id,
+                'symbol': symbol,
+                'side': side,
+                'quantity': trade_info['quantity'],
+                'entry_price': trade_info['entry_price'],
+                'timestamp': trade_info['timestamp'],
+                'is_bybit_sync': trade_info.get('bybit_sync', False)
+            })
+        
+        return summary
+
 # Istanza globale del wrapper
 trading_wrapper = TradingWrapper()
