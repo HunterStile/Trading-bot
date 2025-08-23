@@ -68,11 +68,47 @@ class BotRecoveryManager:
                 self.logger.error(f"❌ Errore nel recovery loop: {e}")
                 time.sleep(10)  # Aspetta meno in caso di errore
     
+    def _recover_active_session(self) -> Optional[str]:
+        """Recupera la sessione attiva prima del crash"""
+        try:
+            from .database import trading_db
+            
+            # Trova l'ultima sessione ACTIVE
+            sessions = trading_db.get_session_history(limit=10)
+            active_session = None
+            
+            for session in sessions:
+                if session.get('status') == 'ACTIVE':
+                    active_session = session
+                    break
+            
+            if active_session:
+                session_id = active_session['session_id']
+                self.logger.info(f"🔄 Sessione attiva recuperata: {session_id}")
+                
+                # Imposta la sessione nel trading wrapper
+                self.trading_wrapper.set_session(session_id)
+                
+                # Sincronizza i trade della sessione
+                self.trading_wrapper.sync_with_database()
+                
+                return session_id
+            else:
+                self.logger.info("🆕 Nessuna sessione attiva trovata, ne sarà creata una nuova")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"❌ Errore nel recovery sessione: {e}")
+            return None
+
     def perform_initial_recovery(self) -> Dict[str, Any]:
         """Esegue recovery iniziale al startup del bot"""
         self.logger.info("🚀 Avvio recovery iniziale...")
         
         try:
+
+            recovered_session = self._recover_active_session()
+
             # Ottieni summary di recovery
             recovery_summary = self.state_manager.get_recovery_summary()
             
@@ -138,6 +174,7 @@ class BotRecoveryManager:
             recovery_result = {
                 'success': True,
                 'message': 'Recovery completato con successo',
+                'recovered_session': recovered_session,
                 'recovered_strategies': recovered_strategies,
                 'recovered_trailing_stops': recovered_trailing,
                 'active_positions': len(real_positions),

@@ -211,34 +211,85 @@ class TradingWrapper:
                 'error': f'Eccezione durante apertura posizione: {str(e)}'
             }
     
-    def close_position(self, trade_id, price=None, reason="MANUAL", **kwargs):
+    def close_position(self, trade_id=None, symbol=None, side=None, price=None, reason="MANUAL", **kwargs):
         """
         Chiude una posizione e aggiorna il database
         
         Args:
-            trade_id: ID del trade da chiudere
+            trade_id: ID del trade da chiudere (opzionale se forniti symbol+side)
+            symbol: Simbolo da chiudere (opzionale se fornito trade_id)
+            side: Lato della posizione (opzionale se fornito trade_id)
             price: Prezzo di chiusura (None per market price)
             reason: Motivo della chiusura
             **kwargs: Altri parametri
         """
-        if trade_id not in self.active_trades:
+        
+        # Trova il trade da chiudere
+        trade_info = None
+        final_trade_id = trade_id
+        
+        # Caso 1: trade_id fornito direttamente
+        if trade_id and trade_id in self.active_trades:
+            trade_info = self.active_trades[trade_id]
+        
+        # Caso 2: Cerca per symbol+side negli active_trades
+        elif symbol and side:
+            for tid, tinfo in self.active_trades.items():
+                if tinfo.get('symbol') == symbol and tinfo.get('side') == side:
+                    trade_info = tinfo
+                    final_trade_id = tid
+                    break
+        
+        # Caso 3: Cerca nel database se non trovato negli active_trades
+        if not trade_info and self.current_session_id:
+            try:
+                trades = trading_db.get_trade_history(self.current_session_id, 200)
+                open_trades = [t for t in trades if t['status'] == 'OPEN']
+                
+                if trade_id:
+                    # Cerca per trade_id nel database
+                    matching_trades = [t for t in open_trades if t['trade_id'] == trade_id]
+                elif symbol and side:
+                    # Cerca per symbol+side nel database
+                    matching_trades = [t for t in open_trades 
+                                    if t['symbol'] == symbol and t['side'] == side]
+                
+                if matching_trades:
+                    db_trade = matching_trades[0]  # Prendi il primo match
+                    final_trade_id = db_trade['trade_id']
+                    trade_info = {
+                        'symbol': db_trade['symbol'],
+                        'side': db_trade['side'],
+                        'quantity': db_trade['quantity'],
+                        'entry_price': db_trade['entry_price'],
+                        'timestamp': db_trade['entry_time']
+                    }
+                    
+                    # Aggiungi agli active_trades per tracking futuro
+                    self.active_trades[final_trade_id] = trade_info
+                    
+                    print(f"📋 Trade recuperato dal database: {final_trade_id}")
+                    
+            except Exception as e:
+                print(f"❌ Errore ricerca trade nel database: {e}")
+        
+        if not trade_info:
             return {
                 'success': False,
-                'error': f'Trade {trade_id} non trovato nei trade attivi'
+                'error': f'Trade non trovato: trade_id={trade_id}, symbol={symbol}, side={side}'
             }
-        
-        trade_info = self.active_trades[trade_id]
         
         try:
             # Log tentativo chiusura
             trading_db.log_event(
                 "POSITION_CLOSE_ATTEMPT",
                 "TRADING",
-                f"Tentativo chiusura posizione: {trade_id}",
+                f"Tentativo chiusura posizione: {final_trade_id}",
                 {
-                    'trade_id': trade_id,
+                    'trade_id': final_trade_id,
                     'reason': reason,
-                    'close_price': price
+                    'close_price': price,
+                    'found_in': 'active_trades' if trade_id in self.active_trades else 'database'
                 },
                 session_id=self.current_session_id
             )
@@ -257,26 +308,20 @@ class TradingWrapper:
             # CHIUSURA REALE SU BYBIT usando le funzioni originali
             success_bybit = False
             try:
-                # Import delle funzioni originali
                 from trading_functions import chiudi_operazione_long, chiudi_operazione_short
                 
                 symbol = trade_info['symbol']
                 quantity = trade_info['quantity']
                 side = trade_info['side']
                 
-                print(f"🔄 Chiusura reale Bybit usando funzioni originali: {side} {quantity} {symbol}")
+                print(f"🔄 Chiusura reale Bybit: {side} {quantity} {symbol}")
                 
-                # Usa le funzioni originali per chiudere
                 if side == 'Buy':
-                    # LONG -> chiudi con SELL
-                    print(f"🔴 Chiusura LONG usando chiudi_operazione_long")
                     chiudi_operazione_long("linear", symbol, quantity)
                 elif side == 'Sell':
-                    # SHORT -> chiudi con BUY  
-                    print(f"🔵 Chiusura SHORT usando chiudi_operazione_short")
                     chiudi_operazione_short("linear", symbol, quantity)
                 
-                print(f"✅ Posizione chiusa su Bybit con funzioni originali")
+                print(f"✅ Posizione chiusa su Bybit")
                 success_bybit = True
                     
             except Exception as e:
@@ -288,31 +333,23 @@ class TradingWrapper:
             
             # Se la chiusura Bybit è andata bene, aggiorna il database
             if success_bybit:
-                print(f"🔍 DEBUG: Aggiornamento database per trade {trade_id}")
-                
                 # Calcola fee approssimativa (0.1%)
                 fee = (price * trade_info['quantity']) * 0.001
                 
-                print(f"🔍 DEBUG: Chiamo trading_db.close_trade({trade_id}, {price}, {fee})")
-                
                 # Aggiorna il trade nel database
-                trading_db.close_trade(trade_id, price, fee)
-                
-                print(f"🔍 DEBUG: Rimuovo trade {trade_id} da active_trades")
-                print(f"🔍 DEBUG: Active trades prima: {list(self.active_trades.keys())}")
+                trading_db.close_trade(final_trade_id, price, fee)
                 
                 # Rimuovi dai trade attivi
-                del self.active_trades[trade_id]
-                
-                print(f"🔍 DEBUG: Active trades dopo: {list(self.active_trades.keys())}")
+                if final_trade_id in self.active_trades:
+                    del self.active_trades[final_trade_id]
                 
                 # Log successo
                 trading_db.log_event(
                     "POSITION_CLOSED",
                     "TRADING",
-                    f"Posizione chiusa con successo: {trade_id}",
+                    f"Posizione chiusa con successo: {final_trade_id}",
                     {
-                        'trade_id': trade_id,
+                        'trade_id': final_trade_id,
                         'close_price': price,
                         'reason': reason,
                         'fee': fee
@@ -322,8 +359,8 @@ class TradingWrapper:
                 
                 return {
                     'success': True,
-                    'trade_id': trade_id,
-                    'message': f'Posizione {trade_id} chiusa',
+                    'trade_id': final_trade_id,
+                    'message': f'Posizione {final_trade_id} chiusa',
                     'close_price': price,
                     'fee': fee
                 }
@@ -332,7 +369,7 @@ class TradingWrapper:
                     'success': False,
                     'error': 'Chiusura Bybit fallita'
                 }
-            
+                
         except Exception as e:
             # Log eccezione
             trading_db.log_event(
@@ -340,7 +377,7 @@ class TradingWrapper:
                 "ERROR",
                 f"Eccezione durante chiusura posizione: {str(e)}",
                 {
-                    'trade_id': trade_id,
+                    'trade_id': final_trade_id,
                     'exception': str(e)
                 },
                 severity="ERROR",
@@ -600,6 +637,58 @@ class TradingWrapper:
                 'success': False,
                 'error': str(e)
             }
+        
+        # Aggiungi questi metodi nel TradingWrapper
+
+    def auto_close_empty_sessions(self):
+        """Chiude automaticamente le sessioni senza trade attivi"""
+        try:
+            if not self.current_session_id:
+                return
+            
+            # Controlla se ci sono trade aperti nella sessione corrente
+            trades = trading_db.get_trade_history(self.current_session_id, 1000)
+            open_trades = [t for t in trades if t['status'] == 'OPEN']
+            
+            # Se non ci sono trade aperti e non ci sono posizioni attive
+            if not open_trades and not self.active_trades:
+                print(f"🔚 Auto-chiusura sessione vuota: {self.current_session_id}")
+                self.end_current_session()
+                
+        except Exception as e:
+            print(f"❌ Errore auto-chiusura sessioni: {e}")
+
+    def end_current_session(self, final_balance=None):
+        """Termina la sessione corrente"""
+        if self.current_session_id:
+            try:
+                # Ottieni saldo finale se non fornito
+                if final_balance is None:
+                    balance_info = self.get_balance()
+                    if balance_info and balance_info.get('success'):
+                        final_balance = balance_info.get('total_equity', 0)
+                
+                # Chiudi la sessione nel database
+                trading_db.end_session(self.current_session_id, final_balance)
+                
+                print(f"🏁 Sessione terminata: {self.current_session_id}")
+                
+                # Reset session
+                old_session = self.current_session_id
+                self.current_session_id = None
+                
+                return {
+                    'success': True,
+                    'message': f'Sessione {old_session} terminata',
+                    'final_balance': final_balance
+                }
+                
+            except Exception as e:
+                print(f"❌ Errore terminazione sessione: {e}")
+                return {
+                    'success': False,
+                    'error': str(e)
+                }
 
     def sync_with_exchange_positions(self):
         """Sincronizza il wrapper con le posizioni reali dell'exchange per crash recovery"""
@@ -615,6 +704,10 @@ class TradingWrapper:
             if result['success']:
                 positions_count = len(self.active_trades)
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Sincronizzazione completata: {positions_count} posizioni attive")
+                
+                # Se non ci sono posizioni attive, considera di chiudere sessioni vuote
+                if positions_count == 0:
+                    self.auto_close_empty_sessions()
                 
                 # Log evento
                 trading_db.log_event(
@@ -635,21 +728,7 @@ class TradingWrapper:
                 
         except Exception as e:
             print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Eccezione durante sincronizzazione: {e}")
-            
-            # Log eccezione
-            trading_db.log_event(
-                "EXCHANGE_SYNC_RECOVERY_ERROR",
-                "ERROR",
-                f"Errore sincronizzazione recovery: {str(e)}",
-                {
-                    'exception': str(e)
-                },
-                severity="ERROR",
-                session_id=self.current_session_id
-            )
-            
-            return False
-    
+        
     def cleanup_closed_positions(self):
         """Pulisce le posizioni chiuse dal tracking"""
         try:
