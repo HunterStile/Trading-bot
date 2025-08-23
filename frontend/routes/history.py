@@ -28,11 +28,9 @@ def get_trade_history():
         trading_db = current_app.config['TRADING_DB']
         session_id = request.args.get('session_id')
         limit = request.args.get('limit', 100, type=int)
-        symbol = request.args.get('symbol')
-        days = request.args.get('days', 30, type=int)
         
         if session_id:
-            trades = trading_db.get_trade_history(limit=limit)
+            trades = trading_db.get_trade_history(session_id=session_id, limit=limit)
         else:
             trades = trading_db.get_trade_history(limit=limit)
         
@@ -46,10 +44,8 @@ def get_trade_history():
                         entry_price = trade['entry_price']
                         
                         if trade.get('side') == 'BUY':
-                            # LONG: PnL = (current_price - entry_price) * quantity
                             trade['current_pnl'] = (current_price - entry_price) * quantity
                         else:
-                            # SHORT: PnL = (entry_price - current_price) * quantity  
                             trade['current_pnl'] = (entry_price - current_price) * quantity
                         
                         trade['current_price'] = current_price
@@ -61,7 +57,7 @@ def get_trade_history():
         
         return jsonify({
             'success': True, 
-            'data': trades if session_id else None,
+            'data': trades,
             'trades': trades if not session_id else None,
             'total': len(trades)
         })
