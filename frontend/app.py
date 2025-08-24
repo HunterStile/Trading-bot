@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, send_from_directory
 from flask_socketio import SocketIO
 import sys
 import os
@@ -56,6 +56,14 @@ logging.basicConfig(level=logging.INFO)
 
 # Registra i blueprints
 register_blueprints(app)
+
+# Route per servire i grafici di backtest
+@app.route('/static/charts/<filename>')
+def serve_chart(filename):
+    """Serve i grafici di backtest dalla directory backtest_charts"""
+    import os
+    charts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backtest_charts')
+    return send_from_directory(charts_dir, filename)
 
 # Registra eventi WebSocket
 register_websocket_events(socketio, trading_wrapper, trading_db)

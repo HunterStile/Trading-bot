@@ -145,3 +145,6 @@ enhanced_bot_state.json
 recovery_log.json
 
 sqlite3.exe
+
+/backtest_results/
+/backtest_charts/

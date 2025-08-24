@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Bot - Backtest</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        .backtest-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .backtest-tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        
+        .tab-button {
+            padding: 10px 20px;
+            background: #3a3a3a;
+            color: white;
+            border: none;
+            margin-right: 5px;
+            cursor: pointer;
+            border-radius: 5px 5px 0 0;
+        }
+        
+        .tab-button.active {
+            background: #007bff;
+        }
+        
+        .tab-content {
+            display: none;
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .parameter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .parameter-group {
+            background: #3a3a3a;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        
+        .parameter-group h4 {
+            margin: 0 0 10px 0;
+            color: #00d4aa;
+        }
+        
+        .form-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .form-row label {
+            min-width: 120px;
+            color: #ddd;
+        }
+        
+        .form-row input, .form-row select {
+            flex: 1;
+            padding: 8px;
+            background: #1e1e1e;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 3px;
+            margin-left: 10px;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-warning {
+            background: #ffc107;
+            color: black;
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .results-container {
+            margin-top: 30px;
+        }
+        
+        .results-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .metric-card {
+            background: #3a3a3a;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .metric-card h4 {
+            margin: 0 0 5px 0;
+            color: #ddd;
+            font-size: 0.9em;
+        }
+        
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            margin: 0;
+        }
+        
+        .metric-value.positive {
+            color: #28a745;
+        }
+        
+        .metric-value.negative {
+            color: #dc3545;
+        }
+        
+        .metric-value.neutral {
+            color: #ffc107;
+        }
+        
+        .chart-container {
+            background: #3a3a3a;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .trades-table {
+            background: #3a3a3a;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        .trades-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .trades-table th,
+        .trades-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #555;
+        }
+        
+        .trades-table th {
+            background: #2a2a2a;
+            color: #00d4aa;
+        }
+        
+        .trade-profit {
+            color: #28a745;
+        }
+        
+        .trade-loss {
+            color: #dc3545;
+        }
+        
+        .optimization-progress {
+            margin: 20px 0;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 25px;
+            background: #3a3a3a;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #007bff;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .progress-text {
+            text-align: center;
+            margin-top: 10px;
+            color: #ddd;
+        }
+        
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .timeframe-card {
+            background: #3a3a3a;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        
+        .timeframe-card h4 {
+            margin: 0 0 15px 0;
+            color: #00d4aa;
+            text-align: center;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #ddd;
+        }
+        
+        .spinner {
+            border: 4px solid #3a3a3a;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-message {
+            background: #dc3545;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .success-message {
+            background: #28a745;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <i class="fas fa-robot"></i>
+                Trading Bot - Backtest
+            </div>
+            <ul class="nav-menu">
+                <li><a href="{{ url_for('main.dashboard') }}"><i class="fas fa-home"></i> Dashboard</a></li>
+                <li><a href="{{ url_for('bot_control.control') }}"><i class="fas fa-cog"></i> Controllo Bot</a></li>
+                <li><a href="{{ url_for('history.history') }}"><i class="fas fa-history"></i> Cronologia</a></li>
+                <li><a href="{{ url_for('backtest.backtest_dashboard') }}" class="active"><i class="fas fa-chart-line"></i> Backtest</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="backtest-container">
+        <h1><i class="fas fa-chart-line"></i> Backtest Avanzato</h1>
+        
+        <div class="backtest-tabs">
+            <button class="tab-button active" onclick="showTab('single')">
+                <i class="fas fa-play"></i> Test Singolo
+            </button>
+            <button class="tab-button" onclick="showTab('optimization')">
+                <i class="fas fa-search"></i> Ottimizzazione
+            </button>
+            <button class="tab-button" onclick="showTab('comparison')">
+                <i class="fas fa-balance-scale"></i> Confronto Timeframe
+            </button>
+            <button class="tab-button" onclick="showTab('results')">
+                <i class="fas fa-folder"></i> Risultati Salvati
+            </button>
+        </div>
+
+        <!-- Tab: Test Singolo -->
+        <div id="single-tab" class="tab-content active">
+            <div class="parameter-grid">
+                <div class="parameter-group">
+                    <h4>Mercato</h4>
+                    <div class="form-row">
+                        <label for="symbol">Symbol:</label>
+                        <input type="text" id="symbol" value="BTCUSDT" placeholder="es. BTCUSDT">
+                    </div>
+                    <div class="form-row">
+                        <label for="timeframe">Timeframe:</label>
+                        <select id="timeframe">
+                            <option value="5">5 minuti</option>
+                            <option value="15">15 minuti</option>
+                            <option value="30" selected>30 minuti</option>
+                            <option value="60">1 ora</option>
+                            <option value="240">4 ore</option>
+                            <option value="D">1 giorno</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label for="days_back">Giorni indietro:</label>
+                        <input type="number" id="days_back" value="30" min="1" max="365">
+                    </div>
+                </div>
+                
+                <div class="parameter-group">
+                    <h4>Strategia</h4>
+                    <div class="form-row">
+                        <label for="ema_period">Periodo EMA:</label>
+                        <input type="number" id="ema_period" value="10" min="1" max="200">
+                    </div>
+                    <div class="form-row">
+                        <label for="required_candles">Candele richieste:</label>
+                        <input type="number" id="required_candles" value="3" min="1" max="10">
+                    </div>
+                    <div class="form-row">
+                        <label for="max_distance">Distanza max (%):</label>
+                        <input type="number" id="max_distance" value="1.0" step="0.1" min="0.1" max="5.0">
+                    </div>
+                </div>
+                
+                <div class="parameter-group">
+                    <h4>Capitale e Risk Management</h4>
+                    <div class="form-row">
+                        <label for="initial_capital">Capitale iniziale:</label>
+                        <input type="number" id="initial_capital" value="1000" min="100">
+                    </div>
+                    <div class="form-row">
+                        <label for="operation">Trading Direction:</label>
+                        <select id="operation">
+                            <option value="true">LONG Only</option>
+                            <option value="false">SHORT Only</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label for="use_risk_management">Risk Management:</label>
+                        <input type="checkbox" id="use_risk_management" checked>
+                    </div>
+                    <div class="form-row">
+                        <label for="create_chart">Create Chart:</label>
+                        <input type="checkbox" id="create_chart" checked>
+                    </div>
+                    <div class="form-row">
+                        <label for="stop_loss_pct">Stop Loss (%):</label>
+                        <input type="number" id="stop_loss_pct" value="2.0" step="0.1" min="0.1" max="10.0">
+                    </div>
+                    <div class="form-row">
+                        <label for="take_profit_pct">Take Profit (%):</label>
+                        <input type="number" id="take_profit_pct" value="4.0" step="0.1" min="0.1" max="20.0">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="runSingleBacktest()">
+                    <i class="fas fa-play"></i> Esegui Backtest
+                </button>
+                <button class="btn btn-success" onclick="exportResults()">
+                    <i class="fas fa-download"></i> Esporta Risultati
+                </button>
+            </div>
+        </div>
+
+        <!-- Tab: Ottimizzazione -->
+        <div id="optimization-tab" class="tab-content">
+            <div class="parameter-grid">
+                <div class="parameter-group">
+                    <h4>Mercato</h4>
+                    <div class="form-row">
+                        <label for="opt_symbol">Symbol:</label>
+                        <input type="text" id="opt_symbol" value="BTCUSDT">
+                    </div>
+                    <div class="form-row">
+                        <label for="opt_timeframe">Timeframe:</label>
+                        <select id="opt_timeframe">
+                            <option value="30" selected>30 minuti</option>
+                            <option value="60">1 ora</option>
+                            <option value="240">4 ore</option>
+                            <option value="D">1 giorno</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label for="opt_days_back">Giorni indietro:</label>
+                        <input type="number" id="opt_days_back" value="30" min="7" max="180">
+                    </div>
+                </div>
+                
+                <div class="parameter-group">
+                    <h4>Range Parametri</h4>
+                    <div class="form-row">
+                        <label for="ema_periods">Periodi EMA:</label>
+                        <input type="text" id="ema_periods" value="5,10,15,20" placeholder="es. 5,10,15,20">
+                    </div>
+                    <div class="form-row">
+                        <label for="candle_counts">Candele richieste:</label>
+                        <input type="text" id="candle_counts" value="2,3,4,5" placeholder="es. 2,3,4,5">
+                    </div>
+                    <div class="form-row">
+                        <label for="distances">Distanze (%):</label>
+                        <input type="text" id="distances" value="0.5,1.0,1.5,2.0" placeholder="es. 0.5,1.0,1.5">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="action-buttons">
+                <button class="btn btn-warning" onclick="runOptimization()">
+                    <i class="fas fa-search"></i> Avvia Ottimizzazione
+                </button>
+            </div>
+            
+            <div id="optimization-progress" class="optimization-progress" style="display: none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <div class="progress-text" id="progress-text">Inizializzazione...</div>
+            </div>
+        </div>
+
+        <!-- Tab: Confronto Timeframe -->
+        <div id="comparison-tab" class="tab-content">
+            <div class="parameter-grid">
+                <div class="parameter-group">
+                    <h4>Parametri Test</h4>
+                    <div class="form-row">
+                        <label for="comp_symbol">Symbol:</label>
+                        <input type="text" id="comp_symbol" value="BTCUSDT">
+                    </div>
+                    <div class="form-row">
+                        <label for="comp_capital">Capitale iniziale:</label>
+                        <input type="number" id="comp_capital" value="1000" min="100">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="runTimeframeComparison()">
+                    <i class="fas fa-balance-scale"></i> Confronta Timeframe
+                </button>
+            </div>
+        </div>
+
+        <!-- Tab: Risultati Salvati -->
+        <div id="results-tab" class="tab-content">
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="loadSavedResults()">
+                    <i class="fas fa-sync"></i> Aggiorna Lista
+                </button>
+            </div>
+            <div id="saved-results-list">
+                <!-- Risultati caricati dinamicamente -->
+            </div>
+        </div>
+
+        <!-- Container per i risultati -->
+        <div id="results-container" class="results-container" style="display: none;">
+            <!-- Risultati vengono inseriti qui dinamicamente -->
+        </div>
+    </div>
+
+    <script>
+        let currentResults = null;
+        
+        function showTab(tabName) {
+            // Nascondi tutti i tab
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Mostra il tab selezionato
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        function showLoading(message = 'Caricamento in corso...') {
+            const container = document.getElementById('results-container');
+            container.style.display = 'block';
+            container.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+        
+        function showError(message) {
+            const container = document.getElementById('results-container');
+            container.style.display = 'block';
+            container.innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i> ${message}
+                </div>
+            `;
+        }
+        
+        function showSuccess(message) {
+            const container = document.getElementById('results-container');
+            container.style.display = 'block';
+            container.innerHTML = `
+                <div class="success-message">
+                    <i class="fas fa-check-circle"></i> ${message}
+                </div>
+            `;
+        }
+        
+        async function runSingleBacktest() {
+            showLoading('Eseguendo backtest...');
+            
+            const params = {
+                symbol: document.getElementById('symbol').value,
+                initial_capital: parseFloat(document.getElementById('initial_capital').value),
+                ema_period: parseInt(document.getElementById('ema_period').value),
+                required_candles: parseInt(document.getElementById('required_candles').value),
+                max_distance: parseFloat(document.getElementById('max_distance').value),
+                timeframe: document.getElementById('timeframe').value,
+                days_back: parseInt(document.getElementById('days_back').value),
+                use_risk_management: document.getElementById('use_risk_management').checked,
+                create_chart: document.getElementById('create_chart').checked,
+                operation: document.getElementById('operation').value === 'true',
+                stop_loss_pct: parseFloat(document.getElementById('stop_loss_pct').value),
+                take_profit_pct: parseFloat(document.getElementById('take_profit_pct').value)
+            };
+            
+            try {
+                const response = await fetch('/backtest/run', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(params)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentResults = data.results;
+                    displayResults(data.results, 'Risultati Backtest');
+                } else {
+                    showError('Errore nel backtest: ' + data.error);
+                }
+            } catch (error) {
+                showError('Errore di connessione: ' + error.message);
+            }
+        }
+        
+        async function runOptimization() {
+            const progressDiv = document.getElementById('optimization-progress');
+            progressDiv.style.display = 'block';
+            
+            showLoading('Avviando ottimizzazione parametri...');
+            
+            const params = {
+                symbol: document.getElementById('opt_symbol').value,
+                initial_capital: 1000,
+                timeframe: document.getElementById('opt_timeframe').value,
+                days_back: parseInt(document.getElementById('opt_days_back').value),
+                operation: document.getElementById('operation').value === 'true',
+                ema_periods: document.getElementById('ema_periods').value.split(',').map(x => parseInt(x.trim())),
+                candle_counts: document.getElementById('candle_counts').value.split(',').map(x => parseInt(x.trim())),
+                distances: document.getElementById('distances').value.split(',').map(x => parseFloat(x.trim()))
+            };
+            
+            try {
+                const response = await fetch('/backtest/optimize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(params)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    progressDiv.style.display = 'none';
+                    displayOptimizationResults(data);
+                } else {
+                    progressDiv.style.display = 'none';
+                    showError('Errore nell\'ottimizzazione: ' + data.error);
+                }
+            } catch (error) {
+                progressDiv.style.display = 'none';
+                showError('Errore di connessione: ' + error.message);
+            }
+        }
+        
+        async function runTimeframeComparison() {
+            showLoading('Confrontando performance su diversi timeframe...');
+            
+            const params = {
+                symbol: document.getElementById('comp_symbol').value,
+                initial_capital: parseFloat(document.getElementById('comp_capital').value),
+                operation: document.getElementById('operation').value === 'true'
+            };
+            
+            try {
+                const response = await fetch('/backtest/compare-timeframes', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(params)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayTimeframeComparison(data.results);
+                } else {
+                    showError('Errore nel confronto: ' + data.error);
+                }
+            } catch (error) {
+                showError('Errore di connessione: ' + error.message);
+            }
+        }
+        
+        function displayResults(results, title = 'Risultati') {
+            const container = document.getElementById('results-container');
+            container.style.display = 'block';
+            
+            const metricsHtml = `
+                <div class="results-summary">
+                    <div class="metric-card">
+                        <h4>Ritorno Totale</h4>
+                        <p class="metric-value ${results.total_return_pct >= 0 ? 'positive' : 'negative'}">
+                            ${results.total_return_pct.toFixed(2)}%
+                        </p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Valore Finale</h4>
+                        <p class="metric-value neutral">$${results.final_value.toFixed(2)}</p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Totale Trade</h4>
+                        <p class="metric-value neutral">${results.total_trades}</p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Win Rate</h4>
+                        <p class="metric-value ${results.win_rate >= 50 ? 'positive' : 'negative'}">
+                            ${results.win_rate.toFixed(1)}%
+                        </p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Sharpe Ratio</h4>
+                        <p class="metric-value ${results.sharpe_ratio >= 1 ? 'positive' : 'negative'}">
+                            ${results.sharpe_ratio.toFixed(2)}
+                        </p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Max Drawdown</h4>
+                        <p class="metric-value negative">${results.max_drawdown.toFixed(2)}%</p>
+                    </div>
+                </div>
+            `;
+            
+            const tradesHtml = results.trades && results.trades.length > 0 ? `
+                <div class="trades-table">
+                    <h3>Ultimi 20 Trade</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Data Entry</th>
+                                <th>Tipo</th>
+                                <th>Prezzo Entry</th>
+                                <th>Prezzo Exit</th>
+                                <th>PnL (%)</th>
+                                <th>Durata</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${results.trades.slice(-20).map(trade => `
+                                <tr>
+                                    <td>${new Date(trade.entry_time).toLocaleString()}</td>
+                                    <td>${trade.side}</td>
+                                    <td>$${trade.entry_price.toFixed(4)}</td>
+                                    <td>$${trade.exit_price ? trade.exit_price.toFixed(4) : 'N/A'}</td>
+                                    <td class="${trade.pnl_pct >= 0 ? 'trade-profit' : 'trade-loss'}">
+                                        ${trade.pnl_pct ? trade.pnl_pct.toFixed(2) + '%' : 'N/A'}
+                                    </td>
+                                    <td>${trade.duration_hours ? trade.duration_hours.toFixed(1) + 'h' : 'N/A'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            ` : '';
+            
+            // Aggiungi sezione grafico se disponibile
+            let chartHtml = '';
+            if (results.chart_path) {
+                chartHtml = `
+                    <div class="chart-section">
+                        <h3>📊 Grafico Backtest</h3>
+                        <div class="chart-container">
+                            <img src="/static/charts/${results.chart_path.split('/').pop()}" 
+                                 alt="Backtest Chart" 
+                                 style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px;">
+                        </div>
+                        <p class="chart-info">
+                            <small>💾 Grafico salvato: ${results.chart_path}</small>
+                        </p>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = `
+                <h2>${title}</h2>
+                ${metricsHtml}
+                ${chartHtml}
+                ${tradesHtml}
+            `;
+        }
+        
+        function displayOptimizationResults(data) {
+            const container = document.getElementById('results-container');
+            container.style.display = 'block';
+            
+            const bestResult = data.best_result;
+            const topResults = data.all_results.slice(0, 10);
+            
+            container.innerHTML = `
+                <h2>Risultati Ottimizzazione</h2>
+                
+                <h3>Miglior Configurazione</h3>
+                <div class="results-summary">
+                    <div class="metric-card">
+                        <h4>EMA Period</h4>
+                        <p class="metric-value neutral">${bestResult.ema_period}</p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Candele Richieste</h4>
+                        <p class="metric-value neutral">${bestResult.required_candles}</p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Max Distance</h4>
+                        <p class="metric-value neutral">${bestResult.max_distance}%</p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Ritorno Totale</h4>
+                        <p class="metric-value positive">${bestResult.total_return_pct.toFixed(2)}%</p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Win Rate</h4>
+                        <p class="metric-value ${bestResult.win_rate >= 50 ? 'positive' : 'negative'}">
+                            ${bestResult.win_rate.toFixed(1)}%
+                        </p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Sharpe Ratio</h4>
+                        <p class="metric-value ${bestResult.sharpe_ratio >= 1 ? 'positive' : 'negative'}">
+                            ${bestResult.sharpe_ratio.toFixed(2)}
+                        </p>
+                    </div>
+                </div>
+                
+                <h3>Top 10 Configurazioni</h3>
+                <div class="trades-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>EMA</th>
+                                <th>Candele</th>
+                                <th>Distanza</th>
+                                <th>Ritorno %</th>
+                                <th>Win Rate %</th>
+                                <th>Sharpe</th>
+                                <th>Max DD %</th>
+                                <th>Trade</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${topResults.map(result => `
+                                <tr>
+                                    <td>${result.ema_period}</td>
+                                    <td>${result.required_candles}</td>
+                                    <td>${result.max_distance}</td>
+                                    <td class="${result.total_return_pct >= 0 ? 'trade-profit' : 'trade-loss'}">
+                                        ${result.total_return_pct.toFixed(2)}%
+                                    </td>
+                                    <td>${result.win_rate.toFixed(1)}%</td>
+                                    <td>${result.sharpe_ratio.toFixed(2)}</td>
+                                    <td class="trade-loss">${result.max_drawdown.toFixed(2)}%</td>
+                                    <td>${result.total_trades}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+        
+        function displayTimeframeComparison(results) {
+            const container = document.getElementById('results-container');
+            container.style.display = 'block';
+            
+            container.innerHTML = `
+                <h2>Confronto Timeframe</h2>
+                <div class="comparison-grid">
+                    ${results.map(result => `
+                        <div class="timeframe-card">
+                            <h4>${result.timeframe_name}</h4>
+                            <div class="results-summary">
+                                <div class="metric-card">
+                                    <h4>Ritorno</h4>
+                                    <p class="metric-value ${result.total_return_pct >= 0 ? 'positive' : 'negative'}">
+                                        ${result.total_return_pct.toFixed(2)}%
+                                    </p>
+                                </div>
+                                <div class="metric-card">
+                                    <h4>Win Rate</h4>
+                                    <p class="metric-value ${result.win_rate >= 50 ? 'positive' : 'negative'}">
+                                        ${result.win_rate.toFixed(1)}%
+                                    </p>
+                                </div>
+                                <div class="metric-card">
+                                    <h4>Sharpe</h4>
+                                    <p class="metric-value ${result.sharpe_ratio >= 1 ? 'positive' : 'negative'}">
+                                        ${result.sharpe_ratio.toFixed(2)}
+                                    </p>
+                                </div>
+                                <div class="metric-card">
+                                    <h4>Trade</h4>
+                                    <p class="metric-value neutral">${result.total_trades}</p>
+                                </div>
+                                <div class="metric-card">
+                                    <h4>Max DD</h4>
+                                    <p class="metric-value negative">${result.max_drawdown.toFixed(2)}%</p>
+                                </div>
+                                <div class="metric-card">
+                                    <h4>Giorni</h4>
+                                    <p class="metric-value neutral">${result.days_tested}</p>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+        
+        async function loadSavedResults() {
+            try {
+                const response = await fetch('/backtest/results');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const container = document.getElementById('saved-results-list');
+                    
+                    if (data.results.length === 0) {
+                        container.innerHTML = '<p style="text-align: center; color: #999;">Nessun risultato salvato trovato.</p>';
+                        return;
+                    }
+                    
+                    container.innerHTML = `
+                        <div class="trades-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Data</th>
+                                        <th>Symbol</th>
+                                        <th>Timeframe</th>
+                                        <th>Ritorno %</th>
+                                        <th>Trade</th>
+                                        <th>Win Rate %</th>
+                                        <th>Azioni</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.results.map(result => `
+                                        <tr>
+                                            <td>${new Date(result.created).toLocaleString()}</td>
+                                            <td>${result.symbol}</td>
+                                            <td>${result.timeframe}</td>
+                                            <td class="${result.total_return_pct >= 0 ? 'trade-profit' : 'trade-loss'}">
+                                                ${result.total_return_pct.toFixed(2)}%
+                                            </td>
+                                            <td>${result.total_trades}</td>
+                                            <td>${result.win_rate.toFixed(1)}%</td>
+                                            <td>
+                                                <button class="btn btn-primary" onclick="loadResultDetail('${result.filename}')">
+                                                    <i class="fas fa-eye"></i> Visualizza
+                                                </button>
+                                                <button class="btn btn-danger" onclick="deleteResult('${result.filename}')">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    showError('Errore nel caricamento dei risultati: ' + data.error);
+                }
+            } catch (error) {
+                showError('Errore di connessione: ' + error.message);
+            }
+        }
+        
+        async function loadResultDetail(filename) {
+            try {
+                const response = await fetch(`/backtest/results/${filename}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentResults = data.data;
+                    displayResults(data.data, `Risultato Salvato: ${filename}`);
+                } else {
+                    showError('Errore nel caricamento del risultato: ' + data.error);
+                }
+            } catch (error) {
+                showError('Errore di connessione: ' + error.message);
+            }
+        }
+        
+        async function deleteResult(filename) {
+            if (!confirm(`Sei sicuro di voler eliminare il risultato ${filename}?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/backtest/delete/${filename}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showSuccess(`Risultato ${filename} eliminato con successo`);
+                    loadSavedResults(); // Ricarica la lista
+                } else {
+                    showError('Errore nell\'eliminazione: ' + data.error);
+                }
+            } catch (error) {
+                showError('Errore di connessione: ' + error.message);
+            }
+        }
+        
+        function exportResults() {
+            if (!currentResults) {
+                alert('Nessun risultato da esportare. Esegui prima un backtest.');
+                return;
+            }
+            
+            const dataStr = JSON.stringify(currentResults, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = `backtest_results_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+            link.click();
+        }
+        
+        // Carica risultati salvati all'avvio
+        document.addEventListener('DOMContentLoaded', function() {
+            // Attiva il primo tab
+            showTab('single');
+        });
+    </script>
+</body>
+</html>

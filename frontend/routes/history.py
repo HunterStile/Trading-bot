@@ -1,7 +1,12 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, render_template
 from trading_functions import vedi_prezzo_moneta
 
 history_bp = Blueprint('history', __name__)
+
+@history_bp.route('/')
+def history():
+    """Dashboard principale per la cronologia"""
+    return render_template('history.html')
 
 @history_bp.route('/sessions')
 def get_session_history():

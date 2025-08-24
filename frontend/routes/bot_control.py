@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, render_template
 from datetime import datetime
 import threading
 import time
@@ -9,6 +9,11 @@ bot_control_bp = Blueprint('bot_control', __name__)
 # Variabili globali per il bot
 bot_thread = None
 stop_bot_flag = False
+
+@bot_control_bp.route('/')
+def control():
+    """Dashboard principale per il controllo del bot"""
+    return render_template('bot_control.html')
 
 @bot_control_bp.route('/start', methods=['POST'])
 def start_bot():
