@@ -42,6 +42,9 @@ except ImportError as e:
 from routes import register_blueprints
 from routes.websocket import register_websocket_events
 
+# Import sistema notifiche Telegram
+from utils.telegram_notifier import init_telegram_notifier
+
 # Inizializza Flask e SocketIO
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'trading_bot_secret_key_2024'
@@ -84,6 +87,34 @@ app.config.update({
     'BOT_STATE_MANAGER': bot_state_manager,
     'SOCKETIO': socketio
 })
+
+# Inizializza sistema notifiche Telegram
+telegram_bot_instance = None
+if TELEGRAM_TOKEN and CHAT_ID:
+    telegram_notifier = init_telegram_notifier(TELEGRAM_TOKEN, CHAT_ID, "http://localhost:5000")
+    app.config['TELEGRAM_NOTIFIER'] = telegram_notifier
+    print("✅ Sistema notifiche Telegram inizializzato")
+    
+    # Inizializza bot Telegram interattivo
+    try:
+        from utils.telegram_bot import TradingBotTelegram
+        telegram_bot_instance = TradingBotTelegram(
+            token=TELEGRAM_TOKEN,
+            dashboard_url="http://localhost:5000"
+        )
+        # Avvia il bot in thread separato
+        import threading
+        bot_thread = threading.Thread(target=telegram_bot_instance.start_bot, daemon=True)
+        bot_thread.start()
+        app.config['TELEGRAM_BOT'] = telegram_bot_instance
+        print("✅ Bot Telegram interattivo avviato")
+    except Exception as e:
+        print(f"⚠️ Errore avvio bot Telegram interattivo: {e}")
+        app.config['TELEGRAM_BOT'] = None
+else:
+    print("⚠️ Notifiche Telegram disabilitate (token/chat_id mancanti)")
+    app.config['TELEGRAM_NOTIFIER'] = None
+    app.config['TELEGRAM_BOT'] = None
 
 if __name__ == '__main__':
     print("🚀 Avvio Trading Bot Dashboard...")

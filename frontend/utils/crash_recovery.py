@@ -13,6 +13,13 @@ import traceback
 
 from .simple_bot_state import EnhancedBotState
 
+# Import Telegram notifier
+try:
+    from .telegram_notifier import TelegramNotifier
+    TELEGRAM_AVAILABLE = True
+except ImportError:
+    TELEGRAM_AVAILABLE = False
+
 
 class CrashRecoveryManager:
     """Gestisce il recovery completo del bot dopo crash o riavvii inaspettati"""
@@ -88,6 +95,21 @@ class CrashRecoveryManager:
                                         {'reason': 'Normal stop or no active state'}, 
                                         status="INFO")
                 return False, {}
+            
+            # 📱 Invia notifica Telegram per crash rilevato
+            try:
+                if TELEGRAM_AVAILABLE:
+                    from config import TELEGRAM_TOKEN, CHAT_ID
+                    if TELEGRAM_TOKEN and CHAT_ID:
+                        notifier = TelegramNotifier(TELEGRAM_TOKEN, CHAT_ID)
+                        saved_phase = saved_state.get('operational_phase', 'UNKNOWN')
+                        active_trades = saved_state.get('active_trades', [])
+                        notifier.notify_crash_detected(
+                            f"Crash rilevato. Stato: {saved_phase}, Posizioni attive: {len(active_trades)}"
+                        )
+            except Exception as e:
+                self.log_recovery_action("TELEGRAM_CRASH_NOTIFICATION_ERROR", 
+                                       {'error': str(e)}, status="WARNING")
             
             # 3. Verifica posizioni reali su Bybit
             real_positions = self._get_real_positions_from_exchange()
@@ -300,28 +322,65 @@ class CrashRecoveryManager:
             # Aggiorna bot_status con info di recovery
             updated_status = bot_status.copy()
             
+            result = None
             if action == "CONTINUE_NORMAL":
-                return self._continue_normal_operation(updated_status, recovery_info)
+                result = self._continue_normal_operation(updated_status, recovery_info)
             
             elif action == "SWITCH_TO_MANAGING":
-                return self._switch_to_managing_positions(updated_status, recovery_info)
+                result = self._switch_to_managing_positions(updated_status, recovery_info)
             
             elif action == "UPDATE_POSITIONS":
-                return self._update_position_tracking(updated_status, recovery_info)
+                result = self._update_position_tracking(updated_status, recovery_info)
             
             elif action == "SWITCH_TO_SEEKING":
-                return self._switch_to_seeking_entry(updated_status, recovery_info)
+                result = self._switch_to_seeking_entry(updated_status, recovery_info)
             
             elif action == "CONTINUE_SEEKING":
-                return self._continue_seeking_entry(updated_status, recovery_info)
+                result = self._continue_seeking_entry(updated_status, recovery_info)
             
             else:  # MANUAL_REVIEW_NEEDED
-                return self._handle_manual_review_case(updated_status, recovery_info)
+                result = self._handle_manual_review_case(updated_status, recovery_info)
+            
+            # 📱 Invia notifica Telegram per recovery completato
+            if result and result[0]:  # Se recovery riuscito
+                try:
+                    if TELEGRAM_AVAILABLE:
+                        from config import TELEGRAM_TOKEN, CHAT_ID
+                        if TELEGRAM_TOKEN and CHAT_ID:
+                            notifier = TelegramNotifier(TELEGRAM_TOKEN, CHAT_ID)
+                            success, final_phase, final_status = result
+                            active_trades = final_status.get('active_trades', [])
+                            notifier.notify_recovery_completed({
+                                'action_taken': action,
+                                'final_state': final_phase,
+                                'positions_recovered': len(active_trades),
+                                'recovery_time': datetime.now().isoformat()
+                            })
+                except Exception as e:
+                    self.log_recovery_action("TELEGRAM_RECOVERY_SUCCESS_NOTIFICATION_ERROR", 
+                                           {'error': str(e)}, status="WARNING")
+            
+            return result
                 
         except Exception as e:
             self.log_recovery_action("RECOVERY_EXECUTION_ERROR", 
                                    {'error': str(e), 'traceback': traceback.format_exc()}, 
                                    status="ERROR")
+            
+            # 📱 Invia notifica Telegram per recovery fallito
+            try:
+                if TELEGRAM_AVAILABLE:
+                    from config import TELEGRAM_TOKEN, CHAT_ID
+                    if TELEGRAM_TOKEN and CHAT_ID:
+                        notifier = TelegramNotifier(TELEGRAM_TOKEN, CHAT_ID)
+                        notifier.notify_error(
+                            error_type="RECOVERY_FAILED",
+                            error_msg=f"Recovery fallito: {str(e)}"
+                        )
+            except Exception as telegram_error:
+                self.log_recovery_action("TELEGRAM_RECOVERY_FAILURE_NOTIFICATION_ERROR", 
+                                       {'error': str(telegram_error)}, status="WARNING")
+            
             return False, 'SEEKING_ENTRY', bot_status
     
     def _continue_normal_operation(self, bot_status: Dict, recovery_info: Dict) -> Tuple[bool, str, Dict]:

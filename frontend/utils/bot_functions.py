@@ -465,6 +465,24 @@ def execute_long_entry(bot_status, market_data, trading_wrapper, socketio, state
             'quantity': bot_status['quantity'],
             'timestamp': datetime.now().isoformat()
         })
+        
+        # ✅ NOTIFICA TELEGRAM: Posizione aperta
+        try:
+            from utils.telegram_notifier import get_telegram_notifier
+            telegram_notifier = get_telegram_notifier()
+            if telegram_notifier:
+                trade_info = {
+                    'symbol': market_data['symbol'],
+                    'side': 'BUY',
+                    'quantity': bot_status['quantity'],
+                    'price': market_data['current_price'],
+                    'value': bot_status['quantity'] * market_data['current_price'],
+                    'trade_id': result.get('trade_id', 'N/A')
+                }
+                telegram_notifier.notify_position_opened(trade_info)
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Errore notifica Telegram: {e}")
+        
         return True
     
     return False
@@ -505,6 +523,24 @@ def execute_short_entry(bot_status, market_data, trading_wrapper, socketio, stat
             'quantity': bot_status['quantity'],
             'timestamp': datetime.now().isoformat()
         })
+        
+        # ✅ NOTIFICA TELEGRAM: Posizione aperta
+        try:
+            from utils.telegram_notifier import get_telegram_notifier
+            telegram_notifier = get_telegram_notifier()
+            if telegram_notifier:
+                trade_info = {
+                    'symbol': market_data['symbol'],
+                    'side': 'SELL',
+                    'quantity': bot_status['quantity'],
+                    'price': market_data['current_price'],
+                    'value': bot_status['quantity'] * market_data['current_price'],
+                    'trade_id': result.get('trade_id', 'N/A')
+                }
+                telegram_notifier.notify_position_opened(trade_info)
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Errore notifica Telegram: {e}")
+        
         return True
     
     return False
@@ -555,6 +591,24 @@ def execute_position_close(trade_id, side, symbol, current_price, trading_wrappe
     result = trading_wrapper.close_position(trade_id, current_price, "EMA_STOP")
     
     if result['success']:
+        # 📱 Invia notifica Telegram per chiusura posizione
+        try:
+            from .telegram_notifier import get_telegram_notifier
+            notifier = get_telegram_notifier()
+            if notifier:
+                # Ottieni informazioni del trade dal risultato
+                profit_loss = result.get('profit_loss', 0)
+                profit_pct = result.get('profit_percentage', 0)
+                
+                notifier.notify_position_closed({
+                    'symbol': symbol,
+                    'side': side,
+                    'close_price': current_price,
+                    'timestamp': datetime.now().isoformat()
+                }, pnl=profit_loss, reason="EMA_STOP")
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Errore invio notifica Telegram chiusura: {e}")
+        
         # 🆕 Aggiorna lo stato dopo chiusura posizione
         try:
             if state_manager and bot_status:

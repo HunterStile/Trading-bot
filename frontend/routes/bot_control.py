@@ -63,6 +63,18 @@ def start_bot():
         bot_thread.daemon = True
         bot_thread.start()
         
+        # ✅ NOTIFICA TELEGRAM: Bot avviato
+        telegram_notifier = current_app.config.get('TELEGRAM_NOTIFIER')
+        if telegram_notifier:
+            config_for_telegram = {
+                'ema_period': bot_status['ema_period'],
+                'interval': bot_status['interval'],
+                'quantity': bot_status['quantity'],
+                'stop_candles': bot_status['stop_candles']
+            }
+            operation_text = "LONG" if bot_status['operation'] else "SHORT"
+            telegram_notifier.notify_bot_started(bot_status['symbol'], operation_text, config_for_telegram)
+        
         return jsonify({
             'success': True, 
             'message': 'Bot avviato con successo',
@@ -154,6 +166,11 @@ def stop_bot():
             
         except Exception as e:
             print(f"Errore nella chiusura della sessione: {e}")
+    
+    # ✅ NOTIFICA TELEGRAM: Bot fermato
+    telegram_notifier = current_app.config.get('TELEGRAM_NOTIFIER')
+    if telegram_notifier:
+        telegram_notifier.notify_bot_stopped("Fermato manualmente")
     
     return jsonify({'success': True, 'message': 'Bot fermato'})
 
