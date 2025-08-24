@@ -99,7 +99,28 @@ def stop_bot():
         state_manager.save_bot_stopped_state()
         print("💾 Bot fermato manualmente - stato salvato")
     
-    # Chiudi la sessione corrente se attiva
+    # 🔧 Chiudi la sessione nel trading wrapper
+    trading_wrapper = current_app.config.get('TRADING_WRAPPER')
+    if trading_wrapper and trading_wrapper.current_session_id:
+        try:
+            print(f"🔚 Chiusura sessione wrapper: {trading_wrapper.current_session_id}")
+            
+            # Ottieni saldo finale
+            try:
+                from trading_functions import mostra_saldo
+                balance_response = mostra_saldo()
+                final_balance = balance_response.get('total_equity', 0) if balance_response else 0
+            except Exception as e:
+                print(f"Errore mostra_saldo per final_balance: {e}")
+                final_balance = 0
+            
+            # Chiudi la sessione del wrapper
+            trading_wrapper.end_current_session(final_balance)
+            
+        except Exception as e:
+            print(f"❌ Errore chiusura sessione wrapper: {e}")
+    
+    # Chiudi la sessione corrente se attiva nel bot_status
     if bot_status.get('current_session_id'):
         try:
             from trading_functions import mostra_saldo

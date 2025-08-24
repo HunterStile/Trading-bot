@@ -321,13 +321,15 @@ def chiudi_operazione_long(categoria,pair,token):
     api_secret=api_sec,
     )
     
-    print(session.place_order(
+    result = session.place_order(
     category=categoria,
     symbol=pair,
     side="Sell",
     orderType="Market",
     qty=token
-    ))
+    )
+    print(result)  # Mantieni il print per debug
+    return result  # ✅ CORREZIONE: Restituisci il risultato
 
 def chiudi_operazione_short(categoria,pair,token):
     session = HTTP(
@@ -336,13 +338,15 @@ def chiudi_operazione_short(categoria,pair,token):
     api_secret=api_sec,
     )
     
-    print(session.place_order(
+    result = session.place_order(
     category=categoria,
     symbol=pair,
     side="Buy",
     orderType="Market",
     qty=token
-    ))
+    )
+    print(result)  # Mantieni il print per debug
+    return result  # ✅ CORREZIONE: Restituisci il risultato
     
 def vedi_prezzo_moneta(categoria,pair):
     session = HTTP(

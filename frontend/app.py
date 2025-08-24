@@ -167,5 +167,5 @@ if __name__ == '__main__':
         if bot_state_manager:
             bot_state_manager.save_bot_stopped_state()
     except Exception as e:
-        print(f"❌ Errore nell'avvio del server: {e}")
+        print(f"❌ Errore nell'avvio del servDr: {e}")
         # Non salviamo nulla in caso di errore di startup

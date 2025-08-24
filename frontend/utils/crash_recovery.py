@@ -132,29 +132,58 @@ class CrashRecoveryManager:
                 print(f"⚠️ RECOVERY DEBUG: Trading wrapper non disponibile")
                 return {}
             
-            # Usa il metodo del trading wrapper per ottenere posizioni attive
-            real_positions = self.trading_wrapper.get_active_trades()
+            # 🆕 IMPORTANTE: Imposta una sessione temporanea se necessario per il recovery
+            saved_state = self.state_manager.get_bot_state() if self.state_manager else None
+            temp_session_id = None
             
-            # DEBUG: Log dettagliato delle posizioni trovate
-            print(f"🔍 RECOVERY DEBUG: Posizioni reali dall'exchange:")
-            print(f"   Numero posizioni: {len(real_positions)}")
-            if real_positions:
-                for trade_id, trade_info in real_positions.items():
-                    print(f"   - {trade_id}: {trade_info.get('side', 'N/A')} {trade_info.get('symbol', 'N/A')} {trade_info.get('quantity', 'N/A')}")
+            if saved_state and saved_state.get('current_session_id'):
+                temp_session_id = saved_state['current_session_id']
+                self.trading_wrapper.set_session(temp_session_id)
+                print(f"🔄 RECOVERY DEBUG: Impostata sessione temporanea: {temp_session_id}")
             else:
-                print(f"   - Nessuna posizione trovata")
+                print(f"🔄 RECOVERY DEBUG: Nessuna sessione salvata - recovery senza sessione")
             
-            self.log_recovery_action("REAL_POSITIONS_FETCHED", 
-                                   {'positions_count': len(real_positions),
-                                    'positions_details': list(real_positions.keys()) if real_positions else []}, 
-                                   status="SUCCESS")
+            # Prima sincronizza con il database per caricare trade esistenti
+            self.trading_wrapper.sync_with_database()
             
-            return real_positions
+            # Poi sincronizza con Bybit per trovare posizioni reali
+            sync_result = self.trading_wrapper.sync_with_bybit()
+            
+            if sync_result['success']:
+                # Usa il metodo del trading wrapper per ottenere posizioni attive
+                real_positions = self.trading_wrapper.get_active_trades()
+                
+                # DEBUG: Log dettagliato delle posizioni trovate
+                print(f"🔍 RECOVERY DEBUG: Posizioni reali dall'exchange:")
+                print(f"   Numero posizioni: {len(real_positions)}")
+                if real_positions:
+                    for trade_id, trade_info in real_positions.items():
+                        external_id = trade_info.get('external_trade_id', 'N/A')
+                        recovery_flag = "🆘" if trade_info.get('recovery_orphan') else "📋"
+                        print(f"   {recovery_flag} {trade_id} (ext: {external_id}): {trade_info.get('side', 'N/A')} {trade_info.get('symbol', 'N/A')} {trade_info.get('quantity', 'N/A')}")
+                else:
+                    print(f"   - Nessuna posizione trovata")
+                
+                self.log_recovery_action("REAL_POSITIONS_FETCHED", 
+                                       {'positions_count': len(real_positions),
+                                        'positions_details': list(real_positions.keys()) if real_positions else [],
+                                        'sync_success': True,
+                                        'session_used': temp_session_id}, 
+                                       status="SUCCESS")
+                
+                return real_positions
+            else:
+                print(f"⚠️ RECOVERY DEBUG: Errore sincronizzazione Bybit: {sync_result.get('error')}")
+                self.log_recovery_action("BYBIT_SYNC_FAILED", 
+                                       {'error': sync_result.get('error')}, 
+                                       status="WARNING")
+                return {}
             
         except Exception as e:
             self.log_recovery_action("REAL_POSITIONS_FETCH_ERROR", 
                                    {'error': str(e)}, 
                                    status="ERROR")
+            print(f"❌ RECOVERY DEBUG: Eccezione durante sync: {e}")
             return {}
     
     def _analyze_position_discrepancies(self, saved_state: Dict, real_positions: Dict) -> Dict:
@@ -297,17 +326,29 @@ class CrashRecoveryManager:
     
     def _continue_normal_operation(self, bot_status: Dict, recovery_info: Dict) -> Tuple[bool, str, Dict]:
         """Continua operazione normale - stato coerente"""
-        phase = recovery_info['saved_state_summary']['operational_phase']
+        # 🔧 CORREZIONE: Usa la fase corretta calcolata, non quella salvata
+        correct_phase = recovery_info.get('correct_operational_phase', 
+                                        recovery_info['saved_state_summary']['operational_phase'])
+        
+        # ✅ CORREZIONE CRITICA: Trasferisci session_id dal recovery_info a bot_status
+        saved_session_id = recovery_info['saved_state_summary'].get('session_id')
+        if saved_session_id:
+            bot_status['current_session_id'] = saved_session_id
+            print(f"🔄 Recovery: session_id trasferita: {saved_session_id}")
+        else:
+            print(f"⚠️ Recovery: nessuna session_id trovata nel recovery_info")
         
         self.log_recovery_action("CONTINUING_NORMAL_OPERATION", 
-                               {'phase': phase}, 
+                               {'saved_phase': recovery_info['saved_state_summary']['operational_phase'],
+                                'correct_phase': correct_phase,
+                                'session_id': saved_session_id}, 
                                status="SUCCESS")
         
         # Marca recovery come completato
         self.state_manager.mark_successful_recovery()
         
-        return True, phase, bot_status
-    
+        return True, correct_phase, bot_status
+
     def _switch_to_managing_positions(self, bot_status: Dict, recovery_info: Dict) -> Tuple[bool, str, Dict]:
         """Il bot aveva posizioni aperte ma era in fase SEEKING_ENTRY"""
         real_positions = recovery_info.get('real_positions_summary', {})

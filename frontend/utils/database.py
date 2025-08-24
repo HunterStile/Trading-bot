@@ -66,8 +66,25 @@ class TradingDatabase:
                     status TEXT DEFAULT 'OPEN',
                     strategy_signal TEXT,
                     notes TEXT,
+                    bybit_order_id TEXT,
+                    external_trade_id TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (session_id) REFERENCES trading_sessions (session_id)
+                )
+            ''')
+            
+            # Tabella per mappare ID esterni (Bybit) con ID interni
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS trade_id_mapping (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    internal_trade_id TEXT NOT NULL,
+                    external_trade_id TEXT NOT NULL,
+                    bybit_order_id TEXT,
+                    symbol TEXT NOT NULL,
+                    side TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(external_trade_id),
+                    FOREIGN KEY (internal_trade_id) REFERENCES trades (trade_id)
                 )
             ''')
             
@@ -269,6 +286,84 @@ class TradingDatabase:
         self.log_event("TRADE_CLOSE", "TRADING", 
                       f"Trade chiuso: {trade_id} PnL: {pnl:.2f}", 
                       {"trade_id": trade_id, "pnl": pnl, "exit_price": exit_price})
+    
+    def add_trade_id_mapping(self, internal_trade_id: str, external_trade_id: str, 
+                           bybit_order_id: str = None, symbol: str = None, side: str = None):
+        """Aggiunge mappatura tra ID interno e ID esterno (Bybit)"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT OR REPLACE INTO trade_id_mapping 
+                    (internal_trade_id, external_trade_id, bybit_order_id, symbol, side)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (internal_trade_id, external_trade_id, bybit_order_id, symbol, side))
+                conn.commit()
+                
+                self.logger.info(f"Mappatura ID aggiunta: {internal_trade_id} -> {external_trade_id}")
+                
+        except Exception as e:
+            self.logger.error(f"Errore aggiunta mappatura ID: {e}")
+    
+    def get_internal_trade_id(self, external_trade_id: str) -> Optional[str]:
+        """Ottiene l'ID interno da un ID esterno (Bybit)"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT internal_trade_id FROM trade_id_mapping 
+                    WHERE external_trade_id = ?
+                ''', (external_trade_id,))
+                
+                result = cursor.fetchone()
+                return result[0] if result else None
+                
+        except Exception as e:
+            self.logger.error(f"Errore ricerca ID interno: {e}")
+            return None
+    
+    def get_external_trade_id(self, internal_trade_id: str) -> Optional[str]:
+        """Ottiene l'ID esterno (Bybit) da un ID interno"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT external_trade_id FROM trade_id_mapping 
+                    WHERE internal_trade_id = ?
+                ''', (internal_trade_id,))
+                
+                result = cursor.fetchone()
+                return result[0] if result else None
+                
+        except Exception as e:
+            self.logger.error(f"Errore ricerca ID esterno: {e}")
+            return None
+    
+    def find_trade_by_symbol_side(self, symbol: str, side: str, session_id: str = None) -> Optional[str]:
+        """Trova un trade aperto per simbolo e lato"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                if session_id:
+                    cursor.execute('''
+                        SELECT trade_id FROM trades 
+                        WHERE symbol = ? AND side = ? AND status = 'OPEN' AND session_id = ?
+                        ORDER BY entry_time DESC LIMIT 1
+                    ''', (symbol, side, session_id))
+                else:
+                    cursor.execute('''
+                        SELECT trade_id FROM trades 
+                        WHERE symbol = ? AND side = ? AND status = 'OPEN'
+                        ORDER BY entry_time DESC LIMIT 1
+                    ''', (symbol, side))
+                
+                result = cursor.fetchone()
+                return result[0] if result else None
+                
+        except Exception as e:
+            self.logger.error(f"Errore ricerca trade per simbolo/lato: {e}")
+            return None
     
     def add_market_analysis(self, symbol: str, price: float, ema_data: Dict):
         """Salva analisi di mercato"""
@@ -548,6 +643,28 @@ class TradingDatabase:
             
             conn.commit()
             self.logger.info(f"Dati più vecchi di {days} giorni rimossi")
+    
+    def get_all_sessions(self):
+        """Ottiene tutte le sessioni di trading"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    SELECT * FROM trading_sessions 
+                    ORDER BY start_time DESC
+                ''')
+                
+                sessions = []
+                for row in cursor.fetchall():
+                    sessions.append(dict(row))
+                
+                return sessions
+                
+        except Exception as e:
+            self.logger.error(f"Errore lettura sessioni: {e}")
+            return []
 
 # Istanza globale del database
 trading_db = TradingDatabase()

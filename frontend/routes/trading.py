@@ -78,10 +78,15 @@ def api_close_position():
         # Se non abbiamo trade_id ma abbiamo symbol e side, prova a trovarlo
         if not trade_id and symbol and side:
             active_trades = trading_wrapper.get_active_trades()
+            print(f"🔍 DEBUG CHIUSURA: Cercando {symbol} {side}")
+            print(f"🔍 DEBUG CHIUSURA: Active trades disponibili: {len(active_trades)}")
             for tid, trade_info in active_trades.items():
+                print(f"   - {tid}: {trade_info.get('symbol')} {trade_info.get('side')} {trade_info.get('quantity')}")
+                # ✅ CORREZIONE: Confronto case-insensitive per il side
                 if (trade_info.get('symbol') == symbol and 
-                    trade_info.get('side') == side):
+                    trade_info.get('side', '').upper() == side.upper()):
                     trade_id = tid
+                    print(f"✅ Trade trovato: {tid}")
                     break
         
         # Se ancora non abbiamo trade_id, prova a cercare nel database
@@ -89,8 +94,10 @@ def api_close_position():
             try:
                 if trading_wrapper.current_session_id:
                     trades = trading_db.get_trade_history(trading_wrapper.current_session_id, 100)
+                    # ✅ CORREZIONE: Confronto case-insensitive anche nel database
                     open_trades = [t for t in trades if t['status'] == 'OPEN' 
-                                 and t['symbol'] == symbol and t['side'] == side]
+                                 and t['symbol'] == symbol 
+                                 and t['side'].upper() == side.upper()]
                     if open_trades:
                         trade_id = open_trades[0]['trade_id']
             except Exception as e:

@@ -28,28 +28,55 @@ def run_trading_bot(bot_status, app_config):
             operational_phase = perform_crash_recovery(bot_status, app_config, state_manager)
             print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔄 Fase operativa: {operational_phase}")
         
+        # ✅ CORREZIONE: Aggiorna bot_status con la fase operativa corretta dal recovery
+        bot_status['operational_phase'] = operational_phase
+        
         # Salva stato iniziale aggiornato SOLO se non abbiamo fatto recovery
         # Il recovery ha già salvato lo stato corretto, non sovrascrivere
         if state_manager and operational_phase != 'MANAGING_POSITIONS':
-            state_manager.save_bot_running_state(bot_status)
+            active_trades = trading_wrapper.get_active_trades() if trading_wrapper else {}
+            state_manager.save_bot_running_state(bot_status, active_trades, trading_wrapper)
             print(f"[{datetime.now().strftime('%H:%M:%S')}] 💾 Stato iniziale salvato")
         elif operational_phase == 'MANAGING_POSITIONS':
             print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Recovery attivo - mantenendo stato di recovery")
         
-        # Gestione sessione di trading
+        # Gestione sessione di trading  
         # 🆕 Se abbiamo appena fatto recovery e abbiamo posizioni attive,
         # NON creare una nuova sessione che sovrascrive lo stato di recovery
-        if operational_phase != 'MANAGING_POSITIONS':
+        if operational_phase not in ['MANAGING_POSITIONS', 'IN_POSITION_LONG', 'IN_POSITION_SHORT']:
             setup_trading_session(bot_status, trading_wrapper, trading_db, state_manager)
         else:
             # Recovery completato con posizioni attive - continua sessione esistente
-            if bot_status['current_session_id']:
-                trading_wrapper.set_session(bot_status['current_session_id'])
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Recovery con posizioni attive - continuando sessione esistente")
+            
+            # 🔍 DEBUG CRITICO: Verifica session_id nel bot_status
+            current_session = bot_status.get('current_session_id')
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: session_id nel bot_status: '{current_session}'")
+            
+            if current_session:
+                trading_wrapper.set_session(current_session)
                 trading_wrapper.sync_with_database()
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔄 Continuando sessione di recovery: {bot_status['current_session_id']}")
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Recovery attivo - preservando stato con posizioni")
-        
-        # Loop principale del bot
+                
+                # 🆕 IMPORTANTE: Sincronizza anche con Bybit per recuperare posizioni
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔄 Sincronizzazione posizioni per recovery...")
+                sync_result = trading_wrapper.sync_with_bybit()
+                if sync_result['success']:
+                    active_count = len(trading_wrapper.get_active_trades())
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Sincronizzazione completata: {active_count} posizioni attive")
+                    
+                    # ✅ IMPORTANTE: Aggiorna bot_status con il numero reale di posizioni  
+                    if active_count > 0:
+                        print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Posizioni trovate durante recovery - continuo monitoraggio")
+                    else:
+                        print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Recovery senza posizioni - possibile desync")
+                else:
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Errore sincronizzazione Bybit: {sync_result.get('error')}")
+                
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔄 Continuando sessione di recovery: {current_session}")
+            else:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Recovery senza session_id - creando sessione temporanea")
+                # Fallback: crea sessione temporanea per recovery 
+                setup_trading_session(bot_status, trading_wrapper, trading_db, state_manager)        # Loop principale del bot
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔄 Avvio ciclo di trading...")
         
         while bot_status['running']:
@@ -72,7 +99,9 @@ def run_trading_bot(bot_status, app_config):
                 # Salvataggio periodico stato (ogni 6 cicli = 1 minuto)
                 state_save_counter += 1
                 if state_manager and state_save_counter >= 6:
-                    state_manager.save_bot_running_state(bot_status)
+                    # ✅ CORREZIONE: Passa anche trading_wrapper per ottenere posizioni attive
+                    active_trades = trading_wrapper.get_active_trades() if trading_wrapper else {}
+                    state_manager.save_bot_running_state(bot_status, active_trades, trading_wrapper)
                     state_save_counter = 0
                 
                 time.sleep(10)
@@ -488,30 +517,38 @@ def analyze_exit_signals(bot_status, market_data, active_trades, trading_wrapper
         trade_side = trade_info['side']
         trade_symbol = trade_info.get('symbol', bot_status['symbol'])
         
-        if trade_side == 'Buy':
-            check_long_exit_conditions(bot_status, market_data, trade_id, trade_symbol, trading_wrapper, socketio)
-        elif trade_side == 'Sell':
-            check_short_exit_conditions(bot_status, market_data, trade_id, trade_symbol, trading_wrapper, socketio)
+        # ✅ DEBUG: Mostra il side per capire il formato
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 DEBUG: Trade {trade_id} - Side: '{trade_side}' - Symbol: {trade_symbol}")
+        
+        # ✅ CORREZIONE: Normalizza il side per gestire case sensitivity 
+        trade_side_normalized = trade_side.upper()
+        
+        if trade_side_normalized == 'BUY':
+            check_long_exit_conditions(bot_status, market_data, trade_id, trade_symbol, trading_wrapper, socketio, state_manager)
+        elif trade_side_normalized == 'SELL':
+            check_short_exit_conditions(bot_status, market_data, trade_id, trade_symbol, trading_wrapper, socketio, state_manager)
+        else:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Side non riconosciuto: '{trade_side}' (normalizzato: '{trade_side_normalized}')")
 
-def check_long_exit_conditions(bot_status, market_data, trade_id, trade_symbol, trading_wrapper, socketio):
+def check_long_exit_conditions(bot_status, market_data, trade_id, trade_symbol, trading_wrapper, socketio, state_manager=None):
     """Controlla condizioni chiusura LONG"""
     should_close = market_data['candles_below'] >= bot_status['stop_candles']
     
     print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 LONG {trade_symbol} - Candele sotto EMA: {market_data['candles_below']}/{bot_status['stop_candles']}")
     
     if should_close:
-        execute_position_close(trade_id, 'LONG', trade_symbol, market_data['current_price'], trading_wrapper, socketio)
+        execute_position_close(trade_id, 'LONG', trade_symbol, market_data['current_price'], trading_wrapper, socketio, state_manager, bot_status)
 
-def check_short_exit_conditions(bot_status, market_data, trade_id, trade_symbol, trading_wrapper, socketio):
+def check_short_exit_conditions(bot_status, market_data, trade_id, trade_symbol, trading_wrapper, socketio, state_manager=None):
     """Controlla condizioni chiusura SHORT"""
     should_close = market_data['candles_above'] >= bot_status['stop_candles']
     
     print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 SHORT {trade_symbol} - Candele sopra EMA: {market_data['candles_above']}/{bot_status['stop_candles']}")
     
     if should_close:
-        execute_position_close(trade_id, 'SHORT', trade_symbol, market_data['current_price'], trading_wrapper, socketio)
+        execute_position_close(trade_id, 'SHORT', trade_symbol, market_data['current_price'], trading_wrapper, socketio, state_manager, bot_status)
 
-def execute_position_close(trade_id, side, symbol, current_price, trading_wrapper, socketio):
+def execute_position_close(trade_id, side, symbol, current_price, trading_wrapper, socketio, state_manager=None, bot_status=None):
     """Esegue chiusura posizione"""
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {'🔻' if side == 'LONG' else '🔺'} SEGNALE CHIUSURA {side}!")
     
@@ -520,19 +557,18 @@ def execute_position_close(trade_id, side, symbol, current_price, trading_wrappe
     if result['success']:
         # 🆕 Aggiorna lo stato dopo chiusura posizione
         try:
-            from flask import current_app
-            state_manager = current_app.config.get('BOT_STATE_MANAGER')
-            if state_manager:
+            if state_manager and bot_status:
                 # Controlla se ci sono ancora posizioni attive
                 active_trades = trading_wrapper.get_active_trades()
                 if len(active_trades) == 0:
                     # Nessuna posizione attiva - torna a SEEKING_ENTRY
-                    bot_status = current_app.config['BOT_STATUS']
                     state_manager.save_state_with_position(bot_status, 'SEEKING_ENTRY', trading_wrapper)
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] 💾 Stato aggiornato: ritorno a SEEKING_ENTRY")
                 else:
                     # Ci sono ancora posizioni - continua MANAGING_POSITIONS
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] 💾 {len(active_trades)} posizioni ancora attive")
+            else:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ state_manager o bot_status non disponibili per aggiornamento stato")
         except Exception as e:
             print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Errore aggiornamento stato dopo chiusura: {e}")
         
