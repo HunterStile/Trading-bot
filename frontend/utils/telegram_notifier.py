@@ -92,19 +92,71 @@ class TelegramNotifier:
     
     def notify_bot_started(self, symbol: str, operation: str, config: Dict) -> bool:
         """Notifica avvio bot"""
-        message = f"""
+        # Configurazione base
+        base_config = f"""
 🚀 <b>Trading Bot AVVIATO</b>
 
 💱 Simbolo: <code>{symbol}</code>
 📈 Operazione: <b>{operation}</b>
-⚙️ Configurazione:
+⚙️ Configurazione Base:
   • EMA: {config.get('ema_period', 'N/A')}
   • Intervallo: {config.get('interval', 'N/A')}min
   • Quantità: ${config.get('quantity', 'N/A')}
   • Stop Candele: {config.get('stop_candles', 'N/A')}
+  • Distanza: {config.get('distance', 'N/A')}%"""
+        
+        # 🆕 Strategie Avanzate
+        advanced_config = ""
+        
+        # Multi-Timeframe Exit
+        mtf_enabled = config.get('enable_multi_timeframe', False)
+        if mtf_enabled:
+            spike_threshold = config.get('spike_threshold', 'N/A')
+            mtf_candles = config.get('mtf_candles_trigger', 'N/A')
+            advanced_config += f"""
+
+🔀 <b>Multi-Timeframe Exit</b>: ✅ ATTIVO
+  • Soglia Spike: {spike_threshold}%
+  • Candele Trigger: {mtf_candles}"""
+        else:
+            advanced_config += "\r\n\r\n🔀 <b>Multi-Timeframe Exit</b>: ❌ INATTIVO"
+        
+        # Dynamic Trailing Stop
+        trailing_enabled = config.get('enable_dynamic_trailing', False)
+        if trailing_enabled:
+            trailing_percent = config.get('trailing_stop_percent', 'N/A')
+            min_distance = config.get('min_distance_for_trailing', 'N/A')
+            advanced_config += f"""
+
+📈 <b>Dynamic Trailing Stop</b>: ✅ ATTIVO
+  • Trailing Stop: {trailing_percent}%
+  • Distanza Min: {min_distance}%"""
+        else:
+            advanced_config += "\r\n\r\n📈 <b>Dynamic Trailing Stop</b>: ❌ INATTIVO"
+        
+        # Quick Exit
+        quick_enabled = config.get('enable_quick_exit', False)
+        if quick_enabled:
+            volatile_threshold = config.get('volatile_threshold', 'N/A')
+            advanced_config += f"""
+
+⚡ <b>Quick Exit</b>: ✅ ATTIVO
+  • Soglia Volatilità: {volatile_threshold}%"""
+        else:
+            advanced_config += "\r\n\r\n⚡ <b>Quick Exit</b>: ❌ INATTIVO"
+        
+        # Debug Mode
+        debug_enabled = config.get('advanced_exit_debug', False)
+        debug_status = "🔧 ON" if debug_enabled else "🔇 OFF"
+        advanced_config += f"\r\n\r\n🐛 <b>Debug Avanzato</b>: {debug_status}"
+        
+        # Messaggio finale
+        footer = f"""
 
 🎯 Il bot è ora attivo e cerca opportunità di {operation.lower()}!
-"""
+💡 Strategie avanzate configurate e pronte all'uso!"""
+        
+        message = base_config + advanced_config + footer
         return self.send_message_sync(message)
     
     def notify_bot_stopped(self, reason: str = "Manuale") -> bool:
@@ -237,6 +289,74 @@ class TelegramNotifier:
 """
         return self.send_message_sync(message)
     
+    # 🆕 NOTIFICHE STRATEGIE AVANZATE
+    
+    def notify_advanced_settings_updated(self, changes: Dict) -> bool:
+        """Notifica aggiornamento impostazioni strategie avanzate"""
+        message = "⚙️ <b>IMPOSTAZIONI AVANZATE AGGIORNATE</b>\r\n\r\n"
+        
+        for strategy, settings in changes.items():
+            if strategy == "multi_timeframe":
+                status = "✅ ATTIVO" if settings.get('enabled') else "❌ INATTIVO"
+                message += f"🔀 <b>Multi-Timeframe Exit</b>: {status}\r\n"
+                if settings.get('enabled'):
+                    message += f"  • Soglia: {settings.get('spike_threshold', 'N/A')}%\r\n"
+                    message += f"  • Candele: {settings.get('mtf_candles_trigger', 'N/A')}\r\n"
+                    
+            elif strategy == "dynamic_trailing":
+                status = "✅ ATTIVO" if settings.get('enabled') else "❌ INATTIVO"
+                message += f"\r\n📈 <b>Dynamic Trailing Stop</b>: {status}\r\n"
+                if settings.get('enabled'):
+                    message += f"  • Trailing: {settings.get('trailing_percent', 'N/A')}%\r\n"
+                    message += f"  • Distanza Min: {settings.get('min_distance', 'N/A')}%\r\n"
+                    
+            elif strategy == "quick_exit":
+                status = "✅ ATTIVO" if settings.get('enabled') else "❌ INATTIVO"
+                message += f"\r\n⚡ <b>Quick Exit</b>: {status}\r\n"
+                if settings.get('enabled'):
+                    message += f"  • Volatilità: {settings.get('volatile_threshold', 'N/A')}%\r\n"
+        
+        message += f"\r\n⏰ {datetime.now().strftime('%H:%M:%S')}"
+        return self.send_message_sync(message)
+    
+    def notify_advanced_strategy_triggered(self, strategy_name: str, details: Dict) -> bool:
+        """Notifica attivazione strategia avanzata durante il trading"""
+        symbol = details.get('symbol', 'N/A')
+        price = details.get('current_price', 'N/A')
+        ema_value = details.get('ema_value', 'N/A')
+        
+        if strategy_name == "multi_timeframe":
+            emoji = "🔀"
+            strategy_display = "Multi-Timeframe Exit"
+            reason = details.get('reason', 'Spike rilevato su timeframe minore')
+        elif strategy_name == "dynamic_trailing":
+            emoji = "📈"
+            strategy_display = "Dynamic Trailing Stop"
+            reason = details.get('reason', 'Trailing stop attivato')
+        elif strategy_name == "quick_exit":
+            emoji = "⚡"
+            strategy_display = "Quick Exit"
+            reason = details.get('reason', 'Alta volatilità rilevata')
+        else:
+            emoji = "🎯"
+            strategy_display = strategy_name
+            reason = details.get('reason', 'Strategia attivata')
+        
+        message = f"""
+{emoji} <b>STRATEGIA AVANZATA ATTIVATA</b>
+
+🧠 Strategia: <b>{strategy_display}</b>
+💱 Simbolo: <code>{symbol}</code>
+💰 Prezzo attuale: ${price}
+📊 EMA: ${ema_value}
+
+📋 Motivo: {reason}
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+💡 Controlla il dashboard per i dettagli
+"""
+        return self.send_message_sync(message)
+    
     # 🔧 COMANDI BOT
     
     def get_status_message(self) -> str:
@@ -311,4 +431,17 @@ def notify_bot_recovery(recovery_info: Dict) -> bool:
     """Notifica rapida recovery"""
     if telegram_notifier:
         return telegram_notifier.notify_recovery_completed(recovery_info)
+    return False
+
+# 🆕 Funzioni utilità per strategie avanzate
+def notify_advanced_settings_update(changes: Dict) -> bool:
+    """Notifica rapida aggiornamento impostazioni avanzate"""
+    if telegram_notifier:
+        return telegram_notifier.notify_advanced_settings_updated(changes)
+    return False
+
+def notify_strategy_activation(strategy_name: str, details: Dict) -> bool:
+    """Notifica rapida attivazione strategia avanzata"""
+    if telegram_notifier:
+        return telegram_notifier.notify_advanced_strategy_triggered(strategy_name, details)
     return False

@@ -46,8 +46,29 @@ def start_bot():
                 'open_candles': int(data.get('open_candles', 3)),
                 'stop_candles': int(data.get('stop_candles', 3)),
                 'distance': float(data.get('distance', 1)),
-                'category': 'linear'
+                'category': 'linear',
+                
+                # 🆕 ADVANCED EXIT STRATEGIES SETTINGS
+                # Multi-Timeframe Exit
+                'enable_multi_timeframe': bool(data.get('enable_multi_timeframe', True)),
+                'spike_threshold': float(data.get('spike_threshold', 3.0)),
+                'mtf_candles_trigger': int(data.get('mtf_candles_trigger', 1)),
+                
+                # Dynamic Trailing Stop
+                'enable_dynamic_trailing': bool(data.get('enable_dynamic_trailing', True)),
+                'trailing_stop_percent': float(data.get('trailing_stop_percent', 2.0)),
+                'min_distance_for_trailing': float(data.get('min_distance_for_trailing', 2.0)),
+                
+                # Quick Exit
+                'enable_quick_exit': bool(data.get('enable_quick_exit', True)),
+                'volatile_threshold': float(data.get('volatile_threshold', 5.0)),
+                'advanced_exit_debug': bool(data.get('advanced_exit_debug', True))
             })
+            
+            print(f"🔧 Configurazione bot aggiornata con strategie avanzate:")
+            print(f"   Multi-Timeframe: {bot_status['enable_multi_timeframe']} (soglia: {bot_status['spike_threshold']}%)")
+            print(f"   Dynamic Trailing: {bot_status['enable_dynamic_trailing']} (trailing: {bot_status['trailing_stop_percent']}%)")
+            print(f"   Quick Exit: {bot_status['enable_quick_exit']} (volatilità: {bot_status['volatile_threshold']}%)")
         
         bot_status['running'] = True
         bot_status['last_update'] = datetime.now().isoformat()
@@ -68,14 +89,29 @@ def start_bot():
         bot_thread.daemon = True
         bot_thread.start()
         
-        # ✅ NOTIFICA TELEGRAM: Bot avviato
+        # ✅ NOTIFICA TELEGRAM: Bot avviato con configurazione completa
         telegram_notifier = current_app.config.get('TELEGRAM_NOTIFIER')
         if telegram_notifier:
             config_for_telegram = {
+                # Configurazione base
                 'ema_period': bot_status['ema_period'],
                 'interval': bot_status['interval'],
                 'quantity': bot_status['quantity'],
-                'stop_candles': bot_status['stop_candles']
+                'stop_candles': bot_status['stop_candles'],
+                'distance': bot_status['distance'],
+                
+                # 🆕 Strategie avanzate
+                'enable_multi_timeframe': bot_status.get('enable_multi_timeframe', True),
+                'spike_threshold': bot_status.get('spike_threshold', 3.0),
+                'mtf_candles_trigger': bot_status.get('mtf_candles_trigger', 1),
+                
+                'enable_dynamic_trailing': bot_status.get('enable_dynamic_trailing', True),
+                'trailing_stop_percent': bot_status.get('trailing_stop_percent', 2.0),
+                'min_distance_for_trailing': bot_status.get('min_distance_for_trailing', 2.0),
+                
+                'enable_quick_exit': bot_status.get('enable_quick_exit', True),
+                'volatile_threshold': bot_status.get('volatile_threshold', 5.0),
+                'advanced_exit_debug': bot_status.get('advanced_exit_debug', True)
             }
             operation_text = "LONG" if bot_status['operation'] else "SHORT"
             telegram_notifier.notify_bot_started(bot_status['symbol'], operation_text, config_for_telegram)
@@ -202,6 +238,7 @@ def get_bot_config():
                 can_auto_restart = True
         
         current_config = {
+            # Configurazione base
             'symbol': bot_status['symbol'],
             'quantity': bot_status['quantity'],
             'operation': bot_status['operation'],
@@ -212,7 +249,20 @@ def get_bot_config():
             'distance': bot_status['distance'],
             'running': bot_status['running'],
             'session_id': bot_status.get('current_session_id'),
-            'total_trades': bot_status.get('total_trades', 0)
+            'total_trades': bot_status.get('total_trades', 0),
+            
+            # 🆕 Advanced Exit Strategies Settings
+            'enable_multi_timeframe': bot_status.get('enable_multi_timeframe', True),
+            'spike_threshold': bot_status.get('spike_threshold', 3.0),
+            'mtf_candles_trigger': bot_status.get('mtf_candles_trigger', 1),
+            
+            'enable_dynamic_trailing': bot_status.get('enable_dynamic_trailing', True),
+            'trailing_stop_percent': bot_status.get('trailing_stop_percent', 2.0),
+            'min_distance_for_trailing': bot_status.get('min_distance_for_trailing', 2.0),
+            
+            'enable_quick_exit': bot_status.get('enable_quick_exit', True),
+            'volatile_threshold': bot_status.get('volatile_threshold', 5.0),
+            'advanced_exit_debug': bot_status.get('advanced_exit_debug', True)
         }
         
         return jsonify({
@@ -274,8 +324,54 @@ def update_bot_settings():
     
     try:
         data = request.get_json()
+        
+        # Salva impostazioni precedenti per confronto
+        old_settings = {
+            'enable_multi_timeframe': bot_status.get('enable_multi_timeframe'),
+            'enable_dynamic_trailing': bot_status.get('enable_dynamic_trailing'),
+            'enable_quick_exit': bot_status.get('enable_quick_exit')
+        }
+        
         bot_status.update(data)
         bot_status['last_update'] = datetime.now().isoformat()
+        
+        # 📡 Verifica se sono cambiate le strategie avanzate e invia notifica Telegram
+        new_settings = {
+            'enable_multi_timeframe': bot_status.get('enable_multi_timeframe'),
+            'enable_dynamic_trailing': bot_status.get('enable_dynamic_trailing'),
+            'enable_quick_exit': bot_status.get('enable_quick_exit')
+        }
+        
+        # Controlla se ci sono stati cambiamenti nelle strategie avanzate
+        advanced_changes = {}
+        
+        if old_settings.get('enable_multi_timeframe') != new_settings.get('enable_multi_timeframe'):
+            advanced_changes['multi_timeframe'] = {
+                'enabled': new_settings.get('enable_multi_timeframe', False),
+                'spike_threshold': bot_status.get('spike_threshold', 3.0),
+                'mtf_candles_trigger': bot_status.get('mtf_candles_trigger', 1)
+            }
+        
+        if old_settings.get('enable_dynamic_trailing') != new_settings.get('enable_dynamic_trailing'):
+            advanced_changes['dynamic_trailing'] = {
+                'enabled': new_settings.get('enable_dynamic_trailing', False),
+                'trailing_percent': bot_status.get('trailing_stop_percent', 2.0),
+                'min_distance': bot_status.get('min_distance_for_trailing', 2.0)
+            }
+        
+        if old_settings.get('enable_quick_exit') != new_settings.get('enable_quick_exit'):
+            advanced_changes['quick_exit'] = {
+                'enabled': new_settings.get('enable_quick_exit', False),
+                'volatile_threshold': bot_status.get('volatile_threshold', 5.0)
+            }
+        
+        # 📨 Invia notifica Telegram se ci sono stati cambiamenti
+        if advanced_changes:
+            telegram_notifier = current_app.config.get('TELEGRAM_NOTIFIER')
+            if telegram_notifier:
+                from utils.telegram_notifier import notify_advanced_settings_update
+                notify_advanced_settings_update(advanced_changes)
+                print(f"📡 Notifica Telegram inviata per aggiornamenti strategie avanzate: {list(advanced_changes.keys())}")
         
         return jsonify({'success': True, 'message': 'Impostazioni aggiornate'})
     except Exception as e:

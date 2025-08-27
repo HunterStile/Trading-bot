@@ -84,8 +84,31 @@ bot_status = {
     'current_session_id': None,
     'session_start_time': None,
     'total_trades': 0,
-    'session_pnl': 0
+    'session_pnl': 0,
+    
+    # 🆕 ADVANCED EXIT STRATEGIES CONFIGURATION
+    # Multi-Timeframe Exit Settings
+    'enable_multi_timeframe': True,   # Attiva/disattiva Multi-Timeframe Exit
+    'spike_threshold': 3.0,           # % dalla EMA per attivare MTF monitoring
+    'mtf_candles_trigger': 1,         # Candele necessarie su timeframe minore per chiudere
+    
+    # Dynamic Trailing Stop Settings  
+    'enable_dynamic_trailing': True,  # Attiva/disattiva Trailing Stop Dinamico
+    'trailing_stop_percent': 2.0,     # % trailing stop
+    'min_distance_for_trailing': 2.0, # Distanza minima EMA per attivare trailing
+    
+    # Quick Exit Settings
+    'enable_quick_exit': True,        # Attiva/disattiva Quick Exit su spike
+    'volatile_threshold': 5.0,        # % dalla EMA per quick exit immediato
+    
+    # Advanced Exit Debug
+    'advanced_exit_debug': True       # Logging dettagliato per strategie avanzate
 }
+
+print("⚙️ Advanced Exit Strategies inizializzate:")
+print(f"   🔀 Multi-Timeframe Exit: {'ATTIVO' if bot_status['enable_multi_timeframe'] else 'INATTIVO'}")
+print(f"   📈 Dynamic Trailing Stop: {'ATTIVO' if bot_status['enable_dynamic_trailing'] else 'INATTIVO'}")
+print(f"   ⚡ Quick Exit: {'ATTIVO' if bot_status['enable_quick_exit'] else 'INATTIVO'}")
 
 # Condividi le variabili globali con i blueprints
 app.config.update({

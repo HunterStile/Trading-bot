@@ -207,7 +207,145 @@
                         </div>
                     </div>
                     
-                    <div class="d-flex gap-2">
+                    <!-- 🆕 ADVANCED EXIT STRATEGIES SECTION -->
+                    <div class="mt-4">
+                        <h6 class="mb-3">
+                            <i class="fas fa-cog"></i> Strategie di Uscita Avanzate
+                            <button type="button" class="btn btn-outline-info btn-sm ms-2" 
+                                    data-bs-toggle="collapse" data-bs-target="#advanced-exit-settings" 
+                                    aria-expanded="false">
+                                <i class="fas fa-chevron-down"></i> Mostra/Nascondi
+                            </button>
+                        </h6>
+                        
+                        <div class="collapse" id="advanced-exit-settings">
+                            <div class="border rounded p-3 bg-dark">
+                                <div class="row">
+                                    <!-- Multi-Timeframe Exit -->
+                                    <div class="col-md-4">
+                                        <div class="card h-100">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">
+                                                    <i class="fas fa-layer-group"></i> Multi-Timeframe Exit
+                                                </h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="form-check form-switch mb-3">
+                                                    <input class="form-check-input" type="checkbox" 
+                                                           id="enable_multi_timeframe" name="enable_multi_timeframe">
+                                                    <label class="form-check-label" for="enable_multi_timeframe">
+                                                        Attiva MTF Exit
+                                                    </label>
+                                                </div>
+                                                
+                                                <div class="mb-3">
+                                                    <label for="spike_threshold" class="form-label">Soglia Spike (%)</label>
+                                                    <input type="number" class="form-control form-control-sm" 
+                                                           id="spike_threshold" name="spike_threshold" 
+                                                           value="3.0" min="1.0" max="10.0" step="0.5">
+                                                    <div class="form-text">Distanza da EMA per attivare MTF</div>
+                                                </div>
+                                                
+                                                <div class="mb-3">
+                                                    <label for="mtf_candles_trigger" class="form-label">Candele Trigger</label>
+                                                    <input type="number" class="form-control form-control-sm" 
+                                                           id="mtf_candles_trigger" name="mtf_candles_trigger" 
+                                                           value="1" min="1" max="5">
+                                                    <div class="form-text">Candele contro-trend su timeframe minore</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Dynamic Trailing Stop -->
+                                    <div class="col-md-4">
+                                        <div class="card h-100">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">
+                                                    <i class="fas fa-chart-line"></i> Dynamic Trailing Stop
+                                                </h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="form-check form-switch mb-3">
+                                                    <input class="form-check-input" type="checkbox" 
+                                                           id="enable_dynamic_trailing" name="enable_dynamic_trailing">
+                                                    <label class="form-check-label" for="enable_dynamic_trailing">
+                                                        Attiva Trailing Stop
+                                                    </label>
+                                                </div>
+                                                
+                                                <div class="mb-3">
+                                                    <label for="trailing_stop_percent" class="form-label">Trailing Stop (%)</label>
+                                                    <input type="number" class="form-control form-control-sm" 
+                                                           id="trailing_stop_percent" name="trailing_stop_percent" 
+                                                           value="2.0" min="0.5" max="5.0" step="0.1">
+                                                    <div class="form-text">Percentuale trailing stop</div>
+                                                </div>
+                                                
+                                                <div class="mb-3">
+                                                    <label for="min_distance_for_trailing" class="form-label">Distanza Min. (%)</label>
+                                                    <input type="number" class="form-control form-control-sm" 
+                                                           id="min_distance_for_trailing" name="min_distance_for_trailing" 
+                                                           value="2.0" min="1.0" max="5.0" step="0.1">
+                                                    <div class="form-text">Distanza minima da EMA per attivare</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Quick Exit on Spike -->
+                                    <div class="col-md-4">
+                                        <div class="card h-100">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">
+                                                    <i class="fas fa-bolt"></i> Quick Exit
+                                                </h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="form-check form-switch mb-3">
+                                                    <input class="form-check-input" type="checkbox" 
+                                                           id="enable_quick_exit" name="enable_quick_exit">
+                                                    <label class="form-check-label" for="enable_quick_exit">
+                                                        Attiva Quick Exit
+                                                    </label>
+                                                </div>
+                                                
+                                                <div class="mb-3">
+                                                    <label for="volatile_threshold" class="form-label">Soglia Volatilità (%)</label>
+                                                    <input type="number" class="form-control form-control-sm" 
+                                                           id="volatile_threshold" name="volatile_threshold" 
+                                                           value="5.0" min="3.0" max="15.0" step="0.5">
+                                                    <div class="form-text">Distanza da EMA per exit immediato</div>
+                                                </div>
+                                                
+                                                <div class="form-check form-switch mb-3">
+                                                    <input class="form-check-input" type="checkbox" 
+                                                           id="advanced_exit_debug" name="advanced_exit_debug">
+                                                    <label class="form-check-label" for="advanced_exit_debug">
+                                                        Debug Mode
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Advanced Exit Status Info -->
+                                <div class="mt-3">
+                                    <div class="alert alert-info" role="alert">
+                                        <h6><i class="fas fa-info-circle"></i> Come funzionano le Strategie Avanzate:</h6>
+                                        <ul class="mb-0">
+                                            <li><strong>Multi-Timeframe:</strong> Monitora timeframe più piccoli quando il prezzo si allontana dalla EMA</li>
+                                            <li><strong>Dynamic Trailing:</strong> Stop-loss che segue il prezzo in caso di movimenti favorevoli</li>
+                                            <li><strong>Quick Exit:</strong> Uscita immediata su movimenti estremi (>5% dalla EMA)</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2 mt-3">
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-save"></i> Salva Configurazione
                         </button>
@@ -433,6 +571,7 @@ function loadSettings() {
     fetch('/api/bot/status')
         .then(response => response.json())
         .then(data => {
+            // Impostazioni base
             document.getElementById('symbol').value = data.symbol || 'AVAXUSDT';
             document.getElementById('quantity').value = data.quantity || 50;
             document.getElementById('operation').value = data.operation || true;
@@ -441,6 +580,28 @@ function loadSettings() {
             document.getElementById('open_candles').value = data.open_candles || 3;
             document.getElementById('stop_candles').value = data.stop_candles || 3;
             document.getElementById('distance').value = data.distance || 1;
+            
+            // 🆕 ADVANCED EXIT STRATEGIES SETTINGS
+            // Multi-Timeframe Exit
+            document.getElementById('enable_multi_timeframe').checked = data.enable_multi_timeframe !== false;
+            document.getElementById('spike_threshold').value = data.spike_threshold || 3.0;
+            document.getElementById('mtf_candles_trigger').value = data.mtf_candles_trigger || 1;
+            
+            // Dynamic Trailing Stop
+            document.getElementById('enable_dynamic_trailing').checked = data.enable_dynamic_trailing !== false;
+            document.getElementById('trailing_stop_percent').value = data.trailing_stop_percent || 2.0;
+            document.getElementById('min_distance_for_trailing').value = data.min_distance_for_trailing || 2.0;
+            
+            // Quick Exit
+            document.getElementById('enable_quick_exit').checked = data.enable_quick_exit !== false;
+            document.getElementById('volatile_threshold').value = data.volatile_threshold || 5.0;
+            document.getElementById('advanced_exit_debug').checked = data.advanced_exit_debug !== false;
+            
+            console.log('🔧 Impostazioni avanzate caricate:', {
+                multi_timeframe: data.enable_multi_timeframe,
+                dynamic_trailing: data.enable_dynamic_trailing,
+                quick_exit: data.enable_quick_exit
+            });
         })
         .catch(error => {
             console.error('Errore caricamento impostazioni:', error);
@@ -452,15 +613,42 @@ function saveSettings() {
     const formData = new FormData(document.getElementById('bot-settings-form'));
     const settings = {};
     
+    // Lista campi numerici
+    const numericFields = [
+        'quantity', 'ema_period', 'interval', 'open_candles', 'stop_candles', 'distance',
+        // 🆕 Campi numerici Advanced Exit Strategies
+        'spike_threshold', 'mtf_candles_trigger', 'trailing_stop_percent', 
+        'min_distance_for_trailing', 'volatile_threshold'
+    ];
+    
+    // Lista campi boolean
+    const booleanFields = [
+        'operation',
+        // 🆕 Campi boolean Advanced Exit Strategies
+        'enable_multi_timeframe', 'enable_dynamic_trailing', 'enable_quick_exit', 'advanced_exit_debug'
+    ];
+    
     for (let [key, value] of formData.entries()) {
-        if (key === 'operation') {
+        if (booleanFields.includes(key)) {
             settings[key] = value === 'true';
-        } else if (['quantity', 'ema_period', 'interval', 'open_candles', 'stop_candles', 'distance'].includes(key)) {
+        } else if (numericFields.includes(key)) {
             settings[key] = parseFloat(value);
         } else {
             settings[key] = value;
         }
     }
+    
+    // 🆕 Gestione speciale per i checkbox che non vengono inviati se non selezionati
+    booleanFields.forEach(field => {
+        if (!(field in settings)) {
+            const element = document.getElementById(field);
+            if (element && element.type === 'checkbox') {
+                settings[field] = element.checked;
+            }
+        }
+    });
+    
+    console.log('📁 Impostazioni da salvare:', settings);
     
     fetch('/api/bot/settings', {
         method: 'POST',
@@ -472,8 +660,8 @@ function saveSettings() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showAlert('Impostazioni salvate con successo', 'success');
-            addLog(`[${new Date().toLocaleTimeString()}] Impostazioni aggiornate`, 'info');
+            showAlert('⚙️ Impostazioni salvate con successo (incluse strategie avanzate)', 'success');
+            addLog(`[${new Date().toLocaleTimeString()}] ⚙️ Impostazioni aggiornate (avanzate incluse)`, 'info');
         } else {
             showAlert('Errore nel salvataggio: ' + data.error, 'danger');
         }
@@ -619,7 +807,8 @@ function restartBot() {
 
 // Ottieni impostazioni dal form
 function getFormSettings() {
-    return {
+    const settings = {
+        // Impostazioni base
         symbol: document.getElementById('symbol').value,
         quantity: parseFloat(document.getElementById('quantity').value),
         operation: document.getElementById('operation').value === 'true',
@@ -628,8 +817,39 @@ function getFormSettings() {
         open_candles: parseInt(document.getElementById('open_candles').value),
         stop_candles: parseInt(document.getElementById('stop_candles').value),
         distance: parseFloat(document.getElementById('distance').value),
-        category: 'linear'
+        category: 'linear',
+        
+        // 🆕 ADVANCED EXIT STRATEGIES SETTINGS
+        // Multi-Timeframe Exit
+        enable_multi_timeframe: document.getElementById('enable_multi_timeframe').checked,
+        spike_threshold: parseFloat(document.getElementById('spike_threshold').value),
+        mtf_candles_trigger: parseInt(document.getElementById('mtf_candles_trigger').value),
+        
+        // Dynamic Trailing Stop
+        enable_dynamic_trailing: document.getElementById('enable_dynamic_trailing').checked,
+        trailing_stop_percent: parseFloat(document.getElementById('trailing_stop_percent').value),
+        min_distance_for_trailing: parseFloat(document.getElementById('min_distance_for_trailing').value),
+        
+        // Quick Exit
+        enable_quick_exit: document.getElementById('enable_quick_exit').checked,
+        volatile_threshold: parseFloat(document.getElementById('volatile_threshold').value),
+        advanced_exit_debug: document.getElementById('advanced_exit_debug').checked
     };
+    
+    console.log('📝 Impostazioni form raccolte:', {
+        base: {
+            symbol: settings.symbol,
+            operation: settings.operation ? 'LONG' : 'SHORT',
+            ema_period: settings.ema_period
+        },
+        advanced: {
+            multi_timeframe: settings.enable_multi_timeframe,
+            dynamic_trailing: settings.enable_dynamic_trailing,
+            quick_exit: settings.enable_quick_exit
+        }
+    });
+    
+    return settings;
 }
 
 // Aggiorna stato bot UI

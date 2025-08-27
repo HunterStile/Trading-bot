@@ -6,6 +6,9 @@ from trading_functions import (
     media_esponenziale, mostra_saldo
 )
 from .crash_recovery import create_crash_recovery_system
+from .advanced_exit_strategies import (
+    create_advanced_exit_manager, analyze_advanced_exit_conditions
+)
 
 def run_trading_bot(bot_status, app_config):
     """Esegue il bot di trading con crash recovery e state management avanzato"""
@@ -567,28 +570,123 @@ def analyze_exit_signals(bot_status, market_data, active_trades, trading_wrapper
             print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Side non riconosciuto: '{trade_side}' (normalizzato: '{trade_side_normalized}')")
 
 def check_long_exit_conditions(bot_status, market_data, trade_id, trade_symbol, trading_wrapper, socketio, state_manager=None):
-    """Controlla condizioni chiusura LONG"""
-    should_close = market_data['candles_below'] >= bot_status['stop_candles']
+    """Controlla condizioni chiusura LONG con strategie avanzate"""
+    # Standard exit condition
+    standard_exit = market_data['candles_below'] >= bot_status['stop_candles']
     
     print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 LONG {trade_symbol} - Candele sotto EMA: {market_data['candles_below']}/{bot_status['stop_candles']}")
     
+    # 🆕 ADVANCED EXIT ANALYSIS
+    should_close = standard_exit
+    close_reason = "EMA_STOP"
+    
+    # Controlla se le strategie avanzate sono attivate
+    advanced_exits_enabled = any([
+        bot_status.get('enable_multi_timeframe', False),
+        bot_status.get('enable_dynamic_trailing', False),
+        bot_status.get('enable_quick_exit', False)
+    ])
+    
+    if advanced_exits_enabled:
+        try:
+            # Crea manager delle strategie avanzate
+            advanced_exit_manager = create_advanced_exit_manager(bot_status)
+            
+            # Informazioni trade necessarie per analisi avanzata
+            trade_info = {
+                'side': 'BUY',  # LONG position
+                'symbol': trade_symbol
+            }
+            
+            # Analizza condizioni di uscita avanzate
+            advanced_result = analyze_advanced_exit_conditions(
+                advanced_exit_manager, trade_id, trade_info, bot_status, market_data
+            )
+            
+            if advanced_result['should_close']:
+                should_close = True
+                close_reason = f"ADVANCED_EXIT_{advanced_result['exit_type']}"
+                
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🚨 ADVANCED EXIT TRIGGERED!")
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 📋 Tipo: {advanced_result['exit_type']}")
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 📋 Motivo: {advanced_result['reason']}")
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 📋 Priorità: {advanced_result.get('priority', 'UNKNOWN')}")
+            else:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Strategie avanzate: Nessuna uscita")
+                if bot_status.get('advanced_exit_debug', False):
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🐛 Advanced Debug: {advanced_result['reason']}")
+                
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Errore strategie avanzate LONG: {e}")
+            # Fallback a logica standard
+    
     if should_close:
-        execute_position_close(trade_id, 'LONG', trade_symbol, market_data['current_price'], trading_wrapper, socketio, state_manager, bot_status)
+        execute_position_close(trade_id, 'LONG', trade_symbol, market_data['current_price'], 
+                              trading_wrapper, socketio, state_manager, bot_status, close_reason)
 
 def check_short_exit_conditions(bot_status, market_data, trade_id, trade_symbol, trading_wrapper, socketio, state_manager=None):
-    """Controlla condizioni chiusura SHORT"""
-    should_close = market_data['candles_above'] >= bot_status['stop_candles']
+    """Controlla condizioni chiusura SHORT con strategie avanzate"""
+    # Standard exit condition
+    standard_exit = market_data['candles_above'] >= bot_status['stop_candles']
     
     print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 SHORT {trade_symbol} - Candele sopra EMA: {market_data['candles_above']}/{bot_status['stop_candles']}")
     
+    # 🆕 ADVANCED EXIT ANALYSIS
+    should_close = standard_exit
+    close_reason = "EMA_STOP"
+    
+    # Controlla se le strategie avanzate sono attivate
+    advanced_exits_enabled = any([
+        bot_status.get('enable_multi_timeframe', False),
+        bot_status.get('enable_dynamic_trailing', False),
+        bot_status.get('enable_quick_exit', False)
+    ])
+    
+    if advanced_exits_enabled:
+        try:
+            # Crea manager delle strategie avanzate
+            advanced_exit_manager = create_advanced_exit_manager(bot_status)
+            
+            # Informazioni trade necessarie per analisi avanzata
+            trade_info = {
+                'side': 'SELL',  # SHORT position
+                'symbol': trade_symbol
+            }
+            
+            # Analizza condizioni di uscita avanzate
+            advanced_result = analyze_advanced_exit_conditions(
+                advanced_exit_manager, trade_id, trade_info, bot_status, market_data
+            )
+            
+            if advanced_result['should_close']:
+                should_close = True
+                close_reason = f"ADVANCED_EXIT_{advanced_result['exit_type']}"
+                
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🚨 ADVANCED EXIT TRIGGERED!")
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 📋 Tipo: {advanced_result['exit_type']}")
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 📋 Motivo: {advanced_result['reason']}")
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 📋 Priorità: {advanced_result.get('priority', 'UNKNOWN')}")
+            else:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Strategie avanzate: Nessuna uscita")
+                if bot_status.get('advanced_exit_debug', False):
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🐛 Advanced Debug: {advanced_result['reason']}")
+                
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Errore strategie avanzate SHORT: {e}")
+            # Fallback a logica standard
+    
     if should_close:
-        execute_position_close(trade_id, 'SHORT', trade_symbol, market_data['current_price'], trading_wrapper, socketio, state_manager, bot_status)
+        execute_position_close(trade_id, 'SHORT', trade_symbol, market_data['current_price'], 
+                              trading_wrapper, socketio, state_manager, bot_status, close_reason)
 
-def execute_position_close(trade_id, side, symbol, current_price, trading_wrapper, socketio, state_manager=None, bot_status=None):
+def execute_position_close(trade_id, side, symbol, current_price, trading_wrapper, socketio, state_manager=None, bot_status=None, close_reason="EMA_STOP"):
     """Esegue chiusura posizione"""
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {'🔻' if side == 'LONG' else '🔺'} SEGNALE CHIUSURA {side}!")
     
-    result = trading_wrapper.close_position(trade_id, current_price, "EMA_STOP")
+    if close_reason != "EMA_STOP":
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Motivo chiusura: {close_reason}")
+    
+    result = trading_wrapper.close_position(trade_id, current_price, close_reason)
     
     if result['success']:
         # 📱 Invia notifica Telegram per chiusura posizione
