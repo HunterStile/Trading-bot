@@ -584,7 +584,8 @@ def check_long_exit_conditions(bot_status, market_data, trade_id, trade_symbol, 
     advanced_exits_enabled = any([
         bot_status.get('enable_multi_timeframe', False),
         bot_status.get('enable_dynamic_trailing', False),
-        bot_status.get('enable_quick_exit', False)
+        bot_status.get('enable_quick_exit', False),
+        bot_status.get('enable_fixed_stop_loss', False)
     ])
     
     if advanced_exits_enabled:
@@ -593,9 +594,15 @@ def check_long_exit_conditions(bot_status, market_data, trade_id, trade_symbol, 
             advanced_exit_manager = create_advanced_exit_manager(bot_status)
             
             # Informazioni trade necessarie per analisi avanzata
+            # Ottieni entry_price dal trading_wrapper per Fixed Stop Loss
+            active_trades = trading_wrapper.get_active_trades()
+            trade_data = active_trades.get(trade_id, {})
+            entry_price = trade_data.get('entry_price', 0)
+            
             trade_info = {
                 'side': 'BUY',  # LONG position
-                'symbol': trade_symbol
+                'symbol': trade_symbol,
+                'entry_price': entry_price
             }
             
             # Analizza condizioni di uscita avanzate
@@ -639,7 +646,8 @@ def check_short_exit_conditions(bot_status, market_data, trade_id, trade_symbol,
     advanced_exits_enabled = any([
         bot_status.get('enable_multi_timeframe', False),
         bot_status.get('enable_dynamic_trailing', False),
-        bot_status.get('enable_quick_exit', False)
+        bot_status.get('enable_quick_exit', False),
+        bot_status.get('enable_fixed_stop_loss', False)
     ])
     
     if advanced_exits_enabled:
@@ -648,9 +656,15 @@ def check_short_exit_conditions(bot_status, market_data, trade_id, trade_symbol,
             advanced_exit_manager = create_advanced_exit_manager(bot_status)
             
             # Informazioni trade necessarie per analisi avanzata
+            # Ottieni entry_price dal trading_wrapper per Fixed Stop Loss
+            active_trades = trading_wrapper.get_active_trades()
+            trade_data = active_trades.get(trade_id, {})
+            entry_price = trade_data.get('entry_price', 0)
+            
             trade_info = {
                 'side': 'SELL',  # SHORT position
-                'symbol': trade_symbol
+                'symbol': trade_symbol,
+                'entry_price': entry_price
             }
             
             # Analizza condizioni di uscita avanzate

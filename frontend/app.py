@@ -101,6 +101,10 @@ bot_status = {
     'enable_quick_exit': True,        # Attiva/disattiva Quick Exit su spike
     'volatile_threshold': 5.0,        # % dalla EMA per quick exit immediato
     
+    # Fixed Stop Loss Settings
+    'enable_fixed_stop_loss': True,   # Attiva/disattiva Stop Loss Fisso
+    'stop_loss_percent': 3.0,         # % Stop Loss fisso dal prezzo di entrata
+    
     # Advanced Exit Debug
     'advanced_exit_debug': True       # Logging dettagliato per strategie avanzate
 }
@@ -109,6 +113,7 @@ print("⚙️ Advanced Exit Strategies inizializzate:")
 print(f"   🔀 Multi-Timeframe Exit: {'ATTIVO' if bot_status['enable_multi_timeframe'] else 'INATTIVO'}")
 print(f"   📈 Dynamic Trailing Stop: {'ATTIVO' if bot_status['enable_dynamic_trailing'] else 'INATTIVO'}")
 print(f"   ⚡ Quick Exit: {'ATTIVO' if bot_status['enable_quick_exit'] else 'INATTIVO'}")
+print(f"   🛑 Fixed Stop Loss: {'ATTIVO' if bot_status['enable_fixed_stop_loss'] else 'INATTIVO'} ({bot_status['stop_loss_percent']}%)")
 
 # Condividi le variabili globali con i blueprints
 app.config.update({

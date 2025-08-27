@@ -7,6 +7,7 @@ i pump&dump tipici delle criptovalute:
 1. Multi-Timeframe Exit: Monitoraggio timeframe più piccoli quando prezzo si allontana
 2. Trailing Stop Dinamico: Stop più aggressivi quando c'è volatilità alta
 3. Quick Exit su spike: Uscite rapide in caso di movimenti anomali
+4. Fixed Stop Loss: Stop loss fisso basato sul prezzo di entrata della posizione
 
 Author: Luigi's Trading Bot
 """
@@ -27,6 +28,7 @@ class AdvancedExitManager:
         self.config = config
         self.active_trailing_stops = {}  # {trade_id: trailing_data}
         self.mtf_monitors = {}           # {trade_id: multi_timeframe_data}
+        self.fixed_stop_losses = {}      # {trade_id: fixed_stop_data}
         
     def should_use_advanced_exit(self, current_price: float, ema_value: float, 
                                distance_percent: float) -> Dict[str, bool]:
@@ -45,7 +47,8 @@ class AdvancedExitManager:
         return {
             'use_multi_timeframe': abs_distance >= spike_threshold,
             'use_dynamic_trailing': abs_distance >= spike_threshold,
-            'use_quick_exit': abs_distance >= volatile_threshold
+            'use_quick_exit': abs_distance >= volatile_threshold,
+            'use_fixed_stop_loss': True  # Fixed stop loss è sempre attivo se abilitato
         }
     
     def analyze_multi_timeframe_exit(self, trade_id: str, trade_info: Dict, 
@@ -178,6 +181,62 @@ class AdvancedExitManager:
             print(f"[SPIKE] Errore Quick Exit: {e}")
             return {'should_close': False, 'reason': f'Spike Error: {e}'}
     
+    def analyze_fixed_stop_loss(self, trade_id: str, trade_info: Dict, 
+                               current_price: float) -> Dict[str, Any]:
+        """
+        Implementa Fixed Stop Loss Strategy
+        
+        Stop loss fisso basato sul prezzo di entrata della posizione.
+        Viene calcolato una sola volta all'apertura del trade e rimane fisso.
+        """
+        try:
+            # Inizializza fixed stop loss se non esiste
+            if trade_id not in self.fixed_stop_losses:
+                self._initialize_fixed_stop_loss(trade_id, trade_info)
+            
+            fixed_stop_data = self.fixed_stop_losses[trade_id]
+            trade_side = trade_info['side'].upper()
+            stop_price = fixed_stop_data['stop_price']
+            entry_price = fixed_stop_data['entry_price']
+            stop_loss_percent = fixed_stop_data['stop_loss_percent']
+            
+            # Controlla se il prezzo corrente ha attivato lo stop loss
+            should_close = False
+            reason = ""
+            
+            if trade_side == 'BUY':  # Long position
+                # Per long: chiudi se prezzo scende sotto lo stop loss
+                if current_price <= stop_price:
+                    should_close = True
+                    loss_percent = ((current_price - entry_price) / entry_price) * 100
+                    reason = f"FIXED STOP LOSS LONG: ${current_price:.4f} <= ${stop_price:.4f} (Perdita: {loss_percent:.2f}%)"
+                else:
+                    reason = f"Stop Loss LONG non attivato: ${current_price:.4f} > ${stop_price:.4f}"
+            
+            elif trade_side == 'SELL':  # Short position
+                # Per short: chiudi se prezzo sale sopra lo stop loss
+                if current_price >= stop_price:
+                    should_close = True
+                    loss_percent = ((entry_price - current_price) / entry_price) * 100
+                    reason = f"FIXED STOP LOSS SHORT: ${current_price:.4f} >= ${stop_price:.4f} (Perdita: {loss_percent:.2f}%)"
+                else:
+                    reason = f"Stop Loss SHORT non attivato: ${current_price:.4f} < ${stop_price:.4f}"
+            
+            return {
+                'should_close': should_close,
+                'reason': reason,
+                'fixed_stop_data': {
+                    'entry_price': entry_price,
+                    'stop_price': stop_price,
+                    'stop_loss_percent': stop_loss_percent,
+                    'current_distance': abs((current_price - stop_price) / stop_price * 100)
+                }
+            }
+            
+        except Exception as e:
+            print(f"[FSL] Errore Fixed Stop Loss: {e}")
+            return {'should_close': False, 'reason': f'FSL Error: {e}'}
+    
     def _get_smaller_interval(self, current_interval: int) -> List[int]:
         """Restituisce timeframe più piccoli disponibili"""
         # Mappa timeframe disponibili (in minuti)
@@ -296,12 +355,44 @@ class AdvancedExitManager:
         
         return False, f"Trailing stop non attivato (${current_price:.4f} vs ${stop_price:.4f})"
     
+    def _initialize_fixed_stop_loss(self, trade_id: str, trade_info: Dict):
+        """Inizializza fixed stop loss per una posizione"""
+        trade_side = trade_info['side'].upper()
+        entry_price = float(trade_info.get('entry_price', 0))
+        
+        # Percentuale di stop loss basata sulla configurazione
+        stop_loss_percent = self.config.get('stop_loss_percent', 3.0)  # 3% default
+        
+        if entry_price <= 0:
+            print(f"[FSL] Errore: prezzo di entrata non valido per {trade_id}: {entry_price}")
+            return
+        
+        if trade_side == 'BUY':  # Long position
+            # Per long: stop loss sotto il prezzo di entrata
+            stop_price = entry_price * (1 - stop_loss_percent / 100)
+        else:  # Short position
+            # Per short: stop loss sopra il prezzo di entrata
+            stop_price = entry_price * (1 + stop_loss_percent / 100)
+        
+        self.fixed_stop_losses[trade_id] = {
+            'trade_side': trade_side,
+            'entry_price': entry_price,
+            'stop_price': stop_price,
+            'stop_loss_percent': stop_loss_percent,
+            'created_at': datetime.now()
+        }
+        
+        print(f"[FSL] Fixed Stop Loss inizializzato per {trade_id} ({trade_side})")
+        print(f"[FSL] Entry: ${entry_price:.4f}, Stop Loss: ${stop_price:.4f} ({stop_loss_percent}%)")
+    
     def cleanup_trade_data(self, trade_id: str):
-        """Pulisce dati di trailing stop per trade chiuso"""
+        """Pulisce dati di trailing stop e fixed stop loss per trade chiuso"""
         if trade_id in self.active_trailing_stops:
             del self.active_trailing_stops[trade_id]
         if trade_id in self.mtf_monitors:
             del self.mtf_monitors[trade_id]
+        if trade_id in self.fixed_stop_losses:
+            del self.fixed_stop_losses[trade_id]
         
         print(f"[EXIT] Cleanup completato per trade {trade_id}")
 
@@ -322,10 +413,14 @@ def create_advanced_exit_manager(bot_config: Dict[str, Any]) -> AdvancedExitMana
         # Quick Exit su spike estremi
         'volatile_threshold': bot_config.get('volatile_threshold', 5.0),  # % per quick exit
         
+        # Fixed Stop Loss
+        'stop_loss_percent': bot_config.get('stop_loss_percent', 3.0),  # % stop loss fisso
+        
         # Configurazioni generali
         'enable_multi_timeframe': bot_config.get('enable_multi_timeframe', True),
         'enable_dynamic_trailing': bot_config.get('enable_dynamic_trailing', True), 
-        'enable_quick_exit': bot_config.get('enable_quick_exit', True)
+        'enable_quick_exit': bot_config.get('enable_quick_exit', True),
+        'enable_fixed_stop_loss': bot_config.get('enable_fixed_stop_loss', True)
     }
     
     return AdvancedExitManager(exit_config)
@@ -395,7 +490,23 @@ def analyze_advanced_exit_conditions(exit_manager: AdvancedExitManager, trade_id
                     'mtf_data': mtf_result.get('mtf_data')
                 }
         
-        # 3. Dynamic Trailing Stop (priorità media)
+        # 3. Fixed Stop Loss (priorità alta - sempre controllato se abilitato)
+        if exit_manager.config.get('enable_fixed_stop_loss', True):
+            
+            fixed_sl_result = exit_manager.analyze_fixed_stop_loss(
+                trade_id, trade_info, current_price
+            )
+            
+            if fixed_sl_result['should_close']:
+                return {
+                    'should_close': True,
+                    'exit_type': 'FIXED_STOP_LOSS',
+                    'reason': fixed_sl_result['reason'],
+                    'priority': 'HIGH',
+                    'fixed_stop_data': fixed_sl_result.get('fixed_stop_data')
+                }
+        
+        # 4. Dynamic Trailing Stop (priorità media)
         if (strategy_flags['use_dynamic_trailing'] and 
             exit_manager.config.get('enable_dynamic_trailing', True)):
             
@@ -478,6 +589,10 @@ EXAMPLE_ADVANCED_EXIT_CONFIG = {
     # Quick Exit Settings
     'enable_quick_exit': True,
     'volatile_threshold': 5.0,        # % per quick exit immediato
+    
+    # Fixed Stop Loss Settings
+    'enable_fixed_stop_loss': True,
+    'stop_loss_percent': 3.0,         # % stop loss fisso dal prezzo di entrata
     
     # Configurazioni generali
     'debug_mode': True               # Logging dettagliato

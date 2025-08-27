@@ -294,7 +294,7 @@
                                     </div>
                                     
                                     <!-- Quick Exit on Spike -->
-                                    <div class="col-md-4">
+                                    <div class="col-md-3">
                                         <div class="card h-100">
                                             <div class="card-header">
                                                 <h6 class="mb-0">
@@ -324,6 +324,38 @@
                                                     <label class="form-check-label" for="advanced_exit_debug">
                                                         Debug Mode
                                                     </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Fixed Stop Loss -->
+                                    <div class="col-md-3">
+                                        <div class="card h-100">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">
+                                                    <i class="fas fa-stop-circle"></i> Fixed Stop Loss
+                                                </h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="form-check form-switch mb-3">
+                                                    <input class="form-check-input" type="checkbox" 
+                                                           id="enable_fixed_stop_loss" name="enable_fixed_stop_loss">
+                                                    <label class="form-check-label" for="enable_fixed_stop_loss">
+                                                        Attiva Stop Loss
+                                                    </label>
+                                                </div>
+                                                
+                                                <div class="mb-3">
+                                                    <label for="stop_loss_percent" class="form-label">Stop Loss (%)</label>
+                                                    <input type="number" class="form-control form-control-sm" 
+                                                           id="stop_loss_percent" name="stop_loss_percent" 
+                                                           value="3.0" min="1.0" max="10.0" step="0.5">
+                                                    <div class="form-text">Percentuale di perdita massima dal prezzo di entrata</div>
+                                                </div>
+                                                
+                                                <div class="alert alert-warning alert-sm p-2">
+                                                    <small><i class="fas fa-exclamation-triangle"></i> Stop Loss fisso dal prezzo di entrata</small>
                                                 </div>
                                             </div>
                                         </div>
@@ -597,6 +629,10 @@ function loadSettings() {
             document.getElementById('volatile_threshold').value = data.volatile_threshold || 5.0;
             document.getElementById('advanced_exit_debug').checked = data.advanced_exit_debug !== false;
             
+            // Fixed Stop Loss
+            document.getElementById('enable_fixed_stop_loss').checked = data.enable_fixed_stop_loss !== false;
+            document.getElementById('stop_loss_percent').value = data.stop_loss_percent || 3.0;
+            
             console.log('🔧 Impostazioni avanzate caricate:', {
                 multi_timeframe: data.enable_multi_timeframe,
                 dynamic_trailing: data.enable_dynamic_trailing,
@@ -618,14 +654,14 @@ function saveSettings() {
         'quantity', 'ema_period', 'interval', 'open_candles', 'stop_candles', 'distance',
         // 🆕 Campi numerici Advanced Exit Strategies
         'spike_threshold', 'mtf_candles_trigger', 'trailing_stop_percent', 
-        'min_distance_for_trailing', 'volatile_threshold'
+        'min_distance_for_trailing', 'volatile_threshold', 'stop_loss_percent'
     ];
     
     // Lista campi boolean
     const booleanFields = [
         'operation',
         // 🆕 Campi boolean Advanced Exit Strategies
-        'enable_multi_timeframe', 'enable_dynamic_trailing', 'enable_quick_exit', 'advanced_exit_debug'
+        'enable_multi_timeframe', 'enable_dynamic_trailing', 'enable_quick_exit', 'enable_fixed_stop_loss', 'advanced_exit_debug'
     ];
     
     for (let [key, value] of formData.entries()) {
