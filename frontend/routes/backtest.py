@@ -15,8 +15,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from simple_backtest import SimpleBacktestEngine
-except ImportError:
+    from advanced_backtest_engine import AdvancedBacktestEngine
+except ImportError as e:
+    print(f"Import warning: {e}")
     SimpleBacktestEngine = None
+    AdvancedBacktestEngine = None
 
 backtest_bp = Blueprint('backtest', __name__)
 
@@ -88,6 +91,85 @@ def run_backtest():
             return jsonify({
                 'success': False,
                 'error': 'Backtest failed - no data or insufficient data'
+            }), 400
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
+@backtest_bp.route('/advanced', methods=['POST'])
+def run_advanced_backtest():
+    """Esegue un backtest avanzato con le 4 strategie di uscita"""
+    try:
+        if not AdvancedBacktestEngine:
+            return jsonify({
+                'success': False,
+                'error': 'Advanced backtest engine not available'
+            }), 500
+        
+        data = request.get_json()
+        
+        # Parametri base
+        symbol = data.get('symbol', 'BTCUSDT').upper()
+        initial_capital = float(data.get('initial_capital', 1000))
+        ema_period = int(data.get('ema_period', 10))
+        required_candles = int(data.get('required_candles', 3))
+        max_distance = float(data.get('max_distance', 1.0))
+        timeframe = data.get('timeframe', '30')
+        days_back = int(data.get('days_back', 30))
+        operation = data.get('operation', True)  # True = LONG, False = SHORT
+        create_chart = data.get('create_chart', True)
+        
+        # 🆕 Parametri strategie avanzate
+        enable_strategies = {
+            'enable_multi_timeframe': data.get('enable_multi_timeframe', True),
+            'enable_dynamic_trailing': data.get('enable_dynamic_trailing', True),
+            'enable_quick_exit': data.get('enable_quick_exit', True),
+            'enable_fixed_stop_loss': data.get('enable_fixed_stop_loss', True),
+            
+            'spike_threshold': float(data.get('spike_threshold', 3.0)),
+            'volatile_threshold': float(data.get('volatile_threshold', 5.0)),
+            'stop_loss_percent': float(data.get('stop_loss_percent', 3.0)),
+            'trailing_stop_percent': float(data.get('trailing_stop_percent', 2.0)),
+            'min_distance_for_trailing': float(data.get('min_distance_for_trailing', 2.0)),
+            
+            'advanced_exit_debug': data.get('advanced_exit_debug', False)
+        }
+        
+        # Crea engine avanzato
+        engine = AdvancedBacktestEngine(symbol, initial_capital=initial_capital)
+        
+        # Esegui backtest avanzato
+        results = engine.run_advanced_backtest(
+            ema_period=ema_period,
+            required_candles=required_candles,
+            max_distance=max_distance,
+            timeframe=timeframe,
+            days_back=days_back,
+            operation=operation,
+            enable_strategies=enable_strategies,
+            create_chart=create_chart
+        )
+        
+        if results:
+            # Compatibilità con frontend esistente
+            results['final_value'] = results.get('final_capital', results.get('initial_capital', 1000))
+            results['sharpe_ratio'] = results.get('profit_factor', 0)
+            results['max_drawdown'] = 0  # Da implementare in futuro
+            
+            return jsonify({
+                'success': True,
+                'results': results,
+                'timestamp': datetime.now().isoformat(),
+                'backtest_type': 'advanced'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Advanced backtest failed - insufficient data or configuration error'
             }), 400
         
     except Exception as e:

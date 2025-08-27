@@ -304,6 +304,9 @@
             <button class="tab-button active" onclick="showTab('single')">
                 <i class="fas fa-play"></i> Test Singolo
             </button>
+            <button class="tab-button" onclick="showTab('advanced')">
+                <i class="fas fa-brain"></i> Advanced Backtest
+            </button>
             <button class="tab-button" onclick="showTab('optimization')">
                 <i class="fas fa-search"></i> Ottimizzazione
             </button>
@@ -395,6 +398,132 @@
                 </button>
                 <button class="btn btn-success" onclick="exportResults()">
                     <i class="fas fa-download"></i> Esporta Risultati
+                </button>
+            </div>
+        </div>
+
+        <!-- Advanced Backtest Tab -->
+        <div id="advanced-tab" class="tab-content">
+            <h3><i class="fas fa-brain"></i> Advanced Backtest with Exit Strategies</h3>
+            <p style="color: #ddd; margin-bottom: 20px;">Test your bot with all 4 advanced exit strategies: Multi-Timeframe Exit, Dynamic Trailing Stop, Quick Exit, and Fixed Stop Loss.</p>
+            
+            <div class="parameter-grid">
+                <!-- Base Parameters -->
+                <div class="parameter-group">
+                    <h4><i class="fas fa-cog"></i> Base Parameters</h4>
+                    <div class="form-row">
+                        <label>Symbol:</label>
+                        <input type="text" id="adv-symbol" value="AVAXUSDT">
+                    </div>
+                    <div class="form-row">
+                        <label>Capital ($):</label>
+                        <input type="number" id="adv-capital" value="1000" min="100" step="100">
+                    </div>
+                    <div class="form-row">
+                        <label>EMA Period:</label>
+                        <input type="number" id="adv-ema-period" value="10" min="5" max="200">
+                    </div>
+                    <div class="form-row">
+                        <label>Required Candles:</label>
+                        <input type="number" id="adv-candles" value="3" min="1" max="10">
+                    </div>
+                    <div class="form-row">
+                        <label>Max Distance (%):</label>
+                        <input type="number" id="adv-distance" value="1.0" min="0.1" max="5.0" step="0.1">
+                    </div>
+                    <div class="form-row">
+                        <label>Timeframe:</label>
+                        <select id="adv-timeframe">
+                            <option value="5">5 minutes</option>
+                            <option value="15">15 minutes</option>
+                            <option value="30" selected>30 minutes</option>
+                            <option value="60">1 hour</option>
+                            <option value="240">4 hours</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>Days Back:</label>
+                        <input type="number" id="adv-days" value="30" min="7" max="180">
+                    </div>
+                    <div class="form-row">
+                        <label>Direction:</label>
+                        <select id="adv-operation">
+                            <option value="true" selected>LONG Only</option>
+                            <option value="false">SHORT Only</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Multi-Timeframe Exit -->
+                <div class="parameter-group">
+                    <h4><i class="fas fa-layer-group"></i> Multi-Timeframe Exit</h4>
+                    <div class="form-row">
+                        <label>Enable:</label>
+                        <input type="checkbox" id="adv-enable-mtf" checked>
+                    </div>
+                    <div class="form-row">
+                        <label>Spike Threshold (%):</label>
+                        <input type="number" id="adv-spike-threshold" value="3.0" min="1.0" max="10.0" step="0.5">
+                    </div>
+                    <small style="color: #999; display: block; margin-top: 5px;">Monitors smaller timeframes when price moves away from EMA</small>
+                </div>
+                
+                <!-- Dynamic Trailing Stop -->
+                <div class="parameter-group">
+                    <h4><i class="fas fa-chart-line"></i> Dynamic Trailing Stop</h4>
+                    <div class="form-row">
+                        <label>Enable:</label>
+                        <input type="checkbox" id="adv-enable-trailing" checked>
+                    </div>
+                    <div class="form-row">
+                        <label>Trailing Stop (%):</label>
+                        <input type="number" id="adv-trailing-percent" value="2.0" min="0.5" max="5.0" step="0.1">
+                    </div>
+                    <div class="form-row">
+                        <label>Min Distance (%):</label>
+                        <input type="number" id="adv-min-distance" value="2.0" min="1.0" max="5.0" step="0.1">
+                    </div>
+                    <small style="color: #999; display: block; margin-top: 5px;">Intelligent trailing stop that follows price movements</small>
+                </div>
+                
+                <!-- Quick Exit -->
+                <div class="parameter-group">
+                    <h4><i class="fas fa-bolt"></i> Quick Exit</h4>
+                    <div class="form-row">
+                        <label>Enable:</label>
+                        <input type="checkbox" id="adv-enable-quick" checked>
+                    </div>
+                    <div class="form-row">
+                        <label>Volatile Threshold (%):</label>
+                        <input type="number" id="adv-volatile-threshold" value="5.0" min="3.0" max="15.0" step="0.5">
+                    </div>
+                    <small style="color: #999; display: block; margin-top: 5px;">Immediate exit on extreme price movements (pump/dump protection)</small>
+                </div>
+                
+                <!-- Fixed Stop Loss -->
+                <div class="parameter-group">
+                    <h4><i class="fas fa-stop-circle"></i> Fixed Stop Loss</h4>
+                    <div class="form-row">
+                        <label>Enable:</label>
+                        <input type="checkbox" id="adv-enable-fixed-sl" checked>
+                    </div>
+                    <div class="form-row">
+                        <label>Stop Loss (%):</label>
+                        <input type="number" id="adv-stop-loss-percent" value="3.0" min="1.0" max="10.0" step="0.5">
+                    </div>
+                    <small style="color: #999; display: block; margin-top: 5px;">Fixed stop loss from entry price (maximum loss protection)</small>
+                </div>
+            </div>
+            
+            <div class="action-buttons">
+                <button class="btn btn-primary" id="run-advanced-btn" onclick="runAdvancedBacktest()">
+                    <i class="fas fa-brain"></i> Run Advanced Backtest
+                </button>
+                <button class="btn btn-success" onclick="loadAdvancedPreset('conservative')">
+                    <i class="fas fa-shield-alt"></i> Conservative Preset
+                </button>
+                <button class="btn btn-warning" onclick="loadAdvancedPreset('aggressive')">
+                    <i class="fas fa-fire"></i> Aggressive Preset
                 </button>
             </div>
         </div>
@@ -989,6 +1118,300 @@
             link.href = URL.createObjectURL(dataBlob);
             link.download = `backtest_results_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
             link.click();
+        }
+        
+        // 🆕 ADVANCED BACKTEST FUNCTIONS
+        async function runAdvancedBacktest() {
+            const btn = document.getElementById('run-advanced-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running Advanced Backtest...';
+            
+            showLoading('🧠 Eseguendo Advanced Backtest con 4 strategie...');
+            
+            const params = {
+                // Base parameters
+                symbol: document.getElementById('adv-symbol').value,
+                initial_capital: parseFloat(document.getElementById('adv-capital').value),
+                ema_period: parseInt(document.getElementById('adv-ema-period').value),
+                required_candles: parseInt(document.getElementById('adv-candles').value),
+                max_distance: parseFloat(document.getElementById('adv-distance').value),
+                timeframe: document.getElementById('adv-timeframe').value,
+                days_back: parseInt(document.getElementById('adv-days').value),
+                operation: document.getElementById('adv-operation').value === 'true',
+                create_chart: true,
+                
+                // Advanced strategies parameters
+                enable_multi_timeframe: document.getElementById('adv-enable-mtf').checked,
+                enable_dynamic_trailing: document.getElementById('adv-enable-trailing').checked,
+                enable_quick_exit: document.getElementById('adv-enable-quick').checked,
+                enable_fixed_stop_loss: document.getElementById('adv-enable-fixed-sl').checked,
+                
+                spike_threshold: parseFloat(document.getElementById('adv-spike-threshold').value),
+                volatile_threshold: parseFloat(document.getElementById('adv-volatile-threshold').value),
+                stop_loss_percent: parseFloat(document.getElementById('adv-stop-loss-percent').value),
+                trailing_stop_percent: parseFloat(document.getElementById('adv-trailing-percent').value),
+                min_distance_for_trailing: parseFloat(document.getElementById('adv-min-distance').value),
+                
+                advanced_exit_debug: false
+            };
+            
+            try {
+                const response = await fetch('/backtest/advanced', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(params)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentResults = data.results;
+                    displayAdvancedResults(data.results, '🧠 Advanced Backtest Results');
+                } else {
+                    showError('Errore nel backtest avanzato: ' + data.error);
+                }
+            } catch (error) {
+                showError('Errore di connessione: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-brain"></i> Run Advanced Backtest';
+            }
+        }
+        
+        function displayAdvancedResults(results, title = '🧠 Advanced Results') {
+            const container = document.getElementById('results-container');
+            container.style.display = 'block';
+            
+            // Strategy Performance Section
+            let strategyPerformanceHtml = '';
+            if (results.strategy_performance) {
+                strategyPerformanceHtml = `
+                    <div class="strategy-performance" style="margin: 20px 0;">
+                        <h3>🎯 Performance per Exit Strategy</h3>
+                        <div class="results-summary">
+                            ${Object.entries(results.strategy_performance).map(([strategy, perf]) => {
+                                const strategyName = strategy.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                const icons = {
+                                    'Ema Stop': '📊',
+                                    'Quick Exit Spike': '⚡',
+                                    'Multi Timeframe Exit': '🔀',
+                                    'Dynamic Trailing Stop': '📈',
+                                    'Fixed Stop Loss': '🛑'
+                                };
+                                const icon = icons[strategyName] || '🎯';
+                                
+                                return `
+                                    <div class="metric-card">
+                                        <h4>${icon} ${strategyName}</h4>
+                                        <p class="metric-value neutral" style="font-size: 1.2em;">${perf.count} trades</p>
+                                        <small class="${perf.win_rate >= 50 ? 'trade-profit' : 'trade-loss'}">
+                                            Win Rate: ${perf.win_rate.toFixed(1)}%<br>
+                                            PnL: $${perf.total_pnl.toFixed(2)}
+                                        </small>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Exit Reasons Distribution
+            let exitReasonsHtml = '';
+            if (results.exit_reasons_stats) {
+                const totalExits = Object.values(results.exit_reasons_stats).reduce((a, b) => a + b, 0);
+                exitReasonsHtml = `
+                    <div class="exit-reasons" style="margin: 20px 0;">
+                        <h3>📈 Distribution of Exit Reasons</h3>
+                        <div class="results-summary">
+                            ${Object.entries(results.exit_reasons_stats)
+                                .filter(([reason, count]) => count > 0)
+                                .map(([reason, count]) => {
+                                    const percentage = (count / totalExits * 100).toFixed(1);
+                                    const reasonName = reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                    const icons = {
+                                        'Ema Stop': '📊',
+                                        'Quick Exit Spike': '⚡',
+                                        'Multi Timeframe Exit': '🔀',
+                                        'Dynamic Trailing Stop': '📈',
+                                        'Fixed Stop Loss': '🛑'
+                                    };
+                                    const icon = icons[reasonName] || '🎯';
+                                    
+                                    return `
+                                        <div class="metric-card">
+                                            <h4>${icon} ${reasonName}</h4>
+                                            <p class="metric-value neutral">${count}</p>
+                                            <small style="color: #aaa;">${percentage}% of exits</small>
+                                        </div>
+                                    `;
+                                }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Base metrics HTML (reuse existing function logic)
+            const metricsHtml = `
+                <div class="results-summary">
+                    <div class="metric-card">
+                        <h4>💰 Total Return</h4>
+                        <p class="metric-value ${results.total_return_pct >= 0 ? 'positive' : 'negative'}">
+                            ${results.total_return_pct.toFixed(2)}%
+                        </p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>💲 Final Value</h4>
+                        <p class="metric-value neutral">$${results.final_capital.toFixed(2)}</p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>🔢 Total Trades</h4>
+                        <p class="metric-value neutral">${results.total_trades}</p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>📊 Win Rate</h4>
+                        <p class="metric-value ${results.win_rate >= 50 ? 'positive' : 'negative'}">
+                            ${results.win_rate.toFixed(1)}%
+                        </p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>⚖️ Profit Factor</h4>
+                        <p class="metric-value ${results.profit_factor >= 1 ? 'positive' : 'negative'}">
+                            ${results.profit_factor.toFixed(2)}
+                        </p>
+                    </div>
+                    <div class="metric-card">
+                        <h4>💸 Total Fees</h4>
+                        <p class="metric-value negative">$${results.total_fees.toFixed(2)}</p>
+                    </div>
+                </div>
+            `;
+            
+            // Configuration info
+            const configHtml = results.advanced_config ? `
+                <div class="config-info" style="margin: 20px 0; padding: 15px; background: #3a3a3a; border-radius: 5px;">
+                    <h4>🔧 Advanced Configuration Used</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; font-size: 0.9em;">
+                        <div>🔀 Multi-Timeframe: ${results.advanced_config.enable_multi_timeframe ? '✅' : '❌'}</div>
+                        <div>📈 Dynamic Trailing: ${results.advanced_config.enable_dynamic_trailing ? '✅' : '❌'}</div>
+                        <div>⚡ Quick Exit: ${results.advanced_config.enable_quick_exit ? '✅' : '❌'}</div>
+                        <div>🛑 Fixed Stop Loss: ${results.advanced_config.enable_fixed_stop_loss ? '✅' : '❌'}</div>
+                        <div>📊 Spike Threshold: ${results.advanced_config.spike_threshold}%</div>
+                        <div>⚡ Volatile Threshold: ${results.advanced_config.volatile_threshold}%</div>
+                        <div>🛑 Stop Loss: ${results.advanced_config.stop_loss_percent}%</div>
+                        <div>📈 Trailing Stop: ${results.advanced_config.trailing_stop_percent}%</div>
+                    </div>
+                </div>
+            ` : '';
+            
+            // Chart section
+            let chartHtml = '';
+            if (results.chart_path) {
+                chartHtml = `
+                    <div class="chart-section">
+                        <h3>📈 Advanced Backtest Chart</h3>
+                        <div class="chart-container">
+                            <img src="/static/charts/${results.chart_path.split('/').pop()}" 
+                                 alt="Advanced Backtest Chart" 
+                                 style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px;">
+                        </div>
+                        <p class="chart-info">
+                            <small>💾 Chart saved: ${results.chart_path}</small><br>
+                            <small>🎨 Colors: 🔵 Entry, ❌ Exit, 🟢 Profit, 🔴 Loss</small>
+                        </p>
+                    </div>
+                `;
+            }
+            
+            // Trades table with exit reasons
+            const tradesHtml = results.trades && results.trades.length > 0 ? `
+                <div class="trades-table">
+                    <h3>📋 Latest 20 Trades (with Exit Strategies)</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Entry Time</th>
+                                <th>Side</th>
+                                <th>Entry Price</th>
+                                <th>Exit Price</th>
+                                <th>PnL (%)</th>
+                                <th>Exit Strategy</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${results.trades.slice(-20).map(trade => {
+                                const exitReason = trade.exit_reason || 'EMA_STOP';
+                                const reasonName = exitReason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                const icons = {
+                                    'Ema Stop': '📊',
+                                    'Quick Exit Spike': '⚡',
+                                    'Multi Timeframe Exit': '🔀',
+                                    'Dynamic Trailing Stop': '📈',
+                                    'Fixed Stop Loss': '🛑'
+                                };
+                                const icon = icons[reasonName] || '🎯';
+                                
+                                return `
+                                    <tr>
+                                        <td>${new Date(trade.entry_time).toLocaleString()}</td>
+                                        <td><span class="${trade.side === 'LONG' ? 'trade-profit' : 'trade-loss'}">${trade.side}</span></td>
+                                        <td>$${trade.entry_price.toFixed(4)}</td>
+                                        <td>$${trade.exit_price.toFixed(4)}</td>
+                                        <td class="${trade.pnl_pct >= 0 ? 'trade-profit' : 'trade-loss'}">
+                                            ${trade.pnl_pct.toFixed(2)}%
+                                        </td>
+                                        <td><small>${icon} ${reasonName}</small></td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            ` : '';
+            
+            container.innerHTML = `
+                <h2>${title}</h2>
+                ${metricsHtml}
+                ${strategyPerformanceHtml}
+                ${exitReasonsHtml}
+                ${configHtml}
+                ${chartHtml}
+                ${tradesHtml}
+            `;
+        }
+        
+        function loadAdvancedPreset(type) {
+            if (type === 'conservative') {
+                // Conservative settings - lower risk
+                document.getElementById('adv-enable-mtf').checked = true;
+                document.getElementById('adv-enable-trailing').checked = false;
+                document.getElementById('adv-enable-quick').checked = true;
+                document.getElementById('adv-enable-fixed-sl').checked = true;
+                
+                document.getElementById('adv-spike-threshold').value = '2.5';
+                document.getElementById('adv-volatile-threshold').value = '4.0';
+                document.getElementById('adv-stop-loss-percent').value = '2.5';
+                document.getElementById('adv-trailing-percent').value = '1.5';
+                document.getElementById('adv-min-distance').value = '1.5';
+                
+                showSuccess('🛡️ Conservative preset loaded: Lower risk, Fixed Stop Loss active');
+            } else if (type === 'aggressive') {
+                // Aggressive settings - higher risk/reward
+                document.getElementById('adv-enable-mtf').checked = true;
+                document.getElementById('adv-enable-trailing').checked = true;
+                document.getElementById('adv-enable-quick').checked = false;
+                document.getElementById('adv-enable-fixed-sl').checked = false;
+                
+                document.getElementById('adv-spike-threshold').value = '4.0';
+                document.getElementById('adv-volatile-threshold').value = '7.0';
+                document.getElementById('adv-stop-loss-percent').value = '4.0';
+                document.getElementById('adv-trailing-percent').value = '2.5';
+                document.getElementById('adv-min-distance').value = '3.0';
+                
+                showSuccess('🔥 Aggressive preset loaded: Higher risk, Dynamic Trailing active');
+            }
         }
         
         // Carica risultati salvati all'avvio
