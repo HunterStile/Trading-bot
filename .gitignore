@@ -148,3 +148,4 @@ sqlite3.exe
 
 /backtest_results/
 /backtest_charts/
+/Ai-bot/backtest_results/*
