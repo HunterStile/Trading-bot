@@ -1,0 +1,56 @@
+{
+  "signal_generation": {
+    "window_size": 30,
+    "mean_reversion_threshold": 1.5,
+    "breakout_threshold": 1.2,
+    "volume_spike_threshold": 1.8,
+    "ob_imbalance_threshold": 0.25,
+    "min_signal_interval": 3,
+    "min_signal_strength": {
+      "mean_reversion": 0.65,
+      "breakout": 0.7
+    }
+  },
+  "mean_reversion_strategy": {
+    "risk_per_trade": 0.01,
+    "max_holding_time": 120,
+    "profit_target_ratio": 0.8,
+    "stop_loss_pct": 0.01,
+    "take_profit_pct": 0.015,
+    "min_signal_strength": 0.65
+  },
+  "breakout_strategy": {
+    "risk_per_trade": 0.01,
+    "max_holding_time": 180,
+    "trailing_stop_distance": 0.006,
+    "profit_target_multiple": 2.5,
+    "stop_loss_pct": 0.008,
+    "take_profit_pct": 0.02,
+    "min_signal_strength": 0.7
+  },
+  "risk_management": {
+    "default_risk_per_trade": 0.01,
+    "max_risk_per_trade": 0.01,
+    "max_position_size": 0.05,
+    "min_stop_distance": 0.003,
+    "max_stop_distance": 0.02,
+    "max_leverage": 10,
+    "max_daily_loss": -0.02,
+    "max_total_exposure": 0.3,
+    "max_drawdown": -0.05,
+    "max_consecutive_losses": 5,
+    "max_concurrent_positions": 3
+  },
+  "backtesting": {
+    "commission_rate": 0.0002,
+    "slippage_pct": 0.0001,
+    "initial_capital": 10000.0
+  },
+  "comments": {
+    "signal_generation": "Parametri per generazione segnali - più bassi = più frequenti",
+    "mean_reversion": "Strategia mean reversion - trade più numerosi, stop-loss allargato",
+    "breakout": "Strategia breakout - target più ampio, trailing stop più largo",
+    "risk_management": "Gestione del rischio - limiti massimi invariati",
+    "backtesting": "Parametri di simulazione, con commissioni e slippage"
+  }
+}

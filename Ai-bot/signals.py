@@ -5,6 +5,8 @@ Calculates VWAP, volatility, order book imbalance, and other scalping signals
 
 import numpy as np
 import pandas as pd
+import json
+import os
 from typing import Dict, List, Optional, Tuple
 from collections import deque
 import time
@@ -13,6 +15,19 @@ from dataclasses import dataclass
 from enum import Enum
 
 logger = logging.getLogger(__name__)
+
+def load_strategy_config():
+    """Load strategy configuration from JSON file"""
+    config_path = os.path.join(os.path.dirname(__file__), 'strategy_config.json')
+    try:
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning(f"Config file not found at {config_path}, using defaults")
+        return {}
+    except json.JSONDecodeError:
+        logger.error(f"Invalid JSON in config file {config_path}, using defaults")
+        return {}
 
 class SignalType(Enum):
     """Signal types for different strategies"""
@@ -136,18 +151,28 @@ class ScalpingSignalGenerator:
         self.symbol = symbol
         self.config = config
         
-        # Initialize indicators
-        self.indicators = TechnicalIndicators(config.get('window_size', 60))
+        # Load strategy configuration from JSON file
+        strategy_config = load_strategy_config()
+        signal_config = strategy_config.get('signal_generation', {})
         
-        self.mean_reversion_threshold = config.get('mean_reversion_threshold', 3.0)  # volatility units
-        self.breakout_threshold = config.get('breakout_threshold', 2.0)  # volatility units
-        self.volume_spike_threshold = config.get('volume_spike_threshold', 2.5)
-        self.ob_imbalance_threshold = config.get('ob_imbalance_threshold', 0.35)
-        # Strategy parameters (more selective defaults)
+        # Initialize indicators
+        self.indicators = TechnicalIndicators(signal_config.get('window_size', 60))
+        
+        # Strategy parameters from config file
+        self.mean_reversion_threshold = signal_config.get('mean_reversion_threshold', 3.0)
+        self.breakout_threshold = signal_config.get('breakout_threshold', 2.0)
+        self.volume_spike_threshold = signal_config.get('volume_spike_threshold', 2.5)
+        self.ob_imbalance_threshold = signal_config.get('ob_imbalance_threshold', 0.35)
+        
+        # Signal strength thresholds
+        min_strength = signal_config.get('min_signal_strength', {})
+        self.min_mean_reversion_strength = min_strength.get('mean_reversion', 0.65)
+        self.min_breakout_strength = min_strength.get('breakout', 0.7)
 
         # Signal history
         self.signal_history = deque(maxlen=100)
         self.last_signal_time = 0
+        self.min_signal_interval = signal_config.get('min_signal_interval', 10)
         self.min_signal_interval = config.get('min_signal_interval', 10)  # seconds (reduce noise)
     
     def update_data(self, price: float, volume: float, orderbook_imbalance: float, timestamp: float = None):
@@ -220,25 +245,27 @@ class ScalpingSignalGenerator:
         
         signal_strength = (deviation_strength + imbalance_strength + volume_strength) / 3.0
         
-        # Minimum signal strength threshold (more selective)
-        if signal_strength < 0.65:
+        # Minimum signal strength threshold from config
+        if signal_strength < self.min_mean_reversion_strength:
             return None
         
-        # Determine signal direction con stop loss e take profit più realistici
+        # Load stop/take profit from config
+        strategy_config = load_strategy_config()
+        mean_rev_config = strategy_config.get('mean_reversion_strategy', {})
+        stop_loss_pct = mean_rev_config.get('stop_loss_pct', 0.005)
+        take_profit_pct = mean_rev_config.get('take_profit_pct', 0.008)
+        
+        # Determine signal direction with configurable stop loss e take profit
         if price_deviation > 0:  # Price above VWAP, expect reversion down
             signal_type = SignalType.MEAN_REVERSION_SHORT
             entry_price = self.current_price
-            # Take profit: fixed small move toward mean (0.6%) for scalping
-            take_profit = entry_price * 0.994  # short: expect price to move down
-            # Stop loss: tighter 0.5% above entry
-            stop_loss = entry_price * 1.005
+            take_profit = entry_price * (1 - take_profit_pct)  # short: expect price to move down
+            stop_loss = entry_price * (1 + stop_loss_pct)
         else:  # Price below VWAP, expect reversion up
             signal_type = SignalType.MEAN_REVERSION_LONG
             entry_price = self.current_price
-            # Take profit: fixed small move toward mean (0.6%) for scalping
-            take_profit = entry_price * 1.006
-            # Stop loss: tighter 0.5% below entry
-            stop_loss = entry_price * 0.995
+            take_profit = entry_price * (1 + take_profit_pct)
+            stop_loss = entry_price * (1 - stop_loss_pct)
         
         return Signal(
             signal_type=signal_type,
@@ -282,22 +309,27 @@ class ScalpingSignalGenerator:
         
         signal_strength = (deviation_strength + volume_strength + momentum_strength + imbalance_strength) / 4.0
         
-        # Minimum signal strength threshold (more selective)
-        if signal_strength < 0.7:
+        # Minimum signal strength threshold from config
+        if signal_strength < self.min_breakout_strength:
             return None
         
-        # Determine signal direction con livelli fissi
+        # Load stop/take profit from config
+        strategy_config = load_strategy_config()
+        breakout_config = strategy_config.get('breakout_strategy', {})
+        stop_loss_pct = breakout_config.get('stop_loss_pct', 0.005)
+        take_profit_pct = breakout_config.get('take_profit_pct', 0.015)
+        
+        # Determine signal direction with configurable levels
         if price_deviation > 0:  # Upward breakout
             signal_type = SignalType.BREAKOUT_LONG
             entry_price = self.current_price
-            # Stop loss e take profit fissi per breakout (improve R:R)
-            stop_loss = entry_price * 0.995  # 0.5% stop loss
-            take_profit = entry_price * 1.015  # 1.5% take profit (~3:1 R/R)
+            stop_loss = entry_price * (1 - stop_loss_pct)
+            take_profit = entry_price * (1 + take_profit_pct)
         else:  # Downward breakout
             signal_type = SignalType.BREAKOUT_SHORT
             entry_price = self.current_price
-            stop_loss = entry_price * 1.005  # 0.5% stop loss
-            take_profit = entry_price * 0.985  # 1.5% take profit (~3:1 R/R)
+            stop_loss = entry_price * (1 + stop_loss_pct)
+            take_profit = entry_price * (1 - take_profit_pct)
         
         return Signal(
             signal_type=signal_type,

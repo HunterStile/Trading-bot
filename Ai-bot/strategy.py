@@ -5,6 +5,8 @@ Mean reversion and breakout strategies with entry/exit logic
 
 import time
 import logging
+import json
+import os
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
@@ -14,6 +16,19 @@ import numpy as np
 from signals import Signal, SignalType
 
 logger = logging.getLogger(__name__)
+
+def load_strategy_config():
+    """Load strategy configuration from JSON file"""
+    config_path = os.path.join(os.path.dirname(__file__), 'strategy_config.json')
+    try:
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning(f"Config file not found at {config_path}, using defaults")
+        return {}
+    except json.JSONDecodeError:
+        logger.error(f"Invalid JSON in config file {config_path}, using defaults")
+        return {}
 
 class PositionSide(Enum):
     LONG = "long"
@@ -229,11 +244,15 @@ class MeanReversionStrategy(BaseStrategy):
     def __init__(self, config: Dict):
         super().__init__("MeanReversion", config)
         
-        # Strategy-specific parameters
-        self.min_signal_strength = config.get('mean_reversion_min_signal_strength', 0.4)
-        self.risk_per_trade = config.get('mean_reversion_risk_per_trade', 0.015)
-        self.max_holding_time = config.get('mean_reversion_max_holding_time', 900)  # 15 minuti
-        self.profit_target_ratio = config.get('mean_reversion_profit_target_ratio', 0.8)
+        # Load strategy configuration from JSON file
+        strategy_config = load_strategy_config()
+        mean_rev_config = strategy_config.get('mean_reversion_strategy', {})
+        
+        # Strategy-specific parameters from config file
+        self.min_signal_strength = mean_rev_config.get('min_signal_strength', 0.65)
+        self.risk_per_trade = mean_rev_config.get('risk_per_trade', 0.005)
+        self.max_holding_time = mean_rev_config.get('max_holding_time', 180)
+        self.profit_target_ratio = mean_rev_config.get('profit_target_ratio', 0.8)
     
     def should_enter(self, signal: Signal) -> bool:
         """Check if signal meets mean reversion entry criteria"""
@@ -315,12 +334,16 @@ class BreakoutStrategy(BaseStrategy):
     def __init__(self, config: Dict):
         super().__init__("Breakout", config)
         
-        # Strategy-specific parameters
-        self.min_signal_strength = config.get('breakout_min_signal_strength', 0.5)
-        self.risk_per_trade = config.get('breakout_risk_per_trade', 0.02)
-        self.trailing_stop_distance = config.get('breakout_trailing_stop_distance', 0.3)
-        self.profit_target_multiple = config.get('breakout_profit_target_multiple', 2.5)
-        self.max_holding_time = config.get('breakout_max_holding_time', 1800)  # 30 minuti
+        # Load strategy configuration from JSON file
+        strategy_config = load_strategy_config()
+        breakout_config = strategy_config.get('breakout_strategy', {})
+        
+        # Strategy-specific parameters from config file
+        self.min_signal_strength = breakout_config.get('min_signal_strength', 0.7)
+        self.risk_per_trade = breakout_config.get('risk_per_trade', 0.008)
+        self.trailing_stop_distance = breakout_config.get('trailing_stop_distance', 0.004)
+        self.profit_target_multiple = breakout_config.get('profit_target_multiple', 2.5)
+        self.max_holding_time = breakout_config.get('max_holding_time', 240)
     
     def should_enter(self, signal: Signal) -> bool:
         """Check if signal meets breakout entry criteria"""
