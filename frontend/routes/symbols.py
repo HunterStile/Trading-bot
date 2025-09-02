@@ -1,6 +1,12 @@
 from flask import Blueprint, request, jsonify
 import json
 import os
+import sys
+from datetime import datetime
+
+# Aggiungi il path per trading_functions
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 from trading_functions import vedi_prezzo_moneta
 
 symbols_bp = Blueprint('symbols', __name__)
@@ -12,17 +18,24 @@ DEFAULT_SYMBOLS = [
     {'symbol': 'ETHUSDT', 'name': 'ETH/USDT'},
     {'symbol': 'SOLUSDT', 'name': 'SOL/USDT'},
     {'symbol': 'ADAUSDT', 'name': 'ADA/USDT'},
-    {'symbol': 'DOTUSDT', 'name': 'DOT/USDT'}
+    {'symbol': 'DOTUSDT', 'name': 'DOT/USDT'},
+    {'symbol': 'XRPUSDT', 'name': 'XRP/USDT'},
+    {'symbol': 'BNBUSDT', 'name': 'BNB/USDT'},
+    {'symbol': 'DOGEUSDT', 'name': 'DOGE/USDT'},
+    {'symbol': 'LINKUSDT', 'name': 'LINK/USDT'}
 ]
 
-# File per salvare coppie personalizzate
-CUSTOM_SYMBOLS_FILE = 'custom_symbols.json'
+# File per salvare coppie personalizzate - usa il path del progetto root
+def get_custom_symbols_file():
+    """Ottieni il path del file custom symbols nel root del progetto"""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'custom_symbols.json')
 
 def load_custom_symbols():
     """Carica le coppie personalizzate dal file"""
     try:
-        if os.path.exists(CUSTOM_SYMBOLS_FILE):
-            with open(CUSTOM_SYMBOLS_FILE, 'r') as f:
+        custom_file = get_custom_symbols_file()
+        if os.path.exists(custom_file):
+            with open(custom_file, 'r') as f:
                 return json.load(f)
     except Exception as e:
         print(f"Errore nel caricamento coppie personalizzate: {e}")
@@ -31,7 +44,8 @@ def load_custom_symbols():
 def save_custom_symbols(symbols):
     """Salva le coppie personalizzate nel file"""
     try:
-        with open(CUSTOM_SYMBOLS_FILE, 'w') as f:
+        custom_file = get_custom_symbols_file()
+        with open(custom_file, 'w') as f:
             json.dump(symbols, f, indent=2)
         return True
     except Exception as e:
@@ -45,11 +59,53 @@ def get_all_symbols():
 
 @symbols_bp.route('')
 def get_symbols():
-    """Restituisce tutti i simboli disponibili"""
-    return jsonify({
-        'success': True,
-        'symbols': get_all_symbols()
-    })
+    """Restituisce tutti i simboli disponibili (default + custom)"""
+    try:
+        # Simboli default
+        all_symbols = DEFAULT_SYMBOLS.copy()
+        
+        # Aggiungi simboli custom
+        custom_symbols = load_custom_symbols()
+        
+        # Converti i simboli custom nel formato corretto se necessario
+        for custom in custom_symbols:
+            if isinstance(custom, dict):
+                # Se è già nel formato corretto
+                if 'symbol' in custom:
+                    symbol_obj = {
+                        'symbol': custom['symbol'],
+                        'name': custom.get('name', custom['symbol'].replace('USDT', '/USDT'))
+                    }
+                    # Aggiungi solo se non esiste già
+                    if not any(s['symbol'] == symbol_obj['symbol'] for s in all_symbols):
+                        all_symbols.append(symbol_obj)
+            else:
+                # Se è solo una stringa
+                symbol_obj = {
+                    'symbol': custom,
+                    'name': custom.replace('USDT', '/USDT')
+                }
+                if not any(s['symbol'] == symbol_obj['symbol'] for s in all_symbols):
+                    all_symbols.append(symbol_obj)
+        
+        # Ordina alfabeticamente
+        all_symbols.sort(key=lambda x: x['symbol'])
+        
+        return jsonify({
+            'success': True,
+            'symbols': all_symbols,
+            'total_count': len(all_symbols),
+            'default_count': len(DEFAULT_SYMBOLS),
+            'custom_count': len(custom_symbols)
+        })
+        
+    except Exception as e:
+        print(f"Errore nel caricamento simboli: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'symbols': DEFAULT_SYMBOLS  # Fallback ai simboli default
+        })
 
 @symbols_bp.route('/verify/<symbol>')
 def verify_symbol(symbol):

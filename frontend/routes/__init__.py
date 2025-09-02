@@ -7,6 +7,7 @@ from .trading import trading_bp
 from .history import history_bp
 from .symbols import symbols_bp
 from .backtest import backtest_bp
+from .alerts import alerts_bp, init_alerts_system
 
 def register_blueprints(app):
     """Registra tutti i blueprints nell'app Flask"""
@@ -17,3 +18,7 @@ def register_blueprints(app):
     app.register_blueprint(history_bp, url_prefix='/api/history')
     app.register_blueprint(symbols_bp, url_prefix='/api/symbols')
     app.register_blueprint(backtest_bp, url_prefix='/backtest')
+    app.register_blueprint(alerts_bp, url_prefix='/alerts')
+    
+    # Inizializza il sistema di alert
+    init_alerts_system(app)

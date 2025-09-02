@@ -1,0 +1,880 @@
+{% extends "base.html" %}
+
+{% block title %}Alert Prezzi - Trading Bot{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Stili per la pagina degli alert */
+.alert-card {
+    background: var(--bs-dark);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+}
+
+.alert-card:hover {
+    border-color: var(--bs-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.alert-card.active {
+    border-left: 4px solid #28a745;
+}
+
+.alert-card.triggered {
+    border-left: 4px solid #ffc107;
+    background: rgba(255, 193, 7, 0.1);
+}
+
+.price-display {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    font-size: 1.1em;
+}
+
+.direction-badge {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.5rem;
+}
+
+.direction-above {
+    background-color: #28a745;
+    color: white;
+}
+
+.direction-below {
+    background-color: #dc3545;
+    color: white;
+}
+
+.alert-form {
+    background: var(--bs-dark);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.status-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+}
+
+.status-active {
+    background-color: #28a745;
+    animation: pulse 2s infinite;
+}
+
+.status-triggered {
+    background-color: #ffc107;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.metric-card {
+    background: linear-gradient(135deg, var(--bs-dark) 0%, rgba(13, 110, 253, 0.1) 100%);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.metric-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--bs-primary);
+}
+
+.metric-label {
+    font-size: 0.8rem;
+    color: var(--bs-secondary);
+    margin-top: 0.25rem;
+}
+
+.symbol-select {
+    background-color: var(--bs-dark);
+    border-color: var(--bs-border-color);
+    color: var(--bs-body-color);
+}
+
+.symbol-select:focus {
+    background-color: var(--bs-dark);
+    border-color: var(--bs-primary);
+    color: var(--bs-body-color);
+}
+
+.btn-add-alert {
+    background: linear-gradient(45deg, #28a745, #20c997);
+    border: none;
+    color: white;
+    font-weight: bold;
+}
+
+.btn-add-alert:hover {
+    background: linear-gradient(45deg, #20c997, #28a745);
+    color: white;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Sidebar con metriche -->
+    <div class="col-lg-3 col-md-4">
+        <div class="sidebar p-3">
+            <h5 class="mb-3">📊 Stato Alert</h5>
+            
+            <!-- Metriche Alert -->
+            <div class="metric-card">
+                <div class="metric-value" id="total-alerts">0</div>
+                <div class="metric-label">Alert Totali</div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-value" id="active-alerts">0</div>
+                <div class="metric-label">Alert Attivi</div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-value" id="triggered-alerts">0</div>
+                <div class="metric-label">Alert Triggerati</div>
+            </div>
+            
+            <!-- Monitor Status -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">🔍 Monitor Status</h6>
+                </div>
+                <div class="card-body text-center">
+                    <div id="monitor-status-indicator" class="status-indicator status-active"></div>
+                    <span id="monitor-status-text">Attivo</span>
+                    <div class="mt-2">
+                        <small class="text-muted" id="last-check">Ultimo controllo: -</small>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Azioni Rapide -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">⚡ Azioni Rapide</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-sm" onclick="refreshAlerts()">
+                            <i class="fas fa-sync"></i> Aggiorna
+                        </button>
+                        <button class="btn btn-warning btn-sm" onclick="clearAllAlerts()">
+                            <i class="fas fa-trash"></i> Cancella Tutti
+                        </button>
+                        <button class="btn btn-info btn-sm" onclick="testTelegramAlert()">
+                            <i class="fas fa-paper-plane"></i> Test Telegram
+                        </button>
+                        <button class="btn btn-success btn-sm" onclick="showCustomSymbolsModal()">
+                            <i class="fas fa-plus"></i> Gestisci Simboli
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Area principale -->
+    <div class="col-lg-9 col-md-8">
+        <!-- Form per aggiungere nuovo alert -->
+        <div class="alert-form">
+            <h5 class="mb-3">🔔 Crea Nuovo Alert</h5>
+            
+            <form id="alert-form">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label for="symbol" class="form-label">Simbolo</label>
+                        <select class="form-select symbol-select" id="symbol" required>
+                            <option value="">Seleziona simbolo...</option>
+                            <option value="BTCUSDT">BTC/USDT</option>
+                            <option value="ETHUSDT">ETH/USDT</option>
+                            <option value="AVAXUSDT">AVAX/USDT</option>
+                            <option value="SOLUSDT">SOL/USDT</option>
+                            <option value="ADAUSDT">ADA/USDT</option>
+                            <option value="XRPUSDT">XRP/USDT</option>
+                            <option value="DOGEUSDT">DOGE/USDT</option>
+                            <option value="DOTUSDT">DOT/USDT</option>
+                            <option value="LINKUSDT">LINK/USDT</option>
+                            <option value="LTCUSDT">LTC/USDT</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label for="current-price" class="form-label">Prezzo Attuale</label>
+                        <input type="text" class="form-control price-display" id="current-price" readonly placeholder="Loading...">
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label for="target-price" class="form-label">Prezzo Target</label>
+                        <input type="number" class="form-control" id="target-price" step="0.0001" required placeholder="0.0000">
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label for="direction" class="form-label">Direzione</label>
+                        <select class="form-select" id="direction" required>
+                            <option value="">Seleziona...</option>
+                            <option value="ABOVE">📈 Sopra (Rialzo)</option>
+                            <option value="BELOW">📉 Sotto (Ribasso)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label for="message" class="form-label">Messaggio Alert</label>
+                        <input type="text" class="form-control" id="message" required placeholder="Es: Prendi profitti!">
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-add-alert">
+                            <i class="fas fa-plus"></i> Aggiungi Alert
+                        </button>
+                        <button type="button" class="btn btn-secondary ms-2" onclick="resetForm()">
+                            <i class="fas fa-undo"></i> Reset
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Lista Alert Attivi -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">📋 Alert Attivi</h5>
+                <span class="badge bg-primary" id="alerts-count-badge">0</span>
+            </div>
+            <div class="card-body">
+                <div id="alerts-container">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-bell-slash fa-3x mb-3"></i>
+                        <p>Nessun alert attivo</p>
+                        <p class="small">Crea il tuo primo alert utilizzando il form sopra</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal per gestire simboli custom -->
+<div class="modal fade" id="customSymbolsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title">🔧 Gestione Simboli Custom</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Form per aggiungere simbolo -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">➕ Aggiungi Nuovo Simbolo</h6>
+                    </div>
+                    <div class="card-body">
+                        <form id="add-custom-symbol-form">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="custom-symbol" class="form-label">Simbolo</label>
+                                    <input type="text" class="form-control" id="custom-symbol" 
+                                           placeholder="Es: SHIB1000USDT" required>
+                                    <div class="form-text">Simbolo esatto come su Bybit</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="custom-name" class="form-label">Nome Descrittivo</label>
+                                    <input type="text" class="form-control" id="custom-name" 
+                                           placeholder="Es: SHIBA INU 1000x">
+                                    <div class="form-text">Nome per identificare facilmente il simbolo</div>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="fas fa-plus"></i> Aggiungi Simbolo
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" onclick="testCustomSymbol()">
+                                        <i class="fas fa-search"></i> Testa Simbolo
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Lista simboli custom esistenti -->
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">📋 Simboli Custom Configurati</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="custom-symbols-list">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-spinner fa-spin"></i> Caricamento...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                <button type="button" class="btn btn-primary" onclick="refreshCustomSymbols()">
+                    <i class="fas fa-sync"></i> Aggiorna Lista
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let alerts = [];
+let currentPrices = {};
+
+// Inizializza la pagina
+document.addEventListener('DOMContentLoaded', function() {
+    loadAlerts();
+    loadSymbols();
+    setupEventListeners();
+    startPriceUpdates();
+});
+
+// Setup event listeners
+function setupEventListeners() {
+    // Form submission
+    document.getElementById('alert-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        addAlert();
+    });
+    
+    // Symbol change
+    document.getElementById('symbol').addEventListener('change', function() {
+        updateCurrentPrice();
+    });
+    
+    // Target price validation
+    document.getElementById('target-price').addEventListener('input', function() {
+        validateTargetPrice();
+    });
+}
+
+// Carica lista alert
+async function loadAlerts() {
+    try {
+        const response = await fetch('/alerts/api/list');
+        const data = await response.json();
+        
+        if (data.success) {
+            alerts = data.alerts;
+            updateAlertsDisplay();
+            updateMetrics();
+        } else {
+            showAlert('Errore nel caricamento degli alert', 'danger');
+        }
+    } catch (error) {
+        console.error('Errore caricamento alert:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Carica simboli disponibili
+async function loadSymbols() {
+    try {
+        const response = await fetch('/alerts/api/symbols');
+        const data = await response.json();
+        
+        if (data.success) {
+            const symbolSelect = document.getElementById('symbol');
+            
+            // Mantieni l'option di default
+            const defaultOption = symbolSelect.querySelector('option[value=""]');
+            symbolSelect.innerHTML = '';
+            symbolSelect.appendChild(defaultOption);
+            
+            // Aggiungi i simboli caricati
+            data.symbols.forEach(symbol => {
+                const option = document.createElement('option');
+                option.value = symbol;
+                option.textContent = symbol.replace('USDT', '/USDT');
+                symbolSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Errore caricamento simboli:', error);
+    }
+}
+
+// Aggiorna prezzo corrente quando cambia simbolo
+async function updateCurrentPrice() {
+    const symbol = document.getElementById('symbol').value;
+    if (!symbol) {
+        document.getElementById('current-price').value = '';
+        return;
+    }
+    
+    try {
+        document.getElementById('current-price').value = 'Loading...';
+        
+        const response = await fetch(`/api/price/${symbol}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const price = parseFloat(data.price);
+            currentPrices[symbol] = price;
+            document.getElementById('current-price').value = price.toFixed(4);
+        } else {
+            document.getElementById('current-price').value = 'Errore';
+            showAlert('Errore nel caricamento del prezzo', 'warning');
+        }
+    } catch (error) {
+        console.error('Errore caricamento prezzo:', error);
+        document.getElementById('current-price').value = 'Errore';
+    }
+}
+
+// Valida prezzo target
+function validateTargetPrice() {
+    const symbol = document.getElementById('symbol').value;
+    const targetPriceInput = document.getElementById('target-price');
+    const direction = document.getElementById('direction').value;
+    
+    if (!symbol || !direction || !currentPrices[symbol]) {
+        targetPriceInput.classList.remove('is-valid', 'is-invalid');
+        return;
+    }
+    
+    const targetPrice = parseFloat(targetPriceInput.value);
+    const currentPrice = currentPrices[symbol];
+    
+    let isValid = false;
+    
+    if (direction === 'ABOVE' && targetPrice > currentPrice) {
+        isValid = true;
+    } else if (direction === 'BELOW' && targetPrice < currentPrice) {
+        isValid = true;
+    }
+    
+    if (isValid) {
+        targetPriceInput.classList.remove('is-invalid');
+        targetPriceInput.classList.add('is-valid');
+    } else {
+        targetPriceInput.classList.remove('is-valid');
+        targetPriceInput.classList.add('is-invalid');
+    }
+}
+
+// Aggiungi nuovo alert
+async function addAlert() {
+    const formData = {
+        symbol: document.getElementById('symbol').value,
+        target_price: document.getElementById('target-price').value,
+        direction: document.getElementById('direction').value,
+        message: document.getElementById('message').value
+    };
+    
+    // Validazione client
+    if (!formData.symbol || !formData.target_price || !formData.direction || !formData.message) {
+        showAlert('Compila tutti i campi', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/alerts/api/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('Alert aggiunto con successo!', 'success');
+            resetForm();
+            loadAlerts(); // Ricarica la lista
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore aggiunta alert:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Rimuovi alert
+async function removePriceAlert(alertId) {
+    if (!confirm('Vuoi rimuovere questo alert?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/alerts/api/remove/${alertId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('Alert rimosso', 'success');
+            loadAlerts();
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore rimozione alert:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Aggiorna display degli alert
+function updateAlertsDisplay() {
+    const container = document.getElementById('alerts-container');
+    
+    if (alerts.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted">
+                <i class="fas fa-bell-slash fa-3x mb-3"></i>
+                <p>Nessun alert attivo</p>
+                <p class="small">Crea il tuo primo alert utilizzando il form sopra</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = alerts.map(alert => {
+        const directionClass = alert.direction === 'ABOVE' ? 'direction-above' : 'direction-below';
+        const directionEmoji = alert.direction === 'ABOVE' ? '📈' : '📉';
+        const statusClass = alert.status === 'ACTIVE' ? 'active' : 'triggered';
+        const statusIndicator = alert.status === 'ACTIVE' ? 'status-active' : 'status-triggered';
+        
+        const currentPrice = alert.current_price || 0;
+        const priceDiff = currentPrice - alert.target_price;
+        const pricePercentage = alert.target_price > 0 ? (priceDiff / alert.target_price * 100) : 0;
+        
+        return `
+            <div class="alert-card ${statusClass}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="status-indicator ${statusIndicator}"></span>
+                            <h6 class="mb-0 me-3">${alert.symbol}</h6>
+                            <span class="badge ${directionClass} direction-badge">
+                                ${directionEmoji} ${alert.direction}
+                            </span>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-3">
+                                <small class="text-muted">Prezzo Target</small>
+                                <div class="price-display text-primary">$${alert.target_price.toFixed(4)}</div>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">Prezzo Corrente</small>
+                                <div class="price-display">${currentPrice > 0 ? '$' + currentPrice.toFixed(4) : 'Loading...'}</div>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">Distanza</small>
+                                <div class="price-display ${pricePercentage >= 0 ? 'text-success' : 'text-danger'}">
+                                    ${pricePercentage > 0 ? '+' : ''}${pricePercentage.toFixed(2)}%
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">Creato</small>
+                                <div class="small">${new Date(alert.created_at).toLocaleString('it-IT')}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-2">
+                            <small class="text-muted">Messaggio:</small>
+                            <div class="small text-info">${alert.message}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="ms-3">
+                        <button class="btn btn-outline-danger btn-sm" onclick="removePriceAlert('${alert.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Aggiorna metriche
+function updateMetrics() {
+    const totalAlerts = alerts.length;
+    const activeAlerts = alerts.filter(a => a.status === 'ACTIVE').length;
+    const triggeredAlerts = alerts.filter(a => a.status === 'TRIGGERED').length;
+    
+    document.getElementById('total-alerts').textContent = totalAlerts;
+    document.getElementById('active-alerts').textContent = activeAlerts;
+    document.getElementById('triggered-alerts').textContent = triggeredAlerts;
+    document.getElementById('alerts-count-badge').textContent = activeAlerts;
+}
+
+// Reset form
+function resetForm() {
+    document.getElementById('alert-form').reset();
+    document.getElementById('current-price').value = '';
+    document.getElementById('target-price').classList.remove('is-valid', 'is-invalid');
+}
+
+// Refresh alert
+function refreshAlerts() {
+    loadAlerts();
+    showAlert('Alert aggiornati', 'info');
+}
+
+// Cancella tutti gli alert
+async function clearAllAlerts() {
+    if (!confirm('Vuoi cancellare TUTTI gli alert? Questa azione non può essere annullata.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/alerts/api/clear', {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(data.message, 'success');
+            loadAlerts();
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore cancellazione alert:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Test notifica Telegram
+async function testTelegramAlert() {
+    try {
+        const response = await fetch('/alerts/api/test-telegram', {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(data.message, 'success');
+        } else {
+            showAlert('Errore test Telegram: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore test Telegram:', error);
+        showAlert('Errore di connessione nel test Telegram', 'danger');
+    }
+}
+
+// Avvia aggiornamenti periodici dei prezzi
+function startPriceUpdates() {
+    setInterval(() => {
+        // Aggiorna prezzo del simbolo selezionato
+        const selectedSymbol = document.getElementById('symbol').value;
+        if (selectedSymbol) {
+            updateCurrentPrice();
+        }
+        
+        // Aggiorna last check
+        document.getElementById('last-check').textContent = 
+            'Ultimo controllo: ' + new Date().toLocaleTimeString('it-IT');
+        
+        // Ricarica alert per aggiornare prezzi correnti
+        loadAlerts();
+    }, 30000); // Ogni 30 secondi
+}
+
+// ==================== GESTIONE SIMBOLI CUSTOM ====================
+
+// Mostra modal simboli custom
+async function showCustomSymbolsModal() {
+    const modal = new bootstrap.Modal(document.getElementById('customSymbolsModal'));
+    modal.show();
+    
+    // Carica simboli custom esistenti
+    await loadCustomSymbols();
+}
+
+// Carica simboli custom
+async function loadCustomSymbols() {
+    try {
+        const response = await fetch('/alerts/api/custom-symbols');
+        const data = await response.json();
+        
+        const container = document.getElementById('custom-symbols-list');
+        
+        if (data.success && data.symbols.length > 0) {
+            container.innerHTML = data.symbols.map(symbol => `
+                <div class="d-flex justify-content-between align-items-center p-2 border rounded mb-2">
+                    <div>
+                        <strong>${symbol.symbol}</strong>
+                        <br>
+                        <small class="text-muted">${symbol.name || symbol.symbol}</small>
+                        ${symbol.added_at ? `<br><small class="text-secondary">Aggiunto: ${new Date(symbol.added_at).toLocaleString('it-IT')}</small>` : ''}
+                    </div>
+                    <div>
+                        <button class="btn btn-outline-primary btn-sm me-2" onclick="testSymbolPrice('${symbol.symbol}')">
+                            <i class="fas fa-search"></i> Test
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="removeCustomSymbol('${symbol.symbol}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="fas fa-inbox"></i>
+                    <p class="mt-2">Nessun simbolo custom configurato</p>
+                    <p class="small">Aggiungi il tuo primo simbolo usando il form sopra</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Errore caricamento simboli custom:', error);
+        document.getElementById('custom-symbols-list').innerHTML = `
+            <div class="text-danger text-center">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p class="mt-2">Errore nel caricamento</p>
+            </div>
+        `;
+    }
+}
+
+// Aggiungi simbolo custom
+document.getElementById('add-custom-symbol-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const symbol = document.getElementById('custom-symbol').value.trim().toUpperCase();
+    const name = document.getElementById('custom-name').value.trim() || symbol;
+    
+    if (!symbol) {
+        showAlert('Inserisci un simbolo', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/alerts/api/custom-symbols', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                symbol: symbol,
+                name: name
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(data.message + ` (Prezzo: $${data.price})`, 'success');
+            document.getElementById('add-custom-symbol-form').reset();
+            await loadCustomSymbols();
+            await loadSymbols(); // Ricarica anche la lista principale
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore aggiunta simbolo:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+});
+
+// Testa simbolo custom prima di aggiungerlo
+async function testCustomSymbol() {
+    const symbol = document.getElementById('custom-symbol').value.trim().toUpperCase();
+    
+    if (!symbol) {
+        showAlert('Inserisci un simbolo da testare', 'warning');
+        return;
+    }
+    
+    try {
+        // Usa l'API di prezzo esistente
+        const response = await fetch(`/api/price/${symbol}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`✅ Simbolo valido! Prezzo: $${data.price}`, 'success');
+        } else {
+            showAlert(`❌ Simbolo non valido: ${data.error}`, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore test simbolo:', error);
+        showAlert('❌ Errore nel test del simbolo', 'danger');
+    }
+}
+
+// Testa prezzo di un simbolo esistente
+async function testSymbolPrice(symbol) {
+    try {
+        const response = await fetch(`/api/price/${symbol}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`💰 ${symbol}: $${data.price}`, 'info');
+        } else {
+            showAlert(`❌ Errore prezzo ${symbol}: ${data.error}`, 'warning');
+        }
+    } catch (error) {
+        console.error('Errore test prezzo:', error);
+        showAlert('❌ Errore nel test del prezzo', 'danger');
+    }
+}
+
+// Rimuovi simbolo custom
+async function removeCustomSymbol(symbol) {
+    if (!confirm(`Vuoi rimuovere il simbolo ${symbol}?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/alerts/api/custom-symbols/${symbol}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(data.message, 'success');
+            await loadCustomSymbols();
+            await loadSymbols(); // Ricarica anche la lista principale
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore rimozione simbolo:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Aggiorna lista simboli custom
+async function refreshCustomSymbols() {
+    await loadCustomSymbols();
+    showAlert('Lista simboli aggiornata', 'info');
+}
+</script>
+{% endblock %}
