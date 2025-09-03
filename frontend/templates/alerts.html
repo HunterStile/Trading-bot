@@ -197,6 +197,23 @@
             <h5 class="mb-3">🔔 Crea Nuovo Alert</h5>
             
             <form id="alert-form">
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <label class="form-label">Tipo di Alert</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="alert_type" id="alert_type_price" value="PRICE" checked>
+                            <label class="btn btn-outline-primary" for="alert_type_price">
+                                <i class="fas fa-dollar-sign"></i> Prezzo Fisso
+                            </label>
+                            
+                            <input type="radio" class="btn-check" name="alert_type" id="alert_type_ema" value="EMA">
+                            <label class="btn btn-outline-info" for="alert_type_ema">
+                                <i class="fas fa-chart-line"></i> Breakout EMA
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="row">
                     <div class="col-md-3">
                         <label for="symbol" class="form-label">Simbolo</label>
@@ -220,9 +237,30 @@
                         <input type="text" class="form-control price-display" id="current-price" readonly placeholder="Loading...">
                     </div>
                     
-                    <div class="col-md-2">
+                    <!-- Campi per Alert di Prezzo -->
+                    <div class="col-md-2" id="price-fields">
                         <label for="target-price" class="form-label">Prezzo Target</label>
-                        <input type="number" class="form-control" id="target-price" step="0.0001" required placeholder="0.0000">
+                        <input type="number" class="form-control" id="target-price" step="0.0001" placeholder="0.0000">
+                    </div>
+                    
+                    <!-- Campi per Alert EMA -->
+                    <div class="col-md-2" id="ema-period-field" style="display: none;">
+                        <label for="ema-period" class="form-label">Periodo EMA</label>
+                        <input type="number" class="form-control" id="ema-period" min="5" max="200" value="20" placeholder="20">
+                    </div>
+                    
+                    <div class="col-md-2" id="timeframe-field" style="display: none;">
+                        <label for="timeframe" class="form-label">Timeframe (min)</label>
+                        <select class="form-select" id="timeframe">
+                            <option value="1">1m</option>
+                            <option value="3">3m</option>
+                            <option value="5">5m</option>
+                            <option value="15" selected>15m</option>
+                            <option value="30">30m</option>
+                            <option value="60">1h</option>
+                            <option value="240">4h</option>
+                            <option value="1440">1d</option>
+                        </select>
                     </div>
                     
                     <div class="col-md-2">
@@ -237,6 +275,17 @@
                     <div class="col-md-3">
                         <label for="message" class="form-label">Messaggio Alert</label>
                         <input type="text" class="form-control" id="message" required placeholder="Es: Prendi profitti!">
+                    </div>
+                </div>
+                
+                <!-- Info aggiuntiva per EMA -->
+                <div class="row mt-2" id="ema-info" style="display: none;">
+                    <div class="col-12">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Alert EMA:</strong> L'alert si attiverà quando il prezzo rompe la EMA nella direzione selezionata.
+                            <span id="current-ema-info"></span>
+                        </div>
                     </div>
                 </div>
                 
@@ -352,6 +401,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSymbols();
     setupEventListeners();
     startPriceUpdates();
+    toggleAlertTypeFields(); // Inizializza i campi corretti
 });
 
 // Setup event listeners
@@ -365,11 +415,31 @@ function setupEventListeners() {
     // Symbol change
     document.getElementById('symbol').addEventListener('change', function() {
         updateCurrentPrice();
+        updateEMAInfo();
+    });
+    
+    // Alert type change
+    document.querySelectorAll('input[name="alert_type"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            toggleAlertTypeFields();
+            validateTargetPrice();
+            updateEMAInfo();
+        });
     });
     
     // Target price validation
     document.getElementById('target-price').addEventListener('input', function() {
         validateTargetPrice();
+    });
+    
+    // EMA period change
+    document.getElementById('ema-period').addEventListener('input', function() {
+        updateEMAInfo();
+    });
+    
+    // Timeframe change
+    document.getElementById('timeframe').addEventListener('change', function() {
+        updateEMAInfo();
     });
 }
 
@@ -480,16 +550,36 @@ function validateTargetPrice() {
 
 // Aggiungi nuovo alert
 async function addAlert() {
+    const alertType = document.querySelector('input[name="alert_type"]:checked').value;
+    
     const formData = {
         symbol: document.getElementById('symbol').value,
-        target_price: document.getElementById('target-price').value,
+        alert_type: alertType,
         direction: document.getElementById('direction').value,
         message: document.getElementById('message').value
     };
     
+    // Campi specifici per tipo di alert
+    if (alertType === 'PRICE') {
+        formData.target_price = document.getElementById('target-price').value;
+    } else if (alertType === 'EMA') {
+        formData.ema_period = document.getElementById('ema-period').value;
+        formData.timeframe = document.getElementById('timeframe').value;
+    }
+    
     // Validazione client
-    if (!formData.symbol || !formData.target_price || !formData.direction || !formData.message) {
+    if (!formData.symbol || !formData.direction || !formData.message) {
         showAlert('Compila tutti i campi', 'warning');
+        return;
+    }
+    
+    if (alertType === 'PRICE' && !formData.target_price) {
+        showAlert('Inserisci il prezzo target', 'warning');
+        return;
+    }
+    
+    if (alertType === 'EMA' && (!formData.ema_period || !formData.timeframe)) {
+        showAlert('Inserisci periodo EMA e timeframe', 'warning');
         return;
     }
     
@@ -505,7 +595,7 @@ async function addAlert() {
         const data = await response.json();
         
         if (data.success) {
-            showAlert('Alert aggiunto con successo!', 'success');
+            showAlert(data.message, 'success');
             resetForm();
             loadAlerts(); // Ricarica la lista
         } else {
@@ -558,14 +648,56 @@ function updateAlertsDisplay() {
     }
     
     container.innerHTML = alerts.map(alert => {
+        const alertType = alert.alert_type || 'PRICE';
         const directionClass = alert.direction === 'ABOVE' ? 'direction-above' : 'direction-below';
         const directionEmoji = alert.direction === 'ABOVE' ? '📈' : '📉';
         const statusClass = alert.status === 'ACTIVE' ? 'active' : 'triggered';
         const statusIndicator = alert.status === 'ACTIVE' ? 'status-active' : 'status-triggered';
         
         const currentPrice = alert.current_price || 0;
-        const priceDiff = currentPrice - alert.target_price;
-        const pricePercentage = alert.target_price > 0 ? (priceDiff / alert.target_price * 100) : 0;
+        
+        let targetInfo, distanceInfo;
+        
+        if (alertType === 'PRICE') {
+            const priceDiff = currentPrice - alert.target_price;
+            const pricePercentage = alert.target_price > 0 ? (priceDiff / alert.target_price * 100) : 0;
+            
+            targetInfo = `
+                <div class="col-md-3">
+                    <small class="text-muted">Prezzo Target</small>
+                    <div class="price-display text-primary">$${alert.target_price.toFixed(4)}</div>
+                </div>
+            `;
+            
+            distanceInfo = `
+                <div class="col-md-3">
+                    <small class="text-muted">Distanza</small>
+                    <div class="price-display ${pricePercentage >= 0 ? 'text-success' : 'text-danger'}">
+                        ${pricePercentage > 0 ? '+' : ''}${pricePercentage.toFixed(2)}%
+                    </div>
+                </div>
+            `;
+        } else if (alertType === 'EMA') {
+            const emaValue = alert.ema_value || 0;
+            const emaDiff = currentPrice - emaValue;
+            const emaPercentage = emaValue > 0 ? (emaDiff / emaValue * 100) : 0;
+            
+            targetInfo = `
+                <div class="col-md-3">
+                    <small class="text-muted">EMA(${alert.ema_period}) ${alert.timeframe}min</small>
+                    <div class="price-display text-info">$${emaValue.toFixed(4)}</div>
+                </div>
+            `;
+            
+            distanceInfo = `
+                <div class="col-md-3">
+                    <small class="text-muted">Distanza da EMA</small>
+                    <div class="price-display ${emaPercentage >= 0 ? 'text-success' : 'text-danger'}">
+                        ${emaPercentage > 0 ? '+' : ''}${emaPercentage.toFixed(2)}%
+                    </div>
+                </div>
+            `;
+        }
         
         return `
             <div class="alert-card ${statusClass}">
@@ -577,23 +709,16 @@ function updateAlertsDisplay() {
                             <span class="badge ${directionClass} direction-badge">
                                 ${directionEmoji} ${alert.direction}
                             </span>
+                            <span class="badge bg-secondary ms-2">${alertType}</span>
                         </div>
                         
                         <div class="row">
-                            <div class="col-md-3">
-                                <small class="text-muted">Prezzo Target</small>
-                                <div class="price-display text-primary">$${alert.target_price.toFixed(4)}</div>
-                            </div>
+                            ${targetInfo}
                             <div class="col-md-3">
                                 <small class="text-muted">Prezzo Corrente</small>
                                 <div class="price-display">${currentPrice > 0 ? '$' + currentPrice.toFixed(4) : 'Loading...'}</div>
                             </div>
-                            <div class="col-md-3">
-                                <small class="text-muted">Distanza</small>
-                                <div class="price-display ${pricePercentage >= 0 ? 'text-success' : 'text-danger'}">
-                                    ${pricePercentage > 0 ? '+' : ''}${pricePercentage.toFixed(2)}%
-                                </div>
-                            </div>
+                            ${distanceInfo}
                             <div class="col-md-3">
                                 <small class="text-muted">Creato</small>
                                 <div class="small">${new Date(alert.created_at).toLocaleString('it-IT')}</div>
@@ -617,6 +742,60 @@ function updateAlertsDisplay() {
     }).join('');
 }
 
+// Mostra/nasconde campi in base al tipo di alert
+function toggleAlertTypeFields() {
+    const alertType = document.querySelector('input[name="alert_type"]:checked').value;
+    
+    const priceFields = document.getElementById('price-fields');
+    const emaPeriodField = document.getElementById('ema-period-field');
+    const timeframeField = document.getElementById('timeframe-field');
+    const emaInfo = document.getElementById('ema-info');
+    
+    if (alertType === 'PRICE') {
+        priceFields.style.display = 'block';
+        emaPeriodField.style.display = 'none';
+        timeframeField.style.display = 'none';
+        emaInfo.style.display = 'none';
+        
+        // Rendi obbligatorio il prezzo target
+        document.getElementById('target-price').required = true;
+        document.getElementById('ema-period').required = false;
+        document.getElementById('timeframe').required = false;
+    } else if (alertType === 'EMA') {
+        priceFields.style.display = 'none';
+        emaPeriodField.style.display = 'block';
+        timeframeField.style.display = 'block';
+        emaInfo.style.display = 'block';
+        
+        // Rendi obbligatori i campi EMA
+        document.getElementById('target-price').required = false;
+        document.getElementById('ema-period').required = true;
+        document.getElementById('timeframe').required = true;
+    }
+}
+
+// Aggiorna info EMA in tempo reale
+async function updateEMAInfo() {
+    const alertType = document.querySelector('input[name="alert_type"]:checked').value;
+    const symbol = document.getElementById('symbol').value;
+    const emaPeriod = document.getElementById('ema-period').value;
+    const timeframe = document.getElementById('timeframe').value;
+    
+    if (alertType !== 'EMA' || !symbol || !emaPeriod || !timeframe) {
+        return;
+    }
+    
+    const infoElement = document.getElementById('current-ema-info');
+    infoElement.innerHTML = ' <i class="fas fa-spinner fa-spin"></i> Calcolando EMA...';
+    
+    try {
+        // Per ora mostra solo info generiche, potremmo aggiungere un endpoint per calcolare EMA
+        infoElement.innerHTML = ` <br><strong>EMA(${emaPeriod}) su timeframe ${timeframe} minuti</strong> per ${symbol}`;
+    } catch (error) {
+        infoElement.innerHTML = ' <span class="text-danger">Errore calcolo EMA</span>';
+    }
+}
+
 // Aggiorna metriche
 function updateMetrics() {
     const totalAlerts = alerts.length;
@@ -634,6 +813,13 @@ function resetForm() {
     document.getElementById('alert-form').reset();
     document.getElementById('current-price').value = '';
     document.getElementById('target-price').classList.remove('is-valid', 'is-invalid');
+    
+    // Reset tipo alert a PRICE
+    document.getElementById('alert_type_price').checked = true;
+    toggleAlertTypeFields();
+    
+    // Reset info EMA
+    document.getElementById('current-ema-info').innerHTML = '';
 }
 
 // Refresh alert

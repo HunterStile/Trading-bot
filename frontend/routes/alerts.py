@@ -9,7 +9,7 @@ import os
 # Aggiungi il path per trading_functions
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from trading_functions import vedi_prezzo_moneta
+from trading_functions import vedi_prezzo_moneta, get_kline_data, media_esponenziale
 
 alerts_bp = Blueprint('alerts', __name__)
 
@@ -44,47 +44,123 @@ def add_alert():
     try:
         data = request.get_json()
         
-        # Validazione dati
-        required_fields = ['symbol', 'target_price', 'direction', 'message']
+        # Validazione dati base
+        required_fields = ['symbol', 'alert_type', 'direction', 'message']
         for field in required_fields:
             if field not in data:
                 return jsonify({'success': False, 'error': f'Campo {field} mancante'})
         
-        # Controlla che il prezzo target sia valido
-        try:
-            target_price = float(data['target_price'])
-        except ValueError:
-            return jsonify({'success': False, 'error': 'Prezzo target non valido'})
+        alert_type = data['alert_type'].upper()
+        symbol = data['symbol'].upper()
+        direction = data['direction'].upper()
         
-        # Ottieni prezzo corrente per validazione
-        current_price = vedi_prezzo_moneta('linear', data['symbol'])
-        if current_price is None:
-            return jsonify({'success': False, 'error': 'Simbolo non valido o errore API'})
+        # Validazione tipo alert
+        if alert_type not in ['PRICE', 'EMA']:
+            return jsonify({'success': False, 'error': 'Tipo alert deve essere PRICE o EMA'})
         
         # Validazione direzione
-        direction = data['direction'].upper()
         if direction not in ['ABOVE', 'BELOW']:
             return jsonify({'success': False, 'error': 'Direzione deve essere ABOVE o BELOW'})
         
-        # Controlla logica dell'alert
-        if direction == 'ABOVE' and target_price <= current_price:
-            return jsonify({'success': False, 'error': 'Il prezzo target per ABOVE deve essere superiore al prezzo corrente'})
+        # Ottieni prezzo corrente per validazione
+        current_price = vedi_prezzo_moneta('linear', symbol)
+        if current_price is None:
+            return jsonify({'success': False, 'error': 'Simbolo non valido o errore API'})
         
-        if direction == 'BELOW' and target_price >= current_price:
-            return jsonify({'success': False, 'error': 'Il prezzo target per BELOW deve essere inferiore al prezzo corrente'})
-        
-        # Crea nuovo alert
-        new_alert = {
-            'id': f"{data['symbol']}_{direction}_{target_price}_{int(time.time())}",
-            'symbol': data['symbol'].upper(),
-            'target_price': target_price,
-            'current_price': current_price,
-            'direction': direction,
-            'message': data['message'],
-            'created_at': datetime.now().isoformat(),
-            'status': 'ACTIVE',
-            'triggered_at': None
-        }
+        if alert_type == 'PRICE':
+            # Alert di prezzo fisso
+            if 'target_price' not in data:
+                return jsonify({'success': False, 'error': 'target_price richiesto per alert PRICE'})
+            
+            try:
+                target_price = float(data['target_price'])
+            except ValueError:
+                return jsonify({'success': False, 'error': 'Prezzo target non valido'})
+            
+            # Validazione logica dell'alert
+            if direction == 'ABOVE' and target_price <= current_price:
+                return jsonify({'success': False, 'error': 'Il prezzo target per ABOVE deve essere superiore al prezzo corrente'})
+            
+            if direction == 'BELOW' and target_price >= current_price:
+                return jsonify({'success': False, 'error': 'Il prezzo target per BELOW deve essere inferiore al prezzo corrente'})
+            
+            # Crea alert di prezzo
+            new_alert = {
+                'id': f"{symbol}_{alert_type}_{direction}_{target_price}_{int(time.time())}",
+                'symbol': symbol,
+                'alert_type': alert_type,
+                'target_price': target_price,
+                'current_price': current_price,
+                'direction': direction,
+                'message': data['message'],
+                'created_at': datetime.now().isoformat(),
+                'status': 'ACTIVE',
+                'triggered_at': None
+            }
+            
+        elif alert_type == 'EMA':
+            # Alert breakout EMA
+            required_ema_fields = ['ema_period', 'timeframe']
+            for field in required_ema_fields:
+                if field not in data:
+                    return jsonify({'success': False, 'error': f'Campo {field} richiesto per alert EMA'})
+            
+            try:
+                ema_period = int(data['ema_period'])
+                timeframe = int(data['timeframe'])
+            except ValueError:
+                return jsonify({'success': False, 'error': 'Periodo EMA e timeframe devono essere numeri'})
+            
+            if ema_period < 5 or ema_period > 200:
+                return jsonify({'success': False, 'error': 'Periodo EMA deve essere tra 5 e 200'})
+            
+            if timeframe not in [1, 3, 5, 15, 30, 60, 240, 1440]:
+                return jsonify({'success': False, 'error': 'Timeframe non valido'})
+            
+            # Calcola EMA corrente
+            try:
+                kline_data = get_kline_data('linear', symbol, str(timeframe), 50)  # Prendi più dati per calcolo accurato
+                if not kline_data:
+                    return jsonify({'success': False, 'error': 'Impossibile ottenere dati storici'})
+                
+                # Calcola EMA - inverti l'ordine dei dati per avere cronologia corretta
+                closes = [float(candle[4]) for candle in reversed(kline_data)]  # Close prices in ordine cronologico
+                ema_list = media_esponenziale(closes, ema_period)
+                
+                if ema_list is None or len(ema_list) == 0:
+                    return jsonify({'success': False, 'error': 'Errore nel calcolo EMA'})
+                
+                # Prendi l'ultimo valore EMA (il più recente)
+                ema_value = ema_list[-1]
+                
+                # Determina se il prezzo è già sopra/sotto l'EMA
+                price_above_ema = current_price > ema_value
+                
+                # Validazione logica
+                if direction == 'ABOVE' and price_above_ema:
+                    return jsonify({'success': False, 'error': f'Il prezzo è già sopra EMA({ema_period}). Attuale: ${current_price:.4f}, EMA: ${ema_value:.4f}'})
+                
+                if direction == 'BELOW' and not price_above_ema:
+                    return jsonify({'success': False, 'error': f'Il prezzo è già sotto EMA({ema_period}). Attuale: ${current_price:.4f}, EMA: ${ema_value:.4f}'})
+                
+                # Crea alert EMA
+                new_alert = {
+                    'id': f"{symbol}_{alert_type}_{direction}_{ema_period}_{timeframe}_{int(time.time())}",
+                    'symbol': symbol,
+                    'alert_type': alert_type,
+                    'ema_period': ema_period,
+                    'timeframe': timeframe,
+                    'ema_value': ema_value,
+                    'current_price': current_price,
+                    'direction': direction,
+                    'message': data['message'],
+                    'created_at': datetime.now().isoformat(),
+                    'status': 'ACTIVE',
+                    'triggered_at': None
+                }
+                
+            except Exception as e:
+                return jsonify({'success': False, 'error': f'Errore calcolo EMA: {str(e)}'})
         
         active_alerts.append(new_alert)
         
@@ -94,23 +170,38 @@ def add_alert():
         # Notifica Telegram di creazione alert
         telegram_notifier = current_app.config.get('TELEGRAM_NOTIFIER')
         if telegram_notifier:
-            direction_emoji = "📈" if direction == "ABOVE" else "📉"
-            message = f"""
-🔔 <b>Nuovo Alert Creato</b>
+            if alert_type == 'PRICE':
+                direction_emoji = "📈" if direction == "ABOVE" else "📉"
+                message = f"""
+🔔 <b>Nuovo Alert Prezzo</b>
 
-{direction_emoji} <b>{data['symbol']}</b>
+{direction_emoji} <b>{symbol}</b>
 💰 Prezzo corrente: <code>${current_price:.4f}</code>
-🎯 Target: <code>${target_price:.4f}</code>
+🎯 Target: <code>${new_alert['target_price']:.4f}</code>
 📍 Direzione: <b>{direction}</b>
 💬 Messaggio: <i>{data['message']}</i>
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
+            else:  # EMA
+                direction_emoji = "🚀" if direction == "ABOVE" else "📉"
+                message = f"""
+🔔 <b>Nuovo Alert EMA Breakout</b>
+
+{direction_emoji} <b>{symbol}</b>
+📊 EMA({ema_period}) su {timeframe}min: <code>${ema_value:.4f}</code>
+💰 Prezzo corrente: <code>${current_price:.4f}</code>
+📍 Breakout: <b>{direction}</b>
+💬 Messaggio: <i>{data['message']}</i>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            
             telegram_notifier.send_message_sync(message)
         
         return jsonify({
             'success': True,
-            'message': 'Alert aggiunto con successo',
+            'message': f'Alert {alert_type} aggiunto con successo',
             'alert': new_alert
         })
         
@@ -134,8 +225,10 @@ def remove_alert(alert_id):
         telegram_notifier = current_app.config.get('TELEGRAM_NOTIFIER')
         if telegram_notifier:
             direction_emoji = "📈" if alert_to_remove['direction'] == "ABOVE" else "📉"
-            message = f"""
-🗑️ <b>Alert Rimosso</b>
+            
+            if alert_to_remove.get('alert_type', 'PRICE') == 'PRICE':
+                message = f"""
+🗑️ <b>Alert Prezzo Rimosso</b>
 
 {direction_emoji} <b>{alert_to_remove['symbol']}</b>
 🎯 Target: <code>${alert_to_remove['target_price']:.4f}</code>
@@ -143,6 +236,17 @@ def remove_alert(alert_id):
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
+            else:  # EMA alert
+                message = f"""
+🗑️ <b>Alert EMA Rimosso</b>
+
+{direction_emoji} <b>{alert_to_remove['symbol']}</b>
+📊 EMA({alert_to_remove['ema_period']}) su {alert_to_remove['timeframe']}min
+📍 Breakout: <b>{alert_to_remove['direction']}</b>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            
             telegram_notifier.send_message_sync(message)
         
         return jsonify({
@@ -250,13 +354,41 @@ def alert_monitor_loop():
                 # Aggiorna prezzo corrente nell'alert
                 alert['current_price'] = current_price
                 
-                # Controlla se l'alert è stato triggerato
                 triggered = False
                 
-                if alert['direction'] == 'ABOVE' and current_price >= alert['target_price']:
-                    triggered = True
-                elif alert['direction'] == 'BELOW' and current_price <= alert['target_price']:
-                    triggered = True
+                if alert.get('alert_type', 'PRICE') == 'PRICE':
+                    # Alert di prezzo fisso
+                    if alert['direction'] == 'ABOVE' and current_price >= alert['target_price']:
+                        triggered = True
+                    elif alert['direction'] == 'BELOW' and current_price <= alert['target_price']:
+                        triggered = True
+                
+                elif alert.get('alert_type') == 'EMA':
+                    # Alert breakout EMA
+                    try:
+                        # Ricalcola EMA corrente
+                        kline_data = get_kline_data('linear', alert['symbol'], str(alert['timeframe']), 50)
+                        if kline_data:
+                            # Inverti l'ordine per cronologia corretta
+                            closes = [float(candle[4]) for candle in reversed(kline_data)]
+                            ema_list = media_esponenziale(closes, alert['ema_period'])
+                            
+                            if ema_list is not None and len(ema_list) > 0:
+                                # Prendi l'ultimo valore EMA (il più recente)
+                                current_ema = ema_list[-1]
+                                
+                                # Aggiorna EMA nell'alert
+                                alert['ema_value'] = current_ema
+                                
+                                # Controlla breakout
+                                if alert['direction'] == 'ABOVE' and current_price > current_ema:
+                                    triggered = True
+                                elif alert['direction'] == 'BELOW' and current_price < current_ema:
+                                    triggered = True
+                    
+                    except Exception as e:
+                        print(f"❌ Errore calcolo EMA per {alert['symbol']}: {e}")
+                        continue
                 
                 if triggered:
                     # Marca alert come triggerato
@@ -271,7 +403,7 @@ def alert_monitor_loop():
                         # Fallback senza context
                         send_alert_notification_fallback(alert)
                     
-                    # Rimuovi alert dalla lista attiva (opzionale)
+                    # Rimuovi alert dalla lista attiva
                     active_alerts.remove(alert)
             
             # Pausa tra controlli
@@ -306,11 +438,14 @@ def send_alert_notification(alert):
         telegram_notifier = current_app.config.get('TELEGRAM_NOTIFIER')
         
         if telegram_notifier:
-            direction_emoji = "🚀" if alert['direction'] == "ABOVE" else "📉"
-            trend_text = "è salito sopra" if alert['direction'] == "ABOVE" else "è sceso sotto"
+            alert_type = alert.get('alert_type', 'PRICE')
             
-            message = f"""
-🚨 <b>ALERT TRIGGERATO!</b> {direction_emoji}
+            if alert_type == 'PRICE':
+                direction_emoji = "🚀" if alert['direction'] == "ABOVE" else "📉"
+                trend_text = "è salito sopra" if alert['direction'] == "ABOVE" else "è sceso sotto"
+                
+                message = f"""
+🚨 <b>ALERT PREZZO TRIGGERATO!</b> {direction_emoji}
 
 💰 <b>{alert['symbol']}</b> {trend_text} il target!
 
@@ -323,8 +458,28 @@ def send_alert_notification(alert):
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 📊 Dashboard: http://localhost:5000/alerts
 """
+            
+            elif alert_type == 'EMA':
+                direction_emoji = "🚀" if alert['direction'] == "ABOVE" else "📉"
+                trend_text = "ha rotto al rialzo" if alert['direction'] == "ABOVE" else "ha rotto al ribasso"
+                
+                message = f"""
+🚨 <b>EMA BREAKOUT TRIGGERATO!</b> {direction_emoji}
+
+💰 <b>{alert['symbol']}</b> {trend_text} EMA({alert['ema_period']})!
+
+📊 EMA({alert['ema_period']}) {alert['timeframe']}min: <code>${alert['ema_value']:.4f}</code>
+💰 Prezzo attuale: <code>${alert['current_price']:.4f}</code>
+📈 Distanza da EMA: <code>{((alert['current_price'] - alert['ema_value']) / alert['ema_value'] * 100):+.2f}%</code>
+
+💬 <i>{alert['message']}</i>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+📊 Dashboard: http://localhost:5000/alerts
+"""
+            
             telegram_notifier.send_message_sync(message)
-            print(f"🔔 Alert triggerato per {alert['symbol']}: {alert['current_price']}")
+            print(f"🔔 Alert {alert_type} triggerato per {alert['symbol']}: {alert['current_price']}")
         
     except Exception as e:
         print(f"❌ Errore invio notifica alert: {e}")
