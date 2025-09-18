@@ -45,16 +45,19 @@ from routes.websocket import register_websocket_events
 # Import health check blueprint - aggiustiamo il path
 try:
     from routes.health import health_bp
+    print("✅ routes.health importato con successo")
 except ImportError:
     # Se non trova routes.health, creiamo un blueprint semplice
     from flask import Blueprint, jsonify
+    import datetime
+    
     health_bp = Blueprint('health', __name__)
     
     @health_bp.route('/health')
     def health():
         return jsonify({
             'status': 'ok',
-            'timestamp': time.time(),
+            'timestamp': datetime.datetime.now().isoformat(),
             'service': 'trading-bot'
         })
     
@@ -62,7 +65,15 @@ except ImportError:
     def api_health():
         return jsonify({
             'status': 'ok',
-            'timestamp': time.time(),
+            'timestamp': datetime.datetime.now().isoformat(),
+            'service': 'trading-bot'
+        })
+    
+    @health_bp.route('/ready')
+    def ready():
+        return jsonify({
+            'status': 'ready',
+            'timestamp': datetime.datetime.now().isoformat(),
             'service': 'trading-bot'
         })
     
