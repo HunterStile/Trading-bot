@@ -1,0 +1,18 @@
+# AI Trading System Requirements
+# Aggiungi queste dipendenze al requirements.txt esistente
+
+# OpenAI per l'engine di decisione
+openai==0.28.1
+
+# Per le analisi news
+requests==2.31.0
+
+# Per i dati macro e finanziari
+yfinance==0.2.18
+pandas==2.0.3
+
+# Già presenti nel bot principale (verificare versioni):
+# python-dotenv
+# flask
+# flask-socketio
+# pybit

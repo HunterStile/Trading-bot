@@ -1,0 +1,85 @@
+# Dipendenze Python per Trading Bot
+# Installazione: pip install -r requirements.txt
+
+# 🌐 Web Framework
+Flask==2.3.3
+Flask-SocketIO==5.3.6
+
+# 📊 Trading e API
+pybit==5.7.0
+requests==2.31.0
+
+# 🤖 Telegram Bot
+python-telegram-bot==20.5
+
+# 🔍 Web Scraping
+selenium==4.15.2
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# 📈 Analisi Tecnica e Grafici
+pandas==2.1.1
+numpy==1.24.3
+matplotlib==3.7.2
+plotly==5.17.0
+ta==0.10.2
+mplfinance==0.12.10a0
+
+# 🗄️ Database
+sqlite3
+
+# 🔧 Utility
+python-dotenv==1.0.0
+schedule==1.2.0
+psutil==5.9.5
+
+# 📧 Email (opzionale)
+smtplib
+
+# 🎵 Audio/Spotify (opzionale) 
+spotipy==2.23.0
+
+# 🔐 Sicurezza
+cryptography==41.0.7
+
+# 📝 Logging
+colorlog==6.7.0
+
+# ⏰ Date e Tempo
+python-dateutil==2.8.2
+pytz==2023.3
+
+# 🧪 Testing (opzionale)
+pytest==7.4.2
+pytest-cov==4.1.0
+
+# 🔄 Threading e Async
+asyncio
+concurrent.futures
+
+# 📊 JSON e YAML
+PyYAML==6.0.1
+
+# 🖥️ Sistema
+psutil==5.9.5
+
+# 📱 HTTP Client avanzato
+httpx==0.25.0
+
+# 🎨 CLI Colors
+termcolor==2.3.0
+
+# 🔢 Calcoli finanziari
+ccxt==4.1.14
+
+# 📦 Gestione configurazione
+configparser
+
+# 🔍 Regex avanzate
+regex==2023.8.8
+
+# ⚡ Performance
+ujson==5.8.0
+
+# 🌍 Timezone
+tzlocal==5.0.1

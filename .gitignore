@@ -104,9 +104,10 @@ dmypy.json
 
 # File di log e output del bot
 *.log
-*.txt
+# File txt specifici da escludere (non requirements.txt!)
 announcements.txt
 news.txt
+help.txt
 
 # File di configurazione browser
 chrome_path.txt
@@ -136,6 +137,9 @@ Thumbs.db
 # File di configurazione locale
 local_config.py
 
+# 📋 REQUIREMENTS.TXT DEVE ESSERE INCLUSO!
+!requirements.txt
+
 
 trading_data.db
 bot_state.db
@@ -148,3 +152,8 @@ sqlite3.exe
 
 /backtest_results/
 /backtest_charts/
+
+# Files di produzione
+deploy.log
+production.log
+supervisor.log
