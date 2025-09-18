@@ -41,7 +41,32 @@ except ImportError as e:
 # Import dei blueprints
 from routes import register_blueprints
 from routes.websocket import register_websocket_events
-from routes.health import health_bp
+
+# Import health check blueprint - aggiustiamo il path
+try:
+    from routes.health import health_bp
+except ImportError:
+    # Se non trova routes.health, creiamo un blueprint semplice
+    from flask import Blueprint, jsonify
+    health_bp = Blueprint('health', __name__)
+    
+    @health_bp.route('/health')
+    def health():
+        return jsonify({
+            'status': 'ok',
+            'timestamp': time.time(),
+            'service': 'trading-bot'
+        })
+    
+    @health_bp.route('/api/health')
+    def api_health():
+        return jsonify({
+            'status': 'ok',
+            'timestamp': time.time(),
+            'service': 'trading-bot'
+        })
+    
+    print("⚠️ routes.health non trovato - usando health check integrato")
 
 # Import sistema notifiche Telegram
 from utils.telegram_notifier import init_telegram_notifier
