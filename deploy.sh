@@ -107,10 +107,20 @@ docker-compose up -d
 print_status "Attendendo avvio..."
 sleep 10
 
+# 6. Verifica servizi
+print_status "Verifica servizi..."
+if docker-compose ps | grep -q "Up"; then
+    print_status "Servizi avviati correttamente"
+else
+    print_warning "Alcuni servizi potrebbero non essere avviati"
+fi
+
 print_status "✅ DEPLOY COMPLETATO!"
 echo ""
 echo "📊 Dashboard: http://$(hostname -I | cut -d' ' -f1):5000"
 echo "🔧 Gestione: docker-compose logs -f"
+echo "🔄 Restart: docker-compose restart"
+echo "🛑 Stop: docker-compose down"
 echo ""
 print_info "Il bot è pronto!"
 
