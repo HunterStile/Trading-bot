@@ -3,30 +3,102 @@
 
 set -e
 
-echo "� DEPLOY TRADING BOT # 4. Configurazione per localhost
-DOMAIN="localhost"
-print_status "Configurazione per localhost - nginx proxy manager gestirà SSL"
+echo "🐳 DEPLOY TRADING BOT CON DOCKER"
+echo "================================="
 
-# 5. Crea directory necessarie
-print_status "Creazione directory necessarie..."
+# Colori per output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Funzione per print colorato
+print_status() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠️ $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}❌ $1${NC}"
+}
+
+print_info() {
+    echo -e "${BLUE}ℹ️ $1${NC}"
+}
+
+# Check se eseguito come root
+if [[ $EUID -eq 0 ]]; then
+   print_error "Non eseguire questo script come root!"
+   exit 1
+fi
+
+# 1. Verifica Docker
+print_status "Verifica Docker..."
+if ! command -v docker &> /dev/null; then
+    print_error "Docker non trovato! Installa Docker prima di continuare"
+    exit 1
+fi
+
+if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+    print_error "Docker Compose non trovato! Installa Docker Compose"
+    exit 1
+fi
+
+print_status "Docker verificato"
+
+# 2. Verifica directory progetto
+PROJECT_DIR=$(pwd)
+print_status "Directory progetto: $PROJECT_DIR"
+
+if [ ! -f "docker-compose.yml" ] || [ ! -f "Dockerfile" ]; then
+    print_error "File Docker mancanti! Assicurati di essere nella directory del Trading-bot"
+    exit 1
+fi
+
+# 3. Configurazione .env
+if [ ! -f ".env" ]; then
+    print_status "Configurazione file .env..."
+    cp .env.example .env
+    
+    print_info "Configurazione API keys:"
+    read -p "Bybit API Key: " BYBIT_API_KEY
+    read -p "Bybit API Secret: " BYBIT_API_SECRET
+    read -p "Telegram Token: " TELEGRAM_TOKEN
+    read -p "Telegram Chat ID: " TELEGRAM_CHAT_ID
+    
+    sed -i "s/BYBIT_API_KEY=.*/BYBIT_API_KEY=$BYBIT_API_KEY/" .env
+    sed -i "s/BYBIT_API_SECRET=.*/BYBIT_API_SECRET=$BYBIT_API_SECRET/" .env
+    sed -i "s/TELEGRAM_TOKEN=.*/TELEGRAM_TOKEN=$TELEGRAM_TOKEN/" .env
+    sed -i "s/TELEGRAM_CHAT_ID=.*/TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID/" .env
+    
+    print_status "File .env configurato"
+else
+    print_warning "File .env esistente"
+fi
+
+# 4. Crea directory
+print_status "Creazione directory..."
 mkdir -p data logs backups
 
-# 8. Scelta configurazione nginx
-print_status "Configurazione nginx..."
+# 5. Deploy
+print_status "Deploy con Docker..."
+docker-compose down 2>/dev/null || true
+docker-compose build --no-cache
+docker-compose up -d
+
+print_status "Attendendo avvio..."
+sleep 10
+
+print_status "✅ DEPLOY COMPLETATO!"
 echo ""
-echo "Scegli la configurazione nginx:"
-echo "1) Nginx incluso nel Docker (semplice)"
-echo "2) Solo bot - nginx esterno/Nginx Proxy Manager (raccomandato)"
+echo "📊 Dashboard: http://$(hostname -I | cut -d' ' -f1):5000"
+echo "🔧 Gestione: docker-compose logs -f"
 echo ""
-if [ "$NGINX_CHOICE" = "2" ]; then
-    echo "   📊 Dashboard: http://IP_DEL_SERVER:5000"
-    echo "   🔧 Configurazione domini: tramite Nginx Proxy Manager"
-else
-    echo "   📊 Dashboard: http://IP_DEL_SERVER"
-    echo "   📊 Dashboard diretta: http://IP_DEL_SERVER:5000"
-fiinx esterno/Nginx Proxy Manager (raccomandato)"
-echo ""
-read -p "Scegli opzione (1 o 2): " NGINX_CHOICE
+print_info "Il bot è pronto!"
 
 if [ "$NGINX_CHOICE" = "2" ]; then
     print_status "Configurazione per Nginx Proxy Manager..."
