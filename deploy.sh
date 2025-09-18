@@ -33,6 +33,9 @@ print_info() {
 # Check se eseguito come root
 if [[ $EUID -eq 0 ]]; then
    print_error "Non eseguire questo script come root!"
+   print_info "Invece, aggiungi l'utente al gruppo docker:"
+   print_info "sudo usermod -aG docker \$USER"
+   print_info "newgrp docker"
    exit 1
 fi
 
@@ -45,6 +48,17 @@ fi
 
 if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
     print_error "Docker Compose non trovato! Installa Docker Compose"
+    exit 1
+fi
+
+# 2. Verifica permessi Docker
+print_status "Verifica permessi Docker..."
+if ! docker ps &> /dev/null; then
+    print_error "L'utente $(whoami) non ha permessi per Docker!"
+    print_info "Esegui questi comandi:"
+    print_info "sudo usermod -aG docker $(whoami)"
+    print_info "newgrp docker"
+    print_info "Poi riavvia il terminale e riprova"
     exit 1
 fi
 
