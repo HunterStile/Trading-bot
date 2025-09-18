@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   trading-bot:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
     container_name: trading-bot
     restart: unless-stopped
     ports:
@@ -11,24 +13,39 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./backups:/app/backups
+      - ./trading_data.db:/app/trading_data.db:rw
+      - ./bot_state.db:/app/bot_state.db:rw
     environment:
       - FLASK_ENV=production
       - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
     env_file:
       - .env
     depends_on:
       - redis
     networks:
       - trading-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   redis:
     image: redis:7-alpine
     container_name: trading-redis
     restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-tradingbot2024}
     volumes:
       - redis_data:/data
     networks:
       - trading-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   nginx:
     image: nginx:alpine
@@ -44,9 +61,15 @@ services:
       - trading-bot
     networks:
       - trading-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   redis_data:
+    driver: local
 
 networks:
   trading-network:

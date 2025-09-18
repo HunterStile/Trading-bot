@@ -1,15 +1,16 @@
 #!/bin/bash
-# Script di deploy rapido per Trading Bot
+# Script di deploy con Docker per Trading Bot
 
 set -e
 
-echo "🚀 DEPLOY TRADING BOT - SETUP AUTOMATICO"
-echo "========================================"
+echo "� DEPLOY TRADING BOT CON DOCKER"
+echo "================================="
 
 # Colori per output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Funzione per print colorato
@@ -25,61 +26,91 @@ print_error() {
     echo -e "${RED}❌ $1${NC}"
 }
 
+print_info() {
+    echo -e "${BLUE}ℹ️ $1${NC}"
+}
+
 # Check se eseguito come root
 if [[ $EUID -eq 0 ]]; then
    print_error "Non eseguire questo script come root!"
    exit 1
 fi
 
-# 1. Aggiornamento sistema
-print_status "Aggiornamento sistema..."
-sudo apt update -y
+# 1. Verifica Docker e Docker Compose
+print_status "Verifica Docker..."
+if ! command -v docker &> /dev/null; then
+    print_warning "Docker non trovato, installazione in corso..."
+    sudo apt update -y
+    sudo apt install -y ca-certificates curl gnupg lsb-release
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    sudo apt update -y
+    sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    sudo usermod -aG docker $USER
+    print_status "Docker installato! Rilogga per usare Docker senza sudo"
+fi
 
-# 2. Installazione dipendenze di sistema
-print_status "Installazione dipendenze di sistema..."
-sudo apt install -y python3 python3-pip python3-venv git nginx supervisor redis-server curl wget unzip
+if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+    print_warning "Docker Compose non trovato, installazione in corso..."
+    sudo apt install -y docker-compose-plugin
+fi
 
-# 3. Installazione Google Chrome (OPZIONALE - solo per scraping)
-read -p "Vuoi installare Chrome per le funzioni di scraping? (y/n): " INSTALL_CHROME
-if [[ $INSTALL_CHROME == "y" || $INSTALL_CHROME == "Y" ]]; then
-    print_status "Installazione Google Chrome..."
-    if ! command -v google-chrome &> /dev/null; then
-        # Prova prima l'installazione normale
-        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add - 2>/dev/null || true
-        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-        sudo apt update
-        
-        if sudo apt install -y google-chrome-stable; then
-            print_status "Chrome installato con successo"
-        else
-            print_warning "Installazione Chrome fallita - continuo senza Chrome"
-            print_warning "Il bot funzionerà comunque per il trading (senza scraping)"
-        fi
-    else
-        print_warning "Chrome già installato"
-    fi
+print_status "Docker verificato"
 
-    # 4. Installazione ChromeDriver (solo se Chrome è installato)
-    if command -v google-chrome &> /dev/null; then
-        print_status "Installazione ChromeDriver..."
-        if ! command -v chromedriver &> /dev/null; then
-            CHROMEDRIVER_VERSION=$(curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE 2>/dev/null || echo "114.0.5735.90")
-            wget -N http://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip -O /tmp/chromedriver.zip 2>/dev/null || true
-            if [ -f "/tmp/chromedriver.zip" ]; then
-                unzip /tmp/chromedriver.zip -d /tmp/
-                sudo mv /tmp/chromedriver /usr/local/bin/ 2>/dev/null || true
-                sudo chmod +x /usr/local/bin/chromedriver 2>/dev/null || true
-                rm /tmp/chromedriver.zip 2>/dev/null || true
-                print_status "ChromeDriver installato"
-            else
-                print_warning "Download ChromeDriver fallito - configura manualmente se necessario"
-            fi
-        else
-            print_warning "ChromeDriver già installato"
-        fi
-    fi
+# 2. Verifica directory progetto
+PROJECT_DIR=$(pwd)
+print_status "Directory progetto: $PROJECT_DIR"
+
+# Verifica che siamo nella directory giusta
+if [ ! -f "docker-compose.yml" ] || [ ! -f "Dockerfile" ]; then
+    print_error "ERRORE: File Docker mancanti!"
+    print_error "Assicurati di essere nella directory del Trading-bot con docker-compose.yml"
+    exit 1
+fi
+
+print_status "File Docker trovati"
+
+# 3. Configurazione .env
+if [ ! -f ".env" ]; then
+    print_status "Configurazione file .env..."
+    cp .env.example .env
+    
+    print_info "Configurazione interattiva delle API keys:"
+    read -p "Inserisci la tua Bybit API Key: " BYBIT_API_KEY
+    read -p "Inserisci la tua Bybit API Secret: " BYBIT_API_SECRET
+    read -p "Inserisci il Token del Bot Telegram: " TELEGRAM_TOKEN
+    read -p "Inserisci il tuo Chat ID Telegram: " TELEGRAM_CHAT_ID
+    
+    # Sostituisci nel file .env
+    sed -i "s/BYBIT_API_KEY=.*/BYBIT_API_KEY=$BYBIT_API_KEY/" .env
+    sed -i "s/BYBIT_API_SECRET=.*/BYBIT_API_SECRET=$BYBIT_API_SECRET/" .env
+    sed -i "s/TELEGRAM_TOKEN=.*/TELEGRAM_TOKEN=$TELEGRAM_TOKEN/" .env
+    sed -i "s/TELEGRAM_CHAT_ID=.*/TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID/" .env
+    
+    print_status "File .env configurato"
 else
-    print_warning "Chrome NON installato - il bot funzionerà senza scraping"
+    print_warning "File .env già esistente - usando configurazione esistente"
+fi
+
+# 4. Configurazione dominio per Nginx
+read -p "Inserisci il tuo dominio (es. trading.miodominio.com) o premi ENTER per localhost: " DOMAIN
+if [ -z "$DOMAIN" ]; then
+    DOMAIN="localhost"
+    print_warning "Usando localhost come dominio"
+fi
+
+# 5. Crea directory necessarie
+print_status "Creazione directory necessarie..."
+mkdir -p data logs backups ssl
+
+# 6. Genera certificati SSL self-signed se non esistono
+if [ ! -f "ssl/cert.pem" ]; then
+    print_status "Generazione certificati SSL self-signed..."
+    openssl req -x509 -newkey rsa:4096 -keyout ssl/key.pem -out ssl/cert.pem -days 365 -nodes 
+        -subj "/C=IT/ST=Italy/L=City/O=TradingBot/CN=$DOMAIN" 2>/dev/null || {
+        print_warning "OpenSSL non disponibile, SSL disabilitato"
+        touch ssl/cert.pem ssl/key.pem
+    }
 fi
 
 # 5. Setup progetto
@@ -257,88 +288,186 @@ if [[ $SETUP_SSL == "y" || $SETUP_SSL == "Y" ]]; then
     sudo certbot --nginx -d $DOMAIN
 fi
 
-# 13. Creazione script di gestione
+# 7. Test configurazione (opzionale)
+read -p "Vuoi testare la configurazione prima del deploy? (y/n): " TEST_CONFIG
+if [[ $TEST_CONFIG == "y" || $TEST_CONFIG == "Y" ]]; then
+    print_status "Test configurazione..."
+    if [ -f "test_robust.py" ]; then
+        docker run --rm -v "$PROJECT_DIR:/app" -w /app --env-file .env python:3.9-slim bash -c "
+            pip install -q requests pybit python-telegram-bot python-dotenv && 
+            python test_robust.py
+        " && print_status "Test configurazione superato!" || print_warning "Test configurazione fallito"
+    else
+        print_warning "File test_robust.py non trovato, salto il test"
+    fi
+fi
+
+# 8. Ferma container esistenti
+print_status "Pulizia container esistenti..."
+docker-compose down 2>/dev/null || true
+docker system prune -f 2>/dev/null || true
+
+# 9. Build e avvio con Docker Compose
+print_status "Build immagini Docker..."
+docker-compose build --no-cache
+
+print_status "Avvio servizi con Docker..."
+docker-compose up -d
+
+# 10. Attendi che i servizi siano pronti
+print_status "Attendendo avvio servizi..."
+sleep 15
+
+# 11. Controllo stato servizi
+print_status "Controllo stato servizi..."
+docker-compose ps
+
+# 12. Test connettività
+print_status "Test connettività..."
+if curl -f -s http://localhost:5000 > /dev/null; then
+    print_status "✅ Trading Bot risponde correttamente!"
+else
+    print_warning "⚠️ Trading Bot non risponde, controlla i log"
+fi
+
+# 13. Configurazione SSL con Let's Encrypt (opzionale)
+if [ "$DOMAIN" != "localhost" ]; then
+    read -p "Vuoi configurare SSL con Let's Encrypt per $DOMAIN? (y/n): " SETUP_SSL
+    if [[ $SETUP_SSL == "y" || $SETUP_SSL == "Y" ]]; then
+        print_status "Installazione Certbot..."
+        sudo apt update && sudo apt install -y certbot
+        print_info "Per configurare SSL, ferma il container nginx e esegui:"
+        print_info "sudo certbot certonly --standalone -d $DOMAIN"
+        print_info "Poi copia i certificati in ssl/ e riavvia con docker-compose up -d"
+    fi
+fi
+
+# 14. Creazione script di gestione Docker
 print_status "Creazione script di gestione..."
 
-# Script di deploy
-cat > deploy.sh << 'EOF'
+# Script di gestione Docker
+cat > docker-manage.sh << 'EOF'
 #!/bin/bash
-set -e
-echo "🚀 Deploy Trading Bot..."
-PROJECT_DIR=$(pwd)
-cd $PROJECT_DIR
-sudo supervisorctl stop trading-bot:* 2>/dev/null || true
-git pull origin main 2>/dev/null || git pull origin master 2>/dev/null || echo "Git pull fallito"
-source venv/bin/activate
-pip install -r requirements.txt
-sudo supervisorctl start trading-bot:* 2>/dev/null || echo "Supervisor non configurato"
-echo "✅ Deploy completato!"
+# Script di gestione Docker per Trading Bot
+
+case "$1" in
+    start)
+        echo "🚀 Avvio Trading Bot..."
+        docker-compose up -d
+        echo "✅ Trading Bot avviato!"
+        ;;
+    stop)
+        echo "🛑 Fermando Trading Bot..."
+        docker-compose down
+        echo "✅ Trading Bot fermato!"
+        ;;
+    restart)
+        echo "� Riavvio Trading Bot..."
+        docker-compose down
+        docker-compose up -d
+        echo "✅ Trading Bot riavviato!"
+        ;;
+    logs)
+        echo "� Log Trading Bot:"
+        docker-compose logs -f --tail=50
+        ;;
+    status)
+        echo "📊 Stato Trading Bot:"
+        docker-compose ps
+        echo ""
+        echo "� Utilizzo risorse:"
+        docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}"
+        ;;
+    update)
+        echo "� Aggiornamento Trading Bot..."
+        git pull origin main 2>/dev/null || git pull origin master 2>/dev/null || echo "Git pull fallito"
+        docker-compose down
+        docker-compose build --no-cache
+        docker-compose up -d
+        echo "✅ Aggiornamento completato!"
+        ;;
+    backup)
+        BACKUP_DIR="./backups"
+        DATE=$(date +%Y%m%d_%H%M%S)
+        mkdir -p $BACKUP_DIR
+        echo "� Backup in corso..."
+        
+        # Backup database dai container
+        docker-compose exec trading-bot cp /app/data/trading_data.db /app/backups/trading_data_$DATE.db 2>/dev/null || true
+        docker-compose exec trading-bot cp /app/data/bot_state.db /app/backups/bot_state_$DATE.db 2>/dev/null || true
+        
+        # Backup configurazione
+        cp .env $BACKUP_DIR/env_$DATE.backup
+        
+        # Comprimi backup
+        tar -czf $BACKUP_DIR/backup_$DATE.tar.gz -C $BACKUP_DIR *_$DATE.*
+        rm $BACKUP_DIR/*_$DATE.* 2>/dev/null || true
+        
+        echo "✅ Backup completato: $BACKUP_DIR/backup_$DATE.tar.gz"
+        ;;
+    clean)
+        echo "🧹 Pulizia sistema Docker..."
+        docker-compose down
+        docker system prune -f
+        docker volume prune -f
+        echo "✅ Pulizia completata!"
+        ;;
+    *)
+        echo "🐳 Trading Bot Docker Manager"
+        echo "Utilizzo: $0 {start|stop|restart|logs|status|update|backup|clean}"
+        echo ""
+        echo "Comandi disponibili:"
+        echo "  start   - Avvia il Trading Bot"
+        echo "  stop    - Ferma il Trading Bot"
+        echo "  restart - Riavvia il Trading Bot"
+        echo "  logs    - Mostra i log in tempo reale"
+        echo "  status  - Mostra stato e risorse"
+        echo "  update  - Aggiorna e ricostruisce"
+        echo "  backup  - Crea backup dei dati"
+        echo "  clean   - Pulisce il sistema Docker"
+        exit 1
+        ;;
+esac
 EOF
 
-# Script di monitoraggio
-cat > monitor.sh << 'EOF'
-#!/bin/bash
-echo "📊 STATO TRADING BOT"
-echo "===================="
-echo ""
-echo "🔧 Processi:"
-sudo supervisorctl status trading-bot:*
-echo ""
-echo "🌐 Nginx:"
-sudo systemctl status nginx --no-pager -l
-echo ""
-echo "📝 Log Frontend (ultime 10 righe):"
-tail -n 10 /var/log/trading-bot/frontend.out.log
-echo ""
-echo "⚠️ Errori (ultime 5 righe):"
-tail -n 5 /var/log/trading-bot/frontend.err.log
-EOF
+chmod +x docker-manage.sh
 
-# Script di backup
-cat > backup.sh << 'EOF'
-#!/bin/bash
-PROJECT_DIR=$(pwd)
-BACKUP_DIR="$PROJECT_DIR/backups"
-DATE=$(date +%Y%m%d_%H%M%S)
-mkdir -p $BACKUP_DIR
-echo "📦 Backup in corso..."
-cp trading_data.db $BACKUP_DIR/trading_data_$DATE.db 2>/dev/null || true
-cp bot_state.db $BACKUP_DIR/bot_state_$DATE.db 2>/dev/null || true
-cp .env $BACKUP_DIR/env_$DATE.backup
-tar -czf $BACKUP_DIR/backup_$DATE.tar.gz -C $BACKUP_DIR *_$DATE.*
-rm $BACKUP_DIR/*_$DATE.db $BACKUP_DIR/*_$DATE.backup 2>/dev/null || true
-echo "✅ Backup: $BACKUP_DIR/backup_$DATE.tar.gz"
-EOF
-
-chmod +x deploy.sh monitor.sh backup.sh
-
-# 14. Setup cron per backup automatico
-print_status "Setup backup automatico..."
-CURRENT_DIR=$(pwd)
-(crontab -l 2>/dev/null; echo "0 2 * * * cd $CURRENT_DIR && ./backup.sh") | crontab -
-
-# 15. Configurazione firewall
-print_status "Configurazione firewall..."
-sudo ufw --force enable
-sudo ufw allow ssh
-sudo ufw allow 80
-sudo ufw allow 443
-
-print_status "✅ SETUP COMPLETATO!"
+# 16. RISULTATI FINALI
+print_status "✅ DEPLOY DOCKER COMPLETATO!"
 echo ""
-echo "🎉 Il tuo Trading Bot è ora configurato in produzione!"
+echo "🎉 Il tuo Trading Bot è ora attivo con Docker!"
 echo ""
-echo "📊 Dashboard: http://$DOMAIN (o https se hai configurato SSL)"
-echo "🔧 Controllo: sudo supervisorctl status trading-bot:*"
-echo "📋 Monitor: ./monitor.sh"
-echo "🚀 Deploy: ./deploy.sh"
-echo "📦 Backup: ./backup.sh"
+echo "🌐 ACCESSO:"
+echo "   📊 Dashboard: http://$DOMAIN"
+if [ "$DOMAIN" != "localhost" ]; then
+    echo "   🔒 HTTPS: https://$DOMAIN (se SSL configurato)"
+fi
+echo "   🐳 Portainer: http://$DOMAIN:9000 (se installato)"
 echo ""
-echo "📁 Directory progetto: $PROJECT_DIR"
-echo "📝 Log: /var/log/trading-bot/"
+echo "🔧 GESTIONE:"
+echo "   ./docker-manage.sh start    - Avvia bot"
+echo "   ./docker-manage.sh stop     - Ferma bot"
+echo "   ./docker-manage.sh restart  - Riavvia bot"
+echo "   ./docker-manage.sh logs     - Mostra log"
+echo "   ./docker-manage.sh status   - Stato servizi"
+echo "   ./docker-manage.sh update   - Aggiorna bot"
+echo "   ./docker-manage.sh backup   - Backup dati"
 echo ""
-print_warning "IMPORTANTE:"
-print_warning "1. Configura il file .env con le tue chiavi API reali"
-print_warning "2. Testa la connessione con: python3 test_api.py"
-print_warning "3. Monitora i log per errori: tail -f /var/log/trading-bot/frontend.out.log"
-print_warning "4. Per avviare il bot: accedi alla dashboard e usa il pannello di controllo"
+echo "📊 MONITORING:"
+echo "   docker-compose ps           - Stato container"
+echo "   docker-compose logs -f      - Log in tempo reale"
+echo "   docker stats                - Utilizzo risorse"
+echo ""
+echo "📁 DIRECTORY:"
+echo "   Progetto: $PROJECT_DIR"
+echo "   Dati: $PROJECT_DIR/data/"
+echo "   Log: $PROJECT_DIR/logs/"
+echo "   Backup: $PROJECT_DIR/backups/"
+echo ""
+print_warning "NEXT STEPS:"
+print_warning "1. Verifica che .env sia configurato correttamente"
+print_warning "2. Accedi alla dashboard per testare il bot"
+print_warning "3. Configura SSL se stai usando un dominio pubblico"
+print_warning "4. Monitora i log per eventuali errori"
+echo ""
+print_info "🚀 Il bot è pronto! Buon trading! 📈"
