@@ -262,12 +262,13 @@ if __name__ == '__main__':
     print("🧪 Test API: http://localhost:5000/api-test")
     
     try:
-        socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+        # In produzione con Werkzeug non sicuro, abilita allow_unsafe_werkzeug
+        socketio.run(app, debug=False, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
     except KeyboardInterrupt:
         print("\n👋 Server fermato dall'utente")
         # Salva che il bot è stato fermato manualmente
         if bot_state_manager:
             bot_state_manager.save_bot_stopped_state()
     except Exception as e:
-        print(f"❌ Errore nell'avvio del servDr: {e}")
+        print(f"❌ Errore nell'avvio del server: {e}")
         # Non salviamo nulla in caso di errore di startup
