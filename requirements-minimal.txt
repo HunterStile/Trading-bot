@@ -1,4 +1,10 @@
-# Requirements minimi per il Trading Bot
+# Requireme# 🤖 Telegram Bot (essenziale)
+python-telegram-bot>=20.0
+
+# 📈 Grafici e visualizzazione (per evitare warning)
+matplotlib>=3.7.0
+
+# 🌐 Web Scraping (per compatibilità)minimi per il Trading Bot
 # Per installazione rapida: pip install -r requirements-minimal.txt
 
 # 🌐 Web Framework (essenziale)
