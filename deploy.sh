@@ -39,28 +39,47 @@ sudo apt update -y
 print_status "Installazione dipendenze di sistema..."
 sudo apt install -y python3 python3-pip python3-venv git nginx supervisor redis-server curl wget unzip
 
-# 3. Installazione Google Chrome
-print_status "Installazione Google Chrome..."
-if ! command -v google-chrome &> /dev/null; then
-    wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-    sudo apt update
-    sudo apt install -y google-chrome-stable
-else
-    print_warning "Chrome già installato"
-fi
+# 3. Installazione Google Chrome (OPZIONALE - solo per scraping)
+read -p "Vuoi installare Chrome per le funzioni di scraping? (y/n): " INSTALL_CHROME
+if [[ $INSTALL_CHROME == "y" || $INSTALL_CHROME == "Y" ]]; then
+    print_status "Installazione Google Chrome..."
+    if ! command -v google-chrome &> /dev/null; then
+        # Prova prima l'installazione normale
+        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add - 2>/dev/null || true
+        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+        sudo apt update
+        
+        if sudo apt install -y google-chrome-stable; then
+            print_status "Chrome installato con successo"
+        else
+            print_warning "Installazione Chrome fallita - continuo senza Chrome"
+            print_warning "Il bot funzionerà comunque per il trading (senza scraping)"
+        fi
+    else
+        print_warning "Chrome già installato"
+    fi
 
-# 4. Installazione ChromeDriver
-print_status "Installazione ChromeDriver..."
-if ! command -v chromedriver &> /dev/null; then
-    CHROMEDRIVER_VERSION=$(curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE)
-    wget -N http://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip
-    unzip chromedriver_linux64.zip
-    sudo mv chromedriver /usr/local/bin/
-    sudo chmod +x /usr/local/bin/chromedriver
-    rm chromedriver_linux64.zip
+    # 4. Installazione ChromeDriver (solo se Chrome è installato)
+    if command -v google-chrome &> /dev/null; then
+        print_status "Installazione ChromeDriver..."
+        if ! command -v chromedriver &> /dev/null; then
+            CHROMEDRIVER_VERSION=$(curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE 2>/dev/null || echo "114.0.5735.90")
+            wget -N http://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip -O /tmp/chromedriver.zip 2>/dev/null || true
+            if [ -f "/tmp/chromedriver.zip" ]; then
+                unzip /tmp/chromedriver.zip -d /tmp/
+                sudo mv /tmp/chromedriver /usr/local/bin/ 2>/dev/null || true
+                sudo chmod +x /usr/local/bin/chromedriver 2>/dev/null || true
+                rm /tmp/chromedriver.zip 2>/dev/null || true
+                print_status "ChromeDriver installato"
+            else
+                print_warning "Download ChromeDriver fallito - configura manualmente se necessario"
+            fi
+        else
+            print_warning "ChromeDriver già installato"
+        fi
+    fi
 else
-    print_warning "ChromeDriver già installato"
+    print_warning "Chrome NON installato - il bot funzionerà senza scraping"
 fi
 
 # 5. Setup progetto
@@ -111,8 +130,15 @@ if [ ! -f ".env" ]; then
     sed -i "s/BYBIT_API_SECRET=.*/BYBIT_API_SECRET=$BYBIT_API_SECRET/" .env
     sed -i "s/TELEGRAM_TOKEN=.*/TELEGRAM_TOKEN=$TELEGRAM_TOKEN/" .env
     sed -i "s/TELEGRAM_CHAT_ID=.*/TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID/" .env
-    sed -i "s|CHROME_DRIVER_PATH=.*|CHROME_DRIVER_PATH=/usr/local/bin/chromedriver|" .env
-    sed -i "s|CHROME_BINARY_PATH=.*|CHROME_BINARY_PATH=/usr/bin/google-chrome|" .env
+    
+    # Configura Chrome solo se installato
+    if command -v google-chrome &> /dev/null; then
+        sed -i "s|CHROME_DRIVER_PATH=.*|CHROME_DRIVER_PATH=/usr/local/bin/chromedriver|" .env
+        sed -i "s|CHROME_BINARY_PATH=.*|CHROME_BINARY_PATH=/usr/bin/google-chrome|" .env
+    else
+        sed -i "s|CHROME_DRIVER_PATH=.*|CHROME_DRIVER_PATH=|" .env
+        sed -i "s|CHROME_BINARY_PATH=.*|CHROME_BINARY_PATH=|" .env
+    fi
 else
     print_warning "File .env già esistente"
 fi
