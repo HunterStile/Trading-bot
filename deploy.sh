@@ -3,8 +3,83 @@
 
 set -e
 
-echo "� DEPLOY TRADING BOT CON DOCKER"
-echo "================================="
+echo "� DEPLOY TRADING BOT # 4. Configurazione per localhost
+DOMAIN="localhost"
+print_status "Configurazione per localhost - nginx proxy manager gestirà SSL"
+
+# 5. Crea directory necessarie
+print_status "Creazione directory necessarie..."
+mkdir -p data logs backups
+
+# 8. Scelta configurazione nginx
+print_status "Configurazione nginx..."
+echo ""
+echo "Scegli la configurazione nginx:"
+echo "1) Nginx incluso nel Docker (semplice)"
+echo "2) Solo bot echo "🌐 ACCESSO:"
+if [ "$NGINX_CHOICE" = "2" ]; then
+    echo "   📊 Dashboard: http://IP_DEL_SERVER:5000"
+    echo "   🔧 Configurazione domini: tramite Nginx Proxy Manager"
+else
+    echo "   📊 Dashboard: http://IP_DEL_SERVER"
+    echo "   📊 Dashboard diretta: http://IP_DEL_SERVER:5000"
+fiinx esterno/Nginx Proxy Manager (raccomandato)"
+echo ""
+read -p "Scegli opzione (1 o 2): " NGINX_CHOICE
+
+if [ "$NGINX_CHOICE" = "2" ]; then
+    print_status "Configurazione per Nginx Proxy Manager..."
+    COMPOSE_FILE="docker-compose.simple.yml"
+    print_info "Useremo docker-compose.simple.yml (solo bot + redis)"
+else
+    print_status "Configurazione con nginx incluso..."
+    COMPOSE_FILE="docker-compose.yml"
+    
+    # Crea configurazione nginx semplificata
+    cat > nginx-simple.conf << 'EOF'
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream trading-bot {
+        server trading-bot:5000;
+    }
+
+    server {
+        listen 80;
+        server_name _;
+
+        # Proxy settings
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Main application
+        location / {
+            proxy_pass http://trading-bot;
+        }
+
+        # WebSocket support
+        location /socket.io/ {
+            proxy_pass http://trading-bot;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+
+        # Health check
+        location /health {
+            proxy_pass http://trading-bot;
+        }
+    }
+}
+EOF
+    
+    # Usa la configurazione semplificata
+    cp nginx-simple.conf nginx.conf
+fi==============================="
 
 # Colori per output
 RED='\033[0;31m'
@@ -304,15 +379,15 @@ fi
 
 # 8. Ferma container esistenti
 print_status "Pulizia container esistenti..."
-docker-compose down 2>/dev/null || true
+docker-compose -f $COMPOSE_FILE down 2>/dev/null || true
 docker system prune -f 2>/dev/null || true
 
 # 9. Build e avvio con Docker Compose
 print_status "Build immagini Docker..."
-docker-compose build --no-cache
+docker-compose -f $COMPOSE_FILE build --no-cache
 
 print_status "Avvio servizi con Docker..."
-docker-compose up -d
+docker-compose -f $COMPOSE_FILE up -d
 
 # 10. Attendi che i servizi siano pronti
 print_status "Attendendo avvio servizi..."
@@ -320,7 +395,7 @@ sleep 15
 
 # 11. Controllo stato servizi
 print_status "Controllo stato servizi..."
-docker-compose ps
+docker-compose -f $COMPOSE_FILE ps
 
 # 12. Test connettività
 print_status "Test connettività..."
@@ -330,16 +405,26 @@ else
     print_warning "⚠️ Trading Bot non risponde, controlla i log"
 fi
 
-# 13. Configurazione SSL con Let's Encrypt (opzionale)
-if [ "$DOMAIN" != "localhost" ]; then
-    read -p "Vuoi configurare SSL con Let's Encrypt per $DOMAIN? (y/n): " SETUP_SSL
-    if [[ $SETUP_SSL == "y" || $SETUP_SSL == "Y" ]]; then
-        print_status "Installazione Certbot..."
-        sudo apt update && sudo apt install -y certbot
-        print_info "Per configurare SSL, ferma il container nginx e esegui:"
-        print_info "sudo certbot certonly --standalone -d $DOMAIN"
-        print_info "Poi copia i certificati in ssl/ e riavvia con docker-compose up -d"
-    fi
+# 13. Informazioni Nginx Proxy Manager
+if [ "$NGINX_CHOICE" = "2" ]; then
+    print_info ""
+    print_info "� CONFIGURAZIONE NGINX PROXY MANAGER:"
+    print_info "   1. Accedi al tuo Nginx Proxy Manager"
+    print_info "   2. Aggiungi nuovo Proxy Host:"
+    print_info "      - Domain Names: il-tuo-dominio.com"
+    print_info "      - Forward Hostname/IP: IP_DI_QUESTO_SERVER"
+    print_info "      - Forward Port: 5000"
+    print_info "      - Websockets Support: ON"
+    print_info "   3. Nella tab SSL:"
+    print_info "      - SSL Certificate: Request new SSL Certificate"
+    print_info "      - Use Let's Encrypt: ON"
+    print_info "      - Email: tua-email@domain.com"
+    print_info "      - Agree to Terms: ON"
+else
+    print_info ""
+    print_info "🌐 NGINX INCLUSO:"
+    print_info "   Il bot include nginx interno per test rapidi"
+    print_info "   Per produzione, usa Nginx Proxy Manager"
 fi
 
 # 14. Creazione script di gestione Docker
@@ -438,11 +523,9 @@ echo ""
 echo "🎉 Il tuo Trading Bot è ora attivo con Docker!"
 echo ""
 echo "🌐 ACCESSO:"
-echo "   📊 Dashboard: http://$DOMAIN"
-if [ "$DOMAIN" != "localhost" ]; then
-    echo "   🔒 HTTPS: https://$DOMAIN (se SSL configurato)"
-fi
-echo "   🐳 Portainer: http://$DOMAIN:9000 (se installato)"
+echo "   📊 Dashboard: http://localhost:5000"
+echo "   � Dashboard (via nginx): http://IP_DEL_SERVER"
+echo "   � Per domini esterni: usa Nginx Proxy Manager"
 echo ""
 echo "🔧 GESTIONE:"
 echo "   ./docker-manage.sh start    - Avvia bot"

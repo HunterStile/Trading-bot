@@ -41,6 +41,7 @@ except ImportError as e:
 # Import dei blueprints
 from routes import register_blueprints
 from routes.websocket import register_websocket_events
+from routes.health import health_bp
 
 # Import sistema notifiche Telegram
 from utils.telegram_notifier import init_telegram_notifier
@@ -56,6 +57,9 @@ logging.basicConfig(level=logging.INFO)
 
 # Registra i blueprints
 register_blueprints(app)
+
+# Registra health check
+app.register_blueprint(health_bp)
 
 # Route per servire i grafici di backtest
 @app.route('/static/charts/<filename>')
