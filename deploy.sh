@@ -162,15 +162,29 @@ fi
 
 # 9. Test configurazione
 print_status "Test configurazione..."
-if python3 test_api.py; then
-    print_status "Test API superato!"
+if python3 test_quick.py; then
+    print_status "Test configurazione superato!"
 else
-    print_warning "Test API fallito - controlla le configurazioni"
+    print_warning "Test configurazione parziale - il bot potrebbe funzionare con limitazioni"
+    print_warning "Controlla le configurazioni nel file .env"
 fi
 
 # 10. Configurazione Nginx
 print_status "Configurazione Nginx..."
-read -p "Inserisci il tuo dominio (es. trading.miodominio.com): " DOMAIN
+
+# Controlla se il file default esiste, altrimenti crealo vuoto
+if [ ! -f "/etc/nginx/sites-enabled/default" ]; then
+    sudo touch /etc/nginx/sites-available/default
+    sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+fi
+
+read -p "Inserisci il tuo dominio (es. trading.miodominio.com) o IP del server: " DOMAIN
+
+# Se l'utente non inserisce nulla, usa localhost
+if [ -z "$DOMAIN" ]; then
+    DOMAIN="localhost"
+    print_warning "Usando localhost come dominio predefinito"
+fi
 
 sudo tee /etc/nginx/sites-available/trading-bot > /dev/null <<EOF
 server {
@@ -200,8 +214,14 @@ EOF
 
 # Abilita il sito
 sudo ln -sf /etc/nginx/sites-available/trading-bot /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
+
+# Test configurazione nginx
+if sudo nginx -t; then
+    print_status "Configurazione Nginx corretta"
+    sudo systemctl reload nginx
+else
+    print_warning "Errore configurazione Nginx - continuo senza nginx"
+fi
 
 # 11. Configurazione Supervisor
 print_status "Configurazione Supervisor..."

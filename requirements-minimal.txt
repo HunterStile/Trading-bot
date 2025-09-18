@@ -12,7 +12,11 @@ requests>=2.31.0
 # 🤖 Telegram Bot (essenziale)
 python-telegram-bot>=20.0
 
-# 🔧 Configurazione (essenziale)
+# � Web Scraping (per compatibilità)
+selenium>=4.15.0
+beautifulsoup4>=4.12.0
+
+# �🔧 Configurazione (essenziale)
 python-dotenv>=1.0.0
 
 # 📈 Analisi Tecnica Base (essenziale)
