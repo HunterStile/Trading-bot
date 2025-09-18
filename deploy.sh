@@ -114,7 +114,20 @@ source venv/bin/activate
 # 7. Installazione dipendenze Python
 print_status "Installazione dipendenze Python..."
 pip install --upgrade pip
-pip install -r requirements.txt
+
+# Prova prima con requirements completo
+if pip install -r requirements.txt; then
+    print_status "Tutte le dipendenze installate con successo"
+else
+    print_warning "Installazione completa fallita, provo con requirements minimi..."
+    if pip install -r requirements-minimal.txt; then
+        print_status "Dipendenze minime installate - il bot funzionerà con funzionalità base"
+    else
+        print_error "Anche l'installazione minima è fallita!"
+        print_error "Prova a installare manualmente: pip install Flask Flask-SocketIO pybit requests python-telegram-bot python-dotenv"
+        exit 1
+    fi
+fi
 
 # 8. Configurazione file .env
 if [ ! -f ".env" ]; then

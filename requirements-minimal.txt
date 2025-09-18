@@ -1,0 +1,29 @@
+# Requirements minimi per il Trading Bot
+# Per installazione rapida: pip install -r requirements-minimal.txt
+
+# 🌐 Web Framework (essenziale)
+Flask>=2.3.0
+Flask-SocketIO>=5.3.0
+
+# 📊 Trading API (essenziale)
+pybit>=5.7.0
+requests>=2.31.0
+
+# 🤖 Telegram Bot (essenziale)
+python-telegram-bot>=20.0
+
+# 🔧 Configurazione (essenziale)
+python-dotenv>=1.0.0
+
+# 📈 Analisi Tecnica Base (essenziale)
+pandas>=2.1.0
+numpy>=1.26.0
+
+# 🔐 Sicurezza
+cryptography>=41.0.0
+
+# ⏰ Date e Tempo
+python-dateutil>=2.8.0
+
+# 📝 Logging
+colorlog>=6.7.0

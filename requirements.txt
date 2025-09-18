@@ -1,85 +1,81 @@
 # Dipendenze Python per Trading Bot
 # Installazione: pip install -r requirements.txt
 
-# 🌐 Web Framework
-Flask==2.3.3
-Flask-SocketIO==5.3.6
+# 🌐 Web Framework (versioni compatibili)
+Flask>=2.3.0
+Flask-SocketIO>=5.3.0
 
 # 📊 Trading e API
-pybit==5.7.0
-requests==2.31.0
+pybit>=5.7.0
+requests>=2.31.0
 
-# 🤖 Telegram Bot
-python-telegram-bot==20.5
+# 🤖 Telegram Bot (versione compatibile Python 3.12)
+python-telegram-bot>=20.0
 
-# 🔍 Web Scraping
-selenium==4.15.2
-beautifulsoup4==4.12.2
-lxml==4.9.3
+# 🔍 Web Scraping (versioni compatibili)
+selenium>=4.15.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
 
-# 📈 Analisi Tecnica e Grafici
-pandas==2.1.1
-numpy==1.24.3
-matplotlib==3.7.2
-plotly==5.17.0
-ta==0.10.2
-mplfinance==0.12.10a0
+# 📈 Analisi Tecnica e Grafici (versioni compatibili Python 3.12)
+pandas>=2.1.0
+numpy>=1.26.0
+matplotlib>=3.7.0
+plotly>=5.17.0
+ta>=0.10.2
+mplfinance>=0.12.10
 
 # 🗄️ Database
-sqlite3
+# sqlite3 è built-in in Python
 
-# 🔧 Utility
-python-dotenv==1.0.0
-schedule==1.2.0
-psutil==5.9.5
+# 📧 Email (built-in)
+# smtplib è built-in in Python
 
-# 📧 Email (opzionale)
-smtplib
+# 🔄 Threading e Async (built-in)
+# asyncio e concurrent.futures sono built-in in Python
 
-# 🎵 Audio/Spotify (opzionale) 
-spotipy==2.23.0
+# 📦 Gestione configurazione (built-in)
+# configparser è built-in in Python
+
+# 🔧 Utility (versioni compatibili)
+python-dotenv>=1.0.0
+schedule>=1.2.0
+psutil>=5.9.0
 
 # 🔐 Sicurezza
-cryptography==41.0.7
+cryptography>=41.0.0
 
 # 📝 Logging
-colorlog==6.7.0
+colorlog>=6.7.0
 
 # ⏰ Date e Tempo
-python-dateutil==2.8.2
-pytz==2023.3
+python-dateutil>=2.8.0
+pytz>=2023.3
 
 # 🧪 Testing (opzionale)
-pytest==7.4.2
-pytest-cov==4.1.0
-
-# 🔄 Threading e Async
-asyncio
-concurrent.futures
+pytest>=7.4.0
+pytest-cov>=4.1.0
 
 # 📊 JSON e YAML
-PyYAML==6.0.1
-
-# 🖥️ Sistema
-psutil==5.9.5
+PyYAML>=6.0.0
 
 # 📱 HTTP Client avanzato
-httpx==0.25.0
+httpx>=0.25.0
 
 # 🎨 CLI Colors
-termcolor==2.3.0
+termcolor>=2.3.0
 
 # 🔢 Calcoli finanziari
-ccxt==4.1.14
+ccxt>=4.1.0
 
-# 📦 Gestione configurazione
-configparser
-
-# 🔍 Regex avanzate
-regex==2023.8.8
+#  Regex avanzate
+regex>=2023.8.0
 
 # ⚡ Performance
-ujson==5.8.0
+ujson>=5.8.0
 
 # 🌍 Timezone
-tzlocal==5.0.1
+tzlocal>=5.0.0
+
+# 🎵 Audio/Spotify (opzionale) 
+spotipy>=2.23.0
