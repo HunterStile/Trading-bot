@@ -83,21 +83,25 @@ else
 fi
 
 # 5. Setup progetto
-PROJECT_DIR="/home/$USER/Trading-bot"
+PROJECT_DIR=$(pwd)
+print_status "Directory progetto corrente: $PROJECT_DIR"
 
-if [ ! -d "$PROJECT_DIR" ]; then
-    print_status "Clone del repository..."
-    cd /home/$USER
-    # Qui dovresti cambiare con il tuo repository reale
-    print_warning "ATTENZIONE: Modifica l'URL del repository nel file deploy.sh"
-    print_warning "git clone https://github.com/TUO_USERNAME/Trading-bot.git"
-    read -p "Inserisci l'URL del tuo repository Git: " REPO_URL
-    git clone $REPO_URL Trading-bot
-else
-    print_warning "Directory progetto già esistente"
+# Verifica che siamo nella directory giusta
+if [ ! -f "trading_functions.py" ] || [ ! -f "frontend/app.py" ]; then
+    print_error "ERRORE: Questo script deve essere eseguito dalla directory del Trading-bot!"
+    print_error "Assicurati di essere in ~/bot/Trading-bot/ e riprova"
+    exit 1
 fi
 
-cd $PROJECT_DIR
+print_status "Repository Trading-bot trovata correttamente"
+
+# Aggiorna repository se è un repository git
+if [ -d ".git" ]; then
+    print_status "Aggiornamento repository..."
+    git pull origin main 2>/dev/null || git pull origin master 2>/dev/null || print_warning "Git pull fallito - continuo comunque"
+else
+    print_warning "Non è un repository git - continuo senza aggiornamento"
+fi
 
 # 6. Setup Python Virtual Environment
 print_status "Creazione ambiente virtuale Python..."
@@ -192,6 +196,7 @@ sudo mkdir -p /var/log/trading-bot
 sudo chown $USER:$USER /var/log/trading-bot
 
 sudo tee /etc/supervisor/conf.d/trading-bot.conf > /dev/null <<EOF
+sudo tee /etc/supervisor/conf.d/trading-bot.conf > /dev/null <<EOF
 [program:trading-bot-frontend]
 command=$PROJECT_DIR/venv/bin/python $PROJECT_DIR/frontend/app.py
 directory=$PROJECT_DIR
@@ -204,6 +209,7 @@ environment=PATH="$PROJECT_DIR/venv/bin"
 
 [group:trading-bot]
 programs=trading-bot-frontend
+EOF
 EOF
 
 sudo supervisorctl reread
@@ -226,12 +232,13 @@ cat > deploy.sh << 'EOF'
 #!/bin/bash
 set -e
 echo "🚀 Deploy Trading Bot..."
-cd /home/$USER/Trading-bot
-sudo supervisorctl stop trading-bot:*
-git pull origin main
+PROJECT_DIR=$(pwd)
+cd $PROJECT_DIR
+sudo supervisorctl stop trading-bot:* 2>/dev/null || true
+git pull origin main 2>/dev/null || git pull origin master 2>/dev/null || echo "Git pull fallito"
 source venv/bin/activate
 pip install -r requirements.txt
-sudo supervisorctl start trading-bot:*
+sudo supervisorctl start trading-bot:* 2>/dev/null || echo "Supervisor non configurato"
 echo "✅ Deploy completato!"
 EOF
 
@@ -257,11 +264,13 @@ EOF
 # Script di backup
 cat > backup.sh << 'EOF'
 #!/bin/bash
-BACKUP_DIR="/home/$USER/Trading-bot-backups"
+PROJECT_DIR=$(pwd)
+BACKUP_DIR="$PROJECT_DIR/backups"
 DATE=$(date +%Y%m%d_%H%M%S)
 mkdir -p $BACKUP_DIR
 echo "📦 Backup in corso..."
 cp trading_data.db $BACKUP_DIR/trading_data_$DATE.db 2>/dev/null || true
+cp bot_state.db $BACKUP_DIR/bot_state_$DATE.db 2>/dev/null || true
 cp .env $BACKUP_DIR/env_$DATE.backup
 tar -czf $BACKUP_DIR/backup_$DATE.tar.gz -C $BACKUP_DIR *_$DATE.*
 rm $BACKUP_DIR/*_$DATE.db $BACKUP_DIR/*_$DATE.backup 2>/dev/null || true
@@ -272,7 +281,8 @@ chmod +x deploy.sh monitor.sh backup.sh
 
 # 14. Setup cron per backup automatico
 print_status "Setup backup automatico..."
-(crontab -l 2>/dev/null; echo "0 2 * * * $PROJECT_DIR/backup.sh") | crontab -
+CURRENT_DIR=$(pwd)
+(crontab -l 2>/dev/null; echo "0 2 * * * cd $CURRENT_DIR && ./backup.sh") | crontab -
 
 # 15. Configurazione firewall
 print_status "Configurazione firewall..."
@@ -298,3 +308,4 @@ print_warning "IMPORTANTE:"
 print_warning "1. Configura il file .env con le tue chiavi API reali"
 print_warning "2. Testa la connessione con: python3 test_api.py"
 print_warning "3. Monitora i log per errori: tail -f /var/log/trading-bot/frontend.out.log"
+print_warning "4. Per avviare il bot: accedi alla dashboard e usa il pannello di controllo"
