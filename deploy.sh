@@ -15,8 +15,8 @@ mkdir -p data logs backups
 print_status "Configurazione nginx..."
 echo ""
 echo "Scegli la configurazione nginx:"
-echo "1) Nginx incluso nel Docker (semplice)"
-echo "2) Solo bot echo "🌐 ACCESSO:"
+echo "1 Nginx incluso nel Docker (semplice)"
+echo "2 Solo bot echo "🌐 ACCESSO:"
 if [ "$NGINX_CHOICE" = "2" ]; then
     echo "   📊 Dashboard: http://IP_DEL_SERVER:5000"
     echo "   🔧 Configurazione domini: tramite Nginx Proxy Manager"
