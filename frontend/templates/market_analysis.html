@@ -1,0 +1,968 @@
+{% extends "base.html" %}
+
+{% block title %}Analisi Automatica Mercato - Trading Bot{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Stili specifici per l'analisi automatica */
+.analysis-card {
+    background: var(--bs-dark);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+}
+
+.analysis-card:hover {
+    border-color: var(--bs-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.performance-card {
+    background: linear-gradient(135deg, var(--bs-dark) 0%, rgba(13, 110, 253, 0.1) 100%);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+}
+
+.performance-card.positive {
+    border-left: 4px solid #28a745;
+    background: linear-gradient(135deg, var(--bs-dark) 0%, rgba(40, 167, 69, 0.1) 100%);
+}
+
+.performance-card.negative {
+    border-left: 4px solid #dc3545;
+    background: linear-gradient(135deg, var(--bs-dark) 0%, rgba(220, 53, 69, 0.1) 100%);
+}
+
+.performance-card.neutral {
+    border-left: 4px solid #ffc107;
+    background: linear-gradient(135deg, var(--bs-dark) 0%, rgba(255, 193, 7, 0.1) 100%);
+}
+
+.trend-indicator {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.8rem;
+    font-weight: bold;
+    margin-right: 0.5rem;
+}
+
+.trend-bullish {
+    background-color: #28a745;
+    color: white;
+}
+
+.trend-bearish {
+    background-color: #dc3545;
+    color: white;
+}
+
+.trend-neutral {
+    background-color: #6c757d;
+    color: white;
+}
+
+.strength-badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.4rem;
+}
+
+.strength-very-strong {
+    background-color: #28a745;
+    color: white;
+}
+
+.strength-strong {
+    background-color: #20c997;
+    color: white;
+}
+
+.strength-neutral {
+    background-color: #6c757d;
+    color: white;
+}
+
+.strength-weak {
+    background-color: #fd7e14;
+    color: white;
+}
+
+.strength-very-weak {
+    background-color: #dc3545;
+    color: white;
+}
+
+.metric-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--bs-primary);
+}
+
+.metric-label {
+    font-size: 0.8rem;
+    color: var(--bs-secondary);
+    margin-top: 0.25rem;
+}
+
+.status-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+}
+
+.status-running {
+    background-color: #28a745;
+    animation: pulse 2s infinite;
+}
+
+.status-stopped {
+    background-color: #dc3545;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.config-section {
+    background: var(--bs-dark);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.symbol-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.symbol-card {
+    background: var(--bs-dark);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    transition: all 0.3s ease;
+}
+
+.symbol-card:hover {
+    border-color: var(--bs-primary);
+}
+
+.rsi-gauge {
+    width: 100%;
+    height: 8px;
+    background: #dc3545;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 0.5rem 0;
+}
+
+.rsi-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.rsi-oversold {
+    background: linear-gradient(90deg, #dc3545 0%, #ffc107 100%);
+}
+
+.rsi-neutral {
+    background: #28a745;
+}
+
+.rsi-overbought {
+    background: linear-gradient(90deg, #ffc107 0%, #dc3545 100%);
+}
+
+.performance-chart {
+    height: 300px;
+    margin: 1rem 0;
+}
+
+.analysis-controls {
+    background: var(--bs-dark);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.btn-analyze {
+    background: linear-gradient(45deg, #28a745, #20c997);
+    border: none;
+    color: white;
+    font-weight: bold;
+}
+
+.btn-analyze:hover {
+    background: linear-gradient(45deg, #20c997, #28a745);
+    color: white;
+}
+
+.last-update {
+    font-size: 0.8rem;
+    color: var(--bs-secondary);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Sidebar con controlli -->
+    <div class="col-lg-3 col-md-4">
+        <div class="analysis-controls">
+            <h5>🤖 Controlli Analisi</h5>
+            
+            <!-- Status -->
+            <div class="mb-3">
+                <div class="d-flex align-items-center">
+                    <span id="status-indicator" class="status-indicator status-stopped"></span>
+                    <span id="status-text">Sistema Fermo</span>
+                </div>
+                <div class="last-update" id="last-analysis-time">
+                    Ultima analisi: Mai eseguita
+                </div>
+            </div>
+            
+            <!-- Pulsanti di controllo -->
+            <div class="d-grid gap-2 mb-3">
+                <button class="btn btn-success" onclick="startAnalysis()" id="start-btn">
+                    <i class="fas fa-play"></i> Avvia Sistema
+                </button>
+                <button class="btn btn-danger" onclick="stopAnalysis()" id="stop-btn" disabled>
+                    <i class="fas fa-stop"></i> Ferma Sistema
+                </button>
+                <button class="btn btn-analyze" onclick="analyzeNow()">
+                    <i class="fas fa-chart-line"></i> Analisi Immediata
+                </button>
+                <button class="btn btn-outline-primary" onclick="sendSignalsNow()">
+                    <i class="fas fa-paper-plane"></i> Invia Segnali
+                </button>
+            </div>
+            
+            <!-- Metriche di sistema -->
+            <div class="metric-card text-center mb-2">
+                <div class="metric-value" id="symbols-count">0</div>
+                <div class="metric-label">Simboli Analizzati</div>
+            </div>
+            
+            <div class="metric-card text-center mb-2">
+                <div class="metric-value" id="analysis-count">0</div>
+                <div class="metric-label">Analisi Totali</div>
+            </div>
+            
+            <div class="metric-card text-center mb-3">
+                <div class="metric-value" id="signals-sent">0</div>
+                <div class="metric-label">Segnali Inviati</div>
+            </div>
+            
+            <!-- Test Telegram -->
+            <button class="btn btn-outline-info btn-sm w-100" onclick="testTelegram()">
+                <i class="fab fa-telegram"></i> Test Telegram
+            </button>
+        </div>
+        
+        <!-- Configurazione -->
+        <div class="config-section">
+            <h6>⚙️ Configurazione</h6>
+            <div class="row">
+                <div class="col-12 mb-2">
+                    <label for="analysis-interval" class="form-label">Intervallo Analisi (min)</label>
+                    <input type="number" class="form-control form-control-sm" id="analysis-interval" min="5" value="30">
+                </div>
+                <div class="col-12 mb-2">
+                    <label for="signal-interval" class="form-label">Intervallo Segnali (min)</label>
+                    <input type="number" class="form-control form-control-sm" id="signal-interval" min="15" value="60">
+                </div>
+                <div class="col-12 mb-3">
+                    <label for="strength-threshold" class="form-label">Soglia Forza (%)</label>
+                    <input type="number" class="form-control form-control-sm" id="strength-threshold" min="1" max="20" step="0.5" value="5.0">
+                </div>
+                <div class="col-12">
+                    <button class="btn btn-primary btn-sm w-100" onclick="updateConfig()">
+                        <i class="fas fa-save"></i> Salva Config
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Area principale -->
+    <div class="col-lg-9 col-md-8">
+        <!-- Sommario Mercato -->
+        <div class="analysis-card">
+            <h5>📊 Sommario Mercato</h5>
+            <div class="row" id="market-summary">
+                <div class="col-md-6">
+                    <h6>💪 Top Performers</h6>
+                    <div id="top-performers">
+                        <div class="text-muted">Nessuna analisi disponibile</div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6>📉 Worst Performers</h6>
+                    <div id="worst-performers">
+                        <div class="text-muted">Nessuna analisi disponibile</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <h6>🔄 Possibili Inversioni</h6>
+                    <div id="reversal-candidates">
+                        <div class="text-muted">Nessun segnale di inversione</div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6>📈 Trend Forti</h6>
+                    <div id="strong-trends">
+                        <div class="text-muted">Nessun trend forte rilevato</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Analisi Dettagliata Simboli -->
+        <div class="analysis-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5>🔍 Analisi Dettagliata</h5>
+                <div>
+                    <select class="form-select form-select-sm" id="timeframe-filter" onchange="filterByTimeframe()">
+                        <option value="60">1 Ora</option>
+                        <option value="240">4 Ore</option>
+                        <option value="1440">1 Giorno</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="symbol-grid" id="symbols-analysis">
+                <div class="text-center text-muted">
+                    <i class="fas fa-chart-line fa-3x mb-2"></i>
+                    <p>Esegui un'analisi per vedere i dettagli</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Performance Report -->
+        <div class="analysis-card">
+            <h5>📈 Report Performance</h5>
+            <div class="performance-chart" id="performance-chart">
+                <div class="text-center text-muted mt-5">
+                    <i class="fas fa-chart-bar fa-3x mb-2"></i>
+                    <p>Grafico performance sarà disponibile dopo l'analisi</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Cronologia Analisi -->
+        <div class="analysis-card">
+            <h5>📜 Cronologia Analisi</h5>
+            <div class="table-responsive">
+                <table class="table table-dark table-hover">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Simboli</th>
+                            <th>Top Performer</th>
+                            <th>Worst Performer</th>
+                            <th>Segnali</th>
+                        </tr>
+                    </thead>
+                    <tbody id="analysis-history">
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">
+                                Nessuna cronologia disponibile
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Dettagli Simbolo -->
+<div class="modal fade" id="symbolDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalSymbolTitle">Dettagli Simbolo</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalSymbolBody">
+                <!-- Contenuto dinamico -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentAnalysis = null;
+let systemStatus = {
+    running: false,
+    lastAnalysis: null,
+    symbolsCount: 0,
+    analysisCount: 0
+};
+
+// Inizializza la pagina
+document.addEventListener('DOMContentLoaded', function() {
+    loadSystemStatus();
+    loadLastAnalysis();
+    loadConfig();
+    startStatusUpdates();
+});
+
+// Carica stato del sistema
+async function loadSystemStatus() {
+    try {
+        const response = await fetch('/market-analysis/api/status');
+        const data = await response.json();
+        
+        if (data.success) {
+            systemStatus = data.status;
+            updateStatusDisplay();
+        }
+    } catch (error) {
+        console.error('Errore caricamento stato:', error);
+    }
+}
+
+// Aggiorna display dello stato
+function updateStatusDisplay() {
+    const statusIndicator = document.getElementById('status-indicator');
+    const statusText = document.getElementById('status-text');
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const lastAnalysisTime = document.getElementById('last-analysis-time');
+    
+    if (systemStatus.running) {
+        statusIndicator.className = 'status-indicator status-running';
+        statusText.textContent = 'Sistema Attivo';
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+    } else {
+        statusIndicator.className = 'status-indicator status-stopped';
+        statusText.textContent = 'Sistema Fermo';
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+    }
+    
+    // Aggiorna timestamp ultima analisi
+    if (systemStatus.lastAnalysis && systemStatus.lastAnalysis !== 'Mai eseguita') {
+        const date = new Date(systemStatus.lastAnalysis);
+        lastAnalysisTime.textContent = `Ultima analisi: ${date.toLocaleString()}`;
+    } else {
+        lastAnalysisTime.textContent = 'Ultima analisi: Mai eseguita';
+    }
+    
+    // Aggiorna metriche
+    document.getElementById('symbols-count').textContent = systemStatus.symbolsCount || 0;
+    document.getElementById('analysis-count').textContent = systemStatus.total_analyses || 0;
+}
+
+// Avvia sistema di analisi
+async function startAnalysis() {
+    try {
+        const response = await fetch('/market-analysis/api/start', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(data.message, 'success');
+            loadSystemStatus();
+        } else {
+            showAlert(data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore avvio sistema:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Ferma sistema di analisi
+async function stopAnalysis() {
+    try {
+        const response = await fetch('/market-analysis/api/stop', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(data.message, 'info');
+            loadSystemStatus();
+        } else {
+            showAlert(data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore stop sistema:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Esegui analisi immediata
+async function analyzeNow() {
+    try {
+        showAlert('Avvio analisi immediata...', 'info');
+        
+        const response = await fetch('/market-analysis/api/analyze-now', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            currentAnalysis = data.analysis;
+            updateAnalysisDisplay();
+            showAlert('Analisi completata!', 'success');
+            loadSystemStatus();
+        } else {
+            showAlert(data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore analisi immediata:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Carica ultima analisi
+async function loadLastAnalysis() {
+    try {
+        const response = await fetch('/market-analysis/api/last-analysis');
+        const data = await response.json();
+        
+        if (data.success) {
+            currentAnalysis = data.analysis;
+            updateAnalysisDisplay();
+        }
+    } catch (error) {
+        console.error('Errore caricamento analisi:', error);
+    }
+}
+
+// Aggiorna display dell'analisi
+function updateAnalysisDisplay() {
+    if (!currentAnalysis) return;
+    
+    updateMarketSummary();
+    updateSymbolsAnalysis();
+    loadAnalysisHistory();
+}
+
+// Aggiorna sommario mercato
+function updateMarketSummary() {
+    const summary = currentAnalysis.market_summary;
+    
+    // Top performers
+    const topPerformersHtml = summary.strongest_performers.map(perf => {
+        const emoji = perf.change > 5 ? "🚀" : "📈";
+        const trendClass = perf.trend === 'BULLISH' ? 'trend-bullish' : 
+                          perf.trend === 'BEARISH' ? 'trend-bearish' : 'trend-neutral';
+        
+        return `
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span>${emoji} <strong>${perf.symbol}</strong></span>
+                <div>
+                    <span class="badge bg-success">${perf.change > 0 ? '+' : ''}${perf.change.toFixed(2)}%</span>
+                    <span class="trend-indicator ${trendClass}">${perf.trend}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    document.getElementById('top-performers').innerHTML = topPerformersHtml || '<div class="text-muted">Nessun dato</div>';
+    
+    // Worst performers
+    const worstPerformersHtml = summary.weakest_performers.map(perf => {
+        const emoji = perf.change < -5 ? "🔻" : "📉";
+        const trendClass = perf.trend === 'BULLISH' ? 'trend-bullish' : 
+                          perf.trend === 'BEARISH' ? 'trend-bearish' : 'trend-neutral';
+        
+        return `
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span>${emoji} <strong>${perf.symbol}</strong></span>
+                <div>
+                    <span class="badge bg-danger">${perf.change > 0 ? '+' : ''}${perf.change.toFixed(2)}%</span>
+                    <span class="trend-indicator ${trendClass}">${perf.trend}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    document.getElementById('worst-performers').innerHTML = worstPerformersHtml || '<div class="text-muted">Nessun dato</div>';
+    
+    // Reversal candidates
+    const reversalHtml = summary.reversal_candidates.map(candidate => {
+        const rsiEmoji = candidate.rsi <= 30 ? "🟢" : candidate.rsi >= 70 ? "🔴" : "🟡";
+        const signalsText = candidate.signals.slice(0, 2).join(', ') || 'RSI Estremo';
+        
+        return `
+            <div class="mb-2">
+                <div class="d-flex justify-content-between">
+                    <span>${rsiEmoji} <strong>${candidate.symbol}</strong></span>
+                    <span class="badge bg-warning">RSI: ${candidate.rsi.toFixed(1)}</span>
+                </div>
+                <small class="text-muted">${signalsText}</small>
+            </div>
+        `;
+    }).join('');
+    
+    document.getElementById('reversal-candidates').innerHTML = reversalHtml || '<div class="text-muted">Nessun segnale</div>';
+    
+    // Strong trends
+    const trendsHtml = summary.trending_symbols.map(trend => {
+        const trendEmoji = trend.trend === 'BULLISH' ? "🚀" : "🔻";
+        
+        return `
+            <div class="mb-2">
+                <div class="d-flex justify-content-between">
+                    <span>${trendEmoji} <strong>${trend.symbol}</strong></span>
+                    <span class="badge bg-info">Forza: ${trend.strength.toFixed(1)}%</span>
+                </div>
+                <small class="text-muted">Durata: ${trend.duration} candele</small>
+            </div>
+        `;
+    }).join('');
+    
+    document.getElementById('strong-trends').innerHTML = trendsHtml || '<div class="text-muted">Nessun trend forte</div>';
+}
+
+// Aggiorna analisi simboli
+function updateSymbolsAnalysis() {
+    const timeframe = document.getElementById('timeframe-filter').value;
+    const container = document.getElementById('symbols-analysis');
+    
+    if (!currentAnalysis || !currentAnalysis.analyses) {
+        container.innerHTML = '<div class="text-center text-muted">Nessuna analisi disponibile</div>';
+        return;
+    }
+    
+    const symbolsHtml = Object.entries(currentAnalysis.analyses).map(([symbol, timeframes]) => {
+        if (!timeframes[timeframe]) return '';
+        
+        const analysis = timeframes[timeframe];
+        const trend = analysis.trend;
+        const strengthVsBtc = analysis.strength_vs_btc;
+        
+        // Determina classe performance
+        let performanceClass = 'neutral';
+        if (analysis.price_change_24h > 2) performanceClass = 'positive';
+        else if (analysis.price_change_24h < -2) performanceClass = 'negative';
+        
+        // RSI gauge
+        let rsiClass = 'rsi-neutral';
+        let rsiWidth = (analysis.rsi / 100) * 100;
+        if (analysis.rsi <= 30) rsiClass = 'rsi-oversold';
+        else if (analysis.rsi >= 70) rsiClass = 'rsi-overbought';
+        
+        // Strength badge
+        let strengthBadge = '';
+        if (strengthVsBtc) {
+            const strengthClass = `strength-${strengthVsBtc.strength_level.toLowerCase().replace('_', '-')}`;
+            strengthBadge = `<span class="badge ${strengthClass}">${strengthVsBtc.strength_level}</span>`;
+        }
+        
+        return `
+            <div class="symbol-card performance-card ${performanceClass}" onclick="showSymbolDetails('${symbol}')">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <h6 class="mb-1">${symbol}</h6>
+                        <small class="text-muted">$${analysis.current_price.toFixed(6)}</small>
+                    </div>
+                    <div class="text-end">
+                        <div class="badge ${analysis.price_change_24h >= 0 ? 'bg-success' : 'bg-danger'}">
+                            ${analysis.price_change_24h > 0 ? '+' : ''}${analysis.price_change_24h.toFixed(2)}%
+                        </div>
+                        ${strengthBadge}
+                    </div>
+                </div>
+                
+                <div class="mb-2">
+                    <span class="trend-indicator trend-${trend.trend.toLowerCase()}">${trend.trend}</span>
+                    <small class="text-muted">Forza: ${trend.strength.toFixed(1)}%</small>
+                </div>
+                
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between">
+                        <small>RSI: ${analysis.rsi.toFixed(1)}</small>
+                        <small>Durata: ${trend.duration} candele</small>
+                    </div>
+                    <div class="rsi-gauge">
+                        <div class="rsi-fill ${rsiClass}" style="width: ${rsiWidth}%"></div>
+                    </div>
+                </div>
+                
+                ${analysis.reversal_signals.length > 0 ? 
+                    `<div class="alert alert-warning alert-sm p-1 mb-0">
+                        <small>🔄 ${analysis.reversal_signals[0]}</small>
+                    </div>` : ''}
+            </div>
+        `;
+    }).filter(html => html !== '').join('');
+    
+    container.innerHTML = symbolsHtml || '<div class="text-center text-muted">Nessun dato per questo timeframe</div>';
+}
+
+// Mostra dettagli simbolo
+function showSymbolDetails(symbol) {
+    if (!currentAnalysis || !currentAnalysis.analyses[symbol]) return;
+    
+    const analyses = currentAnalysis.analyses[symbol];
+    const modal = new bootstrap.Modal(document.getElementById('symbolDetailsModal'));
+    
+    document.getElementById('modalSymbolTitle').textContent = `Analisi Dettagliata: ${symbol}`;
+    
+    let modalContent = '';
+    
+    Object.entries(analyses).forEach(([timeframe, analysis]) => {
+        const timeframeName = {
+            '15': '15 Minuti',
+            '60': '1 Ora',
+            '240': '4 Ore',
+            '1440': '1 Giorno'
+        }[timeframe] || `${timeframe} min`;
+        
+        modalContent += `
+            <div class="card bg-secondary mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0">${timeframeName}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Prezzo:</strong> $${analysis.current_price.toFixed(6)}</p>
+                            <p><strong>Variazione 24h:</strong> 
+                                <span class="badge ${analysis.price_change_24h >= 0 ? 'bg-success' : 'bg-danger'}">
+                                    ${analysis.price_change_24h > 0 ? '+' : ''}${analysis.price_change_24h.toFixed(2)}%
+                                </span>
+                            </p>
+                            <p><strong>RSI:</strong> ${analysis.rsi.toFixed(1)}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Trend:</strong> 
+                                <span class="trend-indicator trend-${analysis.trend.trend.toLowerCase()}">
+                                    ${analysis.trend.trend}
+                                </span>
+                            </p>
+                            <p><strong>Forza Trend:</strong> ${analysis.trend.strength.toFixed(2)}%</p>
+                            <p><strong>Durata:</strong> ${analysis.trend.duration} candele</p>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>EMA(20):</strong> $${analysis.ema_20.toFixed(6)}</p>
+                            <p><strong>EMA(50):</strong> $${analysis.ema_50.toFixed(6)}</p>
+                        </div>
+                        <div class="col-md-6">
+                            ${analysis.strength_vs_btc ? `
+                                <p><strong>vs BTC:</strong> 
+                                    <span class="badge strength-${analysis.strength_vs_btc.strength_level.toLowerCase().replace('_', '-')}">
+                                        ${analysis.strength_vs_btc.strength_level}
+                                    </span>
+                                </p>
+                                <p><strong>Forza Relativa:</strong> ${analysis.strength_vs_btc.relative_strength > 0 ? '+' : ''}${analysis.strength_vs_btc.relative_strength.toFixed(2)}%</p>
+                            ` : ''}
+                        </div>
+                    </div>
+                    
+                    ${analysis.reversal_signals.length > 0 ? `
+                        <div class="alert alert-warning">
+                            <strong>Segnali di Inversione:</strong><br>
+                            ${analysis.reversal_signals.map(signal => `• ${signal}`).join('<br>')}
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    });
+    
+    document.getElementById('modalSymbolBody').innerHTML = modalContent;
+    modal.show();
+}
+
+// Filtra per timeframe
+function filterByTimeframe() {
+    updateSymbolsAnalysis();
+}
+
+// Invia segnali manualmente
+async function sendSignalsNow() {
+    try {
+        const response = await fetch('/market-analysis/api/send-signals', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(data.message, 'success');
+        } else {
+            showAlert(data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore invio segnali:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Test notifica Telegram
+async function testTelegram() {
+    try {
+        const response = await fetch('/market-analysis/api/test-telegram', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(data.message, 'success');
+        } else {
+            showAlert(data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore test Telegram:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Carica configurazione
+async function loadConfig() {
+    try {
+        const response = await fetch('/market-analysis/api/config');
+        const data = await response.json();
+        
+        if (data.success) {
+            const config = data.config;
+            document.getElementById('analysis-interval').value = config.analysis_interval / 60;
+            document.getElementById('signal-interval').value = config.signal_interval / 60;
+            document.getElementById('strength-threshold').value = config.strength_threshold;
+        }
+    } catch (error) {
+        console.error('Errore caricamento config:', error);
+    }
+}
+
+// Aggiorna configurazione
+async function updateConfig() {
+    try {
+        const config = {
+            analysis_interval: parseInt(document.getElementById('analysis-interval').value) * 60,
+            signal_interval: parseInt(document.getElementById('signal-interval').value) * 60,
+            strength_threshold: parseFloat(document.getElementById('strength-threshold').value)
+        };
+        
+        const response = await fetch('/market-analysis/api/config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(config)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(data.message, 'success');
+        } else {
+            showAlert(data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore aggiornamento config:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Carica cronologia analisi
+async function loadAnalysisHistory() {
+    try {
+        const response = await fetch('/market-analysis/api/analysis-history?limit=10');
+        const data = await response.json();
+        
+        if (data.success && data.history.length > 0) {
+            const historyHtml = data.history.reverse().map(analysis => {
+                const timestamp = new Date(analysis.timestamp).toLocaleString();
+                const topPerformer = analysis.market_summary.strongest_performers[0];
+                const worstPerformer = analysis.market_summary.weakest_performers[0];
+                const signalsCount = Object.values(analysis.analyses).reduce((count, timeframes) => {
+                    return count + Object.values(timeframes).reduce((tfCount, tf) => {
+                        return tfCount + tf.reversal_signals.length;
+                    }, 0);
+                }, 0);
+                
+                return `
+                    <tr>
+                        <td>${timestamp}</td>
+                        <td>${analysis.symbols_analyzed}</td>
+                        <td>
+                            ${topPerformer ? `${topPerformer.symbol} (+${topPerformer.change.toFixed(2)}%)` : 'N/A'}
+                        </td>
+                        <td>
+                            ${worstPerformer ? `${worstPerformer.symbol} (${worstPerformer.change.toFixed(2)}%)` : 'N/A'}
+                        </td>
+                        <td>${signalsCount}</td>
+                    </tr>
+                `;
+            }).join('');
+            
+            document.getElementById('analysis-history').innerHTML = historyHtml;
+        }
+    } catch (error) {
+        console.error('Errore caricamento cronologia:', error);
+    }
+}
+
+// Avvia aggiornamenti periodici dello stato
+function startStatusUpdates() {
+    setInterval(() => {
+        loadSystemStatus();
+        
+        // Se il sistema è attivo, ricarica l'analisi ogni 30 secondi
+        if (systemStatus.running) {
+            loadLastAnalysis();
+        }
+    }, 30000); // Ogni 30 secondi
+}
+
+// Funzione di utilità per mostrare alert
+function showAlert(message, type) {
+    // Implementazione base - può essere migliorata
+    const alertClass = {
+        'success': 'alert-success',
+        'danger': 'alert-danger',
+        'warning': 'alert-warning',
+        'info': 'alert-info'
+    }[type] || 'alert-info';
+    
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    // Rimuovi automaticamente dopo 5 secondi
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.parentNode.removeChild(alertDiv);
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}
