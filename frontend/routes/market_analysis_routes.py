@@ -245,12 +245,79 @@ def get_analyzed_symbols():
     """Ottieni lista simboli da analizzare"""
     try:
         symbols = market_analyzer.get_symbols_to_analyze()
+        all_symbols = market_analyzer.get_all_available_symbols()
+        selected_symbols = market_analyzer.config.get('selected_symbols', [])
         
         return jsonify({
             'success': True,
             'symbols': symbols,
+            'all_available': all_symbols,
+            'selected_symbols': selected_symbols,
             'count': len(symbols)
         })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@market_analysis_bp.route('/api/symbols/select', methods=['POST'])
+def set_selected_symbols():
+    """Imposta simboli selezionati per l'analisi"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Dati mancanti'
+            })
+        
+        selected_symbols = data.get('symbols', [])
+        
+        # Valida che sia una lista
+        if not isinstance(selected_symbols, list):
+            return jsonify({
+                'success': False,
+                'error': 'symbols deve essere una lista'
+            })
+        
+        # Imposta simboli selezionati
+        market_analyzer.set_selected_symbols(selected_symbols)
+        
+        # Notifica Telegram se disponibile
+        telegram_notifier = current_app.config.get('TELEGRAM_NOTIFIER')
+        if telegram_notifier:
+            if selected_symbols:
+                symbols_text = ", ".join(selected_symbols[:10])
+                if len(selected_symbols) > 10:
+                    symbols_text += f" (+{len(selected_symbols) - 10} altri)"
+                message = f"""
+🎯 <b>Simboli Analisi Aggiornati</b>
+
+📊 Simboli selezionati: <b>{len(selected_symbols)}</b>
+💰 {symbols_text}
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            else:
+                message = f"""
+🎯 <b>Simboli Analisi Aggiornati</b>
+
+📊 Modalità: <b>TUTTI I SIMBOLI</b>
+💰 Analisi completa del paniere
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            telegram_notifier.send_message_sync(message)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Simboli aggiornati: {len(selected_symbols) if selected_symbols else "TUTTI"}',
+            'selected_symbols': market_analyzer.config['selected_symbols'],
+            'analyzing_count': len(market_analyzer.get_symbols_to_analyze())
+        })
+        
     except Exception as e:
         return jsonify({
             'success': False,

@@ -33,6 +33,7 @@ class MarketAnalyzer:
             'rsi_period': 14,
             'strength_threshold': 5.0,  # % per considerare una crypto forte/debole vs BTC
             'trend_min_duration': 4,    # candele minime per confermare trend
+            'selected_symbols': [],     # Simboli selezionati per l'analisi (vuoto = tutti)
         }
         self.telegram_notifier = None
     
@@ -42,11 +43,25 @@ class MarketAnalyzer:
     
     def get_symbols_to_analyze(self) -> List[str]:
         """Ottieni la lista di simboli da analizzare"""
+        # Se ci sono simboli selezionati specificamente, usa quelli
+        if self.config.get('selected_symbols'):
+            selected = self.config['selected_symbols']
+            # Assicurati che BTC sia sempre presente per i calcoli di forza relativa
+            if 'BTCUSDT' not in selected:
+                selected = ['BTCUSDT'] + selected
+            return selected
+        
+        # Altrimenti usa tutti i simboli disponibili (comportamento originale)
+        return self.get_all_available_symbols()
+    
+    def get_all_available_symbols(self) -> List[str]:
+        """Ottieni tutti i simboli disponibili (default + custom)"""
         # Simboli di default
         default_symbols = [
             'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT',
             'SOLUSDT', 'DOTUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LINKUSDT',
-            'LTCUSDT', 'BCHUSDT', 'FILUSDT', 'ETCUSDT', 'XLMUSDT'
+            'LTCUSDT', 'BCHUSDT', 'FILUSDT', 'ETCUSDT', 'XLMUSDT',
+            'VETUSDT', 'ICPUSDT', 'THETAUSDT', 'TRXUSDT', 'ATOMUSDT'
         ]
         
         # Aggiungi simboli custom se esistono
@@ -65,7 +80,25 @@ class MarketAnalyzer:
         if 'BTCUSDT' not in symbols:
             symbols.insert(0, 'BTCUSDT')
         
-        return symbols
+        return sorted(symbols)
+    
+    def set_selected_symbols(self, symbols: List[str]):
+        """Imposta i simboli selezionati per l'analisi"""
+        if not symbols:
+            # Se lista vuota, analizza tutti i simboli
+            self.config['selected_symbols'] = []
+        else:
+            # Valida che i simboli esistano
+            available_symbols = self.get_all_available_symbols()
+            valid_symbols = [s for s in symbols if s in available_symbols]
+            
+            # Assicurati che BTC sia sempre presente
+            if valid_symbols and 'BTCUSDT' not in valid_symbols:
+                valid_symbols.insert(0, 'BTCUSDT')
+            
+            self.config['selected_symbols'] = valid_symbols
+        
+        print(f"🎯 Simboli selezionati aggiornati: {self.config['selected_symbols'] or 'TUTTI'}")
     
     def calculate_rsi(self, prices: List[float], period: int = 14) -> float:
         """Calcola l'RSI (Relative Strength Index)"""

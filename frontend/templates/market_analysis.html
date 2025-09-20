@@ -215,6 +215,78 @@
     font-size: 0.8rem;
     color: var(--bs-secondary);
 }
+
+/* Stili per selezione simboli */
+.symbol-checkbox-card {
+    background: var(--bs-dark);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.symbol-checkbox-card:hover {
+    border-color: var(--bs-primary);
+    background: rgba(13, 110, 253, 0.1);
+}
+
+.symbol-checkbox-card.selected {
+    border-color: #28a745;
+    background: rgba(40, 167, 69, 0.1);
+}
+
+.symbol-checkbox-card input[type="checkbox"] {
+    margin-right: 0.5rem;
+}
+
+.symbol-info {
+    display: flex;
+    justify-content: between;
+    align-items: center;
+}
+
+.symbol-name {
+    font-weight: bold;
+    color: var(--bs-body-color);
+}
+
+.symbol-price {
+    font-size: 0.8rem;
+    color: var(--bs-secondary);
+    font-family: 'Courier New', monospace;
+}
+
+.selected-symbol-item {
+    background: rgba(40, 167, 69, 0.1);
+    border: 1px solid #28a745;
+    border-radius: 0.25rem;
+    padding: 0.5rem;
+    margin-bottom: 0.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.selected-symbol-item .remove-symbol {
+    background: none;
+    border: none;
+    color: #dc3545;
+    cursor: pointer;
+    padding: 0;
+    margin-left: 0.5rem;
+}
+
+.selected-symbol-item .remove-symbol:hover {
+    color: #fff;
+}
+
+.top-coins {
+    background: linear-gradient(45deg, #ffd700, #ffed4a);
+    color: #000;
+    font-weight: bold;
+}
 </style>
 {% endblock %}
 
@@ -295,6 +367,36 @@
                         <i class="fas fa-save"></i> Salva Config
                     </button>
                 </div>
+            </div>
+        </div>
+        
+        <!-- Selezione Simboli -->
+        <div class="config-section">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6>🎯 Simboli da Analizzare</h6>
+                <button class="btn btn-outline-info btn-sm" onclick="showSymbolSelector()">
+                    <i class="fas fa-list"></i> Seleziona
+                </button>
+            </div>
+            
+            <div class="mb-2">
+                <small class="text-muted">Modalità:</small>
+                <div id="selection-mode" class="badge bg-primary">Tutti i simboli</div>
+            </div>
+            
+            <div class="mb-2">
+                <small class="text-muted">Simboli attivi:</small>
+                <div class="metric-value" id="active-symbols-count">0</div>
+            </div>
+            
+            <div id="selected-symbols-preview" class="small text-muted">
+                Caricamento...
+            </div>
+            
+            <div class="mt-2">
+                <button class="btn btn-outline-warning btn-sm w-100" onclick="resetSymbolSelection()">
+                    <i class="fas fa-undo"></i> Resetta (Tutti)
+                </button>
             </div>
         </div>
     </div>
@@ -408,6 +510,83 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Selezione Simboli -->
+<div class="modal fade" id="symbolSelectorModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title">🎯 Seleziona Simboli da Analizzare</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <!-- Controlli di selezione -->
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <button class="btn btn-success btn-sm me-2" onclick="selectAllSymbols()">
+                                    <i class="fas fa-check-double"></i> Seleziona Tutti
+                                </button>
+                                <button class="btn btn-warning btn-sm me-2" onclick="clearAllSymbols()">
+                                    <i class="fas fa-times"></i> Deseleziona Tutti
+                                </button>
+                                <button class="btn btn-info btn-sm" onclick="selectTopCoins()">
+                                    <i class="fas fa-star"></i> Top 10
+                                </button>
+                            </div>
+                            <div>
+                                <input type="text" class="form-control form-control-sm" id="symbol-search" 
+                                       placeholder="Cerca simbolo..." onkeyup="filterSymbols()" style="width: 200px;">
+                            </div>
+                        </div>
+                        
+                        <!-- Grid simboli selezionabili -->
+                        <div class="row" id="symbol-selection-grid">
+                            <div class="text-center">
+                                <i class="fas fa-spinner fa-spin"></i> Caricamento simboli...
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <!-- Simboli selezionati -->
+                        <div class="card bg-secondary">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-list-check"></i> Simboli Selezionati
+                                    <span class="badge bg-primary ms-2" id="selected-count">0</span>
+                                </h6>
+                            </div>
+                            <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                                <div id="selected-symbols-list">
+                                    <div class="text-muted text-center">Nessun simbolo selezionato</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Note -->
+                        <div class="alert alert-info mt-3">
+                            <small>
+                                <i class="fas fa-info-circle"></i> 
+                                <strong>Nota:</strong> BTC sarà sempre incluso per calcoli di forza relativa.
+                                Lascia vuoto per analizzare tutti i simboli.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Annulla
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveSymbolSelection()">
+                    <i class="fas fa-save"></i> Salva Selezione
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -419,12 +598,16 @@ let systemStatus = {
     symbolsCount: 0,
     analysisCount: 0
 };
+let allAvailableSymbols = [];
+let selectedSymbols = [];
+let symbolPrices = {};
 
 // Inizializza la pagina
 document.addEventListener('DOMContentLoaded', function() {
     loadSystemStatus();
     loadLastAnalysis();
     loadConfig();
+    loadSymbolsInfo();
     startStatusUpdates();
 });
 
@@ -963,6 +1146,280 @@ function showAlert(message, type) {
             alertDiv.parentNode.removeChild(alertDiv);
         }
     }, 5000);
+}
+
+// ==================== GESTIONE SELEZIONE SIMBOLI ====================
+
+// Carica informazioni sui simboli
+async function loadSymbolsInfo() {
+    try {
+        const response = await fetch('/market-analysis/api/symbols');
+        const data = await response.json();
+        
+        if (data.success) {
+            allAvailableSymbols = data.all_available || [];
+            selectedSymbols = data.selected_symbols || [];
+            
+            updateSymbolsDisplay();
+            loadSymbolPrices();
+        }
+    } catch (error) {
+        console.error('Errore caricamento simboli:', error);
+    }
+}
+
+// Aggiorna display informazioni simboli
+function updateSymbolsDisplay() {
+    const modeElement = document.getElementById('selection-mode');
+    const countElement = document.getElementById('active-symbols-count');
+    const previewElement = document.getElementById('selected-symbols-preview');
+    
+    if (selectedSymbols.length === 0) {
+        modeElement.textContent = 'Tutti i simboli';
+        modeElement.className = 'badge bg-primary';
+        countElement.textContent = allAvailableSymbols.length;
+        previewElement.innerHTML = '<em>Analisi completa del paniere</em>';
+    } else {
+        modeElement.textContent = 'Selezione personalizzata';
+        modeElement.className = 'badge bg-success';
+        countElement.textContent = selectedSymbols.length;
+        
+        const preview = selectedSymbols.slice(0, 5).join(', ');
+        const extraCount = selectedSymbols.length > 5 ? ` (+${selectedSymbols.length - 5} altri)` : '';
+        previewElement.innerHTML = `<strong>${preview}</strong>${extraCount}`;
+    }
+}
+
+// Carica prezzi dei simboli per il display
+async function loadSymbolPrices() {
+    try {
+        // Carica prezzi per i primi 20 simboli per evitare troppe richieste
+        const symbolsToPrice = allAvailableSymbols.slice(0, 20);
+        
+        for (const symbol of symbolsToPrice) {
+            try {
+                const response = await fetch(`/api/price/${symbol}`);
+                const data = await response.json();
+                if (data.success) {
+                    symbolPrices[symbol] = data.price;
+                }
+            } catch (error) {
+                console.error(`Errore prezzo ${symbol}:`, error);
+            }
+            
+            // Piccola pausa per non sovraccaricare l'API
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+    } catch (error) {
+        console.error('Errore caricamento prezzi:', error);
+    }
+}
+
+// Mostra modal di selezione simboli
+async function showSymbolSelector() {
+    const modal = new bootstrap.Modal(document.getElementById('symbolSelectorModal'));
+    
+    // Aggiorna la griglia dei simboli
+    updateSymbolSelectionGrid();
+    updateSelectedSymbolsList();
+    
+    modal.show();
+}
+
+// Aggiorna griglia di selezione simboli
+function updateSymbolSelectionGrid() {
+    const grid = document.getElementById('symbol-selection-grid');
+    
+    if (allAvailableSymbols.length === 0) {
+        grid.innerHTML = '<div class="text-center text-muted">Nessun simbolo disponibile</div>';
+        return;
+    }
+    
+    const topCoins = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'SOLUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LINKUSDT', 'LTCUSDT'];
+    
+    const symbolsHtml = allAvailableSymbols.map(symbol => {
+        const isSelected = selectedSymbols.includes(symbol);
+        const isTopCoin = topCoins.includes(symbol);
+        const price = symbolPrices[symbol];
+        const priceDisplay = price ? `$${price.toFixed(6)}` : 'Loading...';
+        
+        return `
+            <div class="col-md-6 col-lg-4 mb-2">
+                <div class="symbol-checkbox-card ${isSelected ? 'selected' : ''} ${isTopCoin ? 'top-coins' : ''}" 
+                     onclick="toggleSymbolSelection('${symbol}')">
+                    <div class="symbol-info">
+                        <div>
+                            <input type="checkbox" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation()">
+                            <span class="symbol-name">${symbol}</span>
+                            ${isTopCoin ? '<i class="fas fa-star text-warning ms-1" title="Top Coin"></i>' : ''}
+                        </div>
+                        <div class="symbol-price">${priceDisplay}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    grid.innerHTML = symbolsHtml;
+}
+
+// Toggle selezione simbolo
+function toggleSymbolSelection(symbol) {
+    const index = selectedSymbols.indexOf(symbol);
+    
+    if (index === -1) {
+        // Aggiungi simbolo
+        selectedSymbols.push(symbol);
+    } else {
+        // Rimuovi simbolo (ma non BTC se è l'unico rimasto)
+        if (symbol !== 'BTCUSDT' || selectedSymbols.length > 1) {
+            selectedSymbols.splice(index, 1);
+        }
+    }
+    
+    updateSymbolSelectionGrid();
+    updateSelectedSymbolsList();
+}
+
+// Aggiorna lista simboli selezionati
+function updateSelectedSymbolsList() {
+    const list = document.getElementById('selected-symbols-list');
+    const countBadge = document.getElementById('selected-count');
+    
+    countBadge.textContent = selectedSymbols.length;
+    
+    if (selectedSymbols.length === 0) {
+        list.innerHTML = '<div class="text-muted text-center">Nessun simbolo selezionato<br><small>Analisi completa del paniere</small></div>';
+        return;
+    }
+    
+    const symbolsHtml = selectedSymbols.map(symbol => {
+        const canRemove = symbol !== 'BTCUSDT' || selectedSymbols.length > 1;
+        
+        return `
+            <div class="selected-symbol-item">
+                <span>${symbol}</span>
+                ${canRemove ? `
+                    <button class="remove-symbol" onclick="removeSelectedSymbol('${symbol}')" title="Rimuovi">
+                        <i class="fas fa-times"></i>
+                    </button>
+                ` : '<i class="fas fa-lock text-muted" title="Richiesto per calcoli"></i>'}
+            </div>
+        `;
+    }).join('');
+    
+    list.innerHTML = symbolsHtml;
+}
+
+// Rimuovi simbolo selezionato
+function removeSelectedSymbol(symbol) {
+    toggleSymbolSelection(symbol);
+}
+
+// Seleziona tutti i simboli
+function selectAllSymbols() {
+    selectedSymbols = [...allAvailableSymbols];
+    updateSymbolSelectionGrid();
+    updateSelectedSymbolsList();
+}
+
+// Deseleziona tutti i simboli
+function clearAllSymbols() {
+    selectedSymbols = [];
+    updateSymbolSelectionGrid();
+    updateSelectedSymbolsList();
+}
+
+// Seleziona top 10 coins
+function selectTopCoins() {
+    const topCoins = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'SOLUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LINKUSDT', 'LTCUSDT'];
+    selectedSymbols = topCoins.filter(symbol => allAvailableSymbols.includes(symbol));
+    updateSymbolSelectionGrid();
+    updateSelectedSymbolsList();
+}
+
+// Filtra simboli per ricerca
+function filterSymbols() {
+    const searchTerm = document.getElementById('symbol-search').value.toLowerCase();
+    const cards = document.querySelectorAll('.symbol-checkbox-card');
+    
+    cards.forEach(card => {
+        const symbol = card.querySelector('.symbol-name').textContent.toLowerCase();
+        const shouldShow = symbol.includes(searchTerm);
+        card.parentElement.style.display = shouldShow ? 'block' : 'none';
+    });
+}
+
+// Salva selezione simboli
+async function saveSymbolSelection() {
+    try {
+        const response = await fetch('/market-analysis/api/symbols/select', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                symbols: selectedSymbols
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(data.message, 'success');
+            updateSymbolsDisplay();
+            loadSystemStatus(); // Aggiorna conteggio simboli
+            
+            // Chiudi modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('symbolSelectorModal'));
+            modal.hide();
+            
+            // Se il sistema è in esecuzione, esegui una nuova analisi
+            if (systemStatus.running) {
+                setTimeout(() => {
+                    analyzeNow();
+                }, 1000);
+            }
+        } else {
+            showAlert(data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore salvataggio simboli:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Reset selezione simboli (tutti)
+async function resetSymbolSelection() {
+    if (!confirm('Vuoi resettare la selezione e analizzare tutti i simboli?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/market-analysis/api/symbols/select', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                symbols: []
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            selectedSymbols = [];
+            showAlert('Selezione resettata - Analisi di tutti i simboli attivata', 'success');
+            updateSymbolsDisplay();
+            loadSystemStatus();
+        } else {
+            showAlert(data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore reset simboli:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
 }
 </script>
 {% endblock %}
