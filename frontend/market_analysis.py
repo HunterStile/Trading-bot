@@ -17,6 +17,17 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from trading_functions import vedi_prezzo_moneta, get_kline_data, media_esponenziale
 
+def convert_timeframe_to_bybit(timeframe):
+    """Converte timeframe in minuti al formato richiesto da Bybit"""
+    if timeframe == 1440:
+        return 'D'  # Daily
+    elif timeframe == 10080:  # 7 giorni
+        return 'W'  # Weekly
+    elif timeframe == 43200:  # 30 giorni (approssimativo)
+        return 'M'  # Monthly
+    else:
+        return str(timeframe)  # Per timeframe in minuti standard
+
 class MarketAnalyzer:
     """Classe principale per l'analisi automatica del mercato"""
     
@@ -220,8 +231,11 @@ class MarketAnalyzer:
     def analyze_symbol(self, symbol: str, timeframe: int) -> Dict:
         """Analizza un singolo simbolo su un timeframe specifico"""
         try:
+            # Converti timeframe al formato corretto per Bybit
+            bybit_timeframe = convert_timeframe_to_bybit(timeframe)
+            
             # Ottieni dati kline
-            kline_data = get_kline_data('linear', symbol, timeframe, limit=100)
+            kline_data = get_kline_data('linear', symbol, bybit_timeframe, limit=100)
             if not kline_data:
                 return None
             

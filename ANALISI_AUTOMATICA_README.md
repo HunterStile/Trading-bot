@@ -254,3 +254,133 @@ POST /market-analysis/api/config          # Aggiorna configurazione
 ---
 
 Il sistema di **Analisi Automatica** trasforma il tuo trading bot da un semplice executor di strategie a un vero **assistente di trading intelligente** che monitora il mercato 24/7 e ti tiene informato sui movimenti più importanti!
+
+
+
+📊 Guida al Sistema di Indicatori e Segnali
+🎯 Indicatori Tecnici Principali
+1. RSI (Relative Strength Index)
+
+Valore: 0-100
+
+Periodo standard: 14
+
+Zone operative:
+
+< 30 → Oversold (Ipervenduto)
+
+> 70 → Overbought (Ipercomprato)
+
+30-70 → Zona Neutrale
+
+2. EMA (Exponential Moving Average)
+
+EMA(20): Media veloce, utile per trend e crossover.
+
+EMA(50): Media lenta, conferma il trend.
+
+Utilizzo:
+
+Individuazione del trend.
+
+Identificazione di supporti e resistenze dinamici.
+
+3. Trend Analysis
+
+Direzione: BULLISH, BEARISH, NEUTRAL
+
+Forza: Percentuale di movimento del trend
+
+Durata: Numero di candele consecutive nel trend
+
+Logica: Trend determinato dalla posizione del prezzo rispetto a EMA(20)
+
+4. Forza Relativa vs BTC
+
+VERY_STRONG: > +5% (configurabile)
+
+STRONG: +2% → +5%
+
+NEUTRAL: -2% → +2%
+
+WEAK: -5% → -2%
+
+VERY_WEAK: < -5%
+
+🚨 Segnali di Inversione
+
+EMA Crossover Signals
+
+RSI Extreme Signals
+
+Divergence Signals
+
+📈 Metriche Aggiuntive
+Performance Metrics
+
+Variazione 24h: Percentuale di cambio prezzo.
+
+Prezzo Corrente: Valore attuale del simbolo.
+
+Distance from EMA: Distanza del prezzo dalle medie.
+
+Multi-Timeframe Analysis
+
+15 minuti: Segnali a breve termine.
+
+1 ora: Trend intermedio.
+
+4 ore: Movimento medio-lungo.
+
+1 giorno: Analisi macro.
+
+🎪 Esempi Completi di Segnali
+
+Scenario Bullish Perfetto
+
+Scenario Bearish Warning
+
+Scenario Neutral / Accumulation
+
+🔧 Configurazioni Soglie
+
+RSI Thresholds
+
+Strength vs BTC Thresholds
+
+Trend Detection
+
+🎯 Interpretazione dei Segnali
+Segnali di Entrata (Buy)
+
+BULLISH_EMA_CROSSOVER + RSI_OVERSOLD
+
+BULLISH_DIVERGENCE su timeframe alti
+
+Trend BEARISH → BULLISH con forza STRONG
+
+Segnali di Uscita (Sell)
+
+BEARISH_EMA_CROSSOVER + RSI_OVERBOUGHT
+
+BEARISH_DIVERGENCE su trend forte
+
+Forza vs BTC da STRONG → WEAK
+
+Segnali di Attenzione
+
+RSI_OVERBOUGHT durante trend bullish forte
+
+BEARISH_DIVERGENCE dopo un rally
+
+Durata trend molto lunga (> 50 candele)
+
+🚀 Combinazioni Potenti
+
+Il sistema è potente perché combina più segnali tra loro:
+
+Analisi tecnica classica
+
+Analisi della forza relativa
+
+Il risultato è un quadro completo della situazione di mercato, utile per individuare entrate, uscite e momenti di attenzione.
