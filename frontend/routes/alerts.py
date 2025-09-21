@@ -55,8 +55,8 @@ def add_alert():
         direction = data['direction'].upper()
         
         # Validazione tipo alert
-        if alert_type not in ['PRICE', 'EMA']:
-            return jsonify({'success': False, 'error': 'Tipo alert deve essere PRICE o EMA'})
+        if alert_type not in ['PRICE', 'EMA', 'VOLUME']:
+            return jsonify({'success': False, 'error': 'Tipo alert deve essere PRICE, EMA o VOLUME'})
         
         # Validazione direzione
         if direction not in ['ABOVE', 'BELOW']:
@@ -162,6 +162,90 @@ def add_alert():
             except Exception as e:
                 return jsonify({'success': False, 'error': f'Errore calcolo EMA: {str(e)}'})
         
+        elif alert_type == 'VOLUME':
+            # Alert volume spike
+            required_volume_fields = ['volume_threshold', 'timeframe', 'threshold_type']
+            for field in required_volume_fields:
+                if field not in data:
+                    return jsonify({'success': False, 'error': f'Campo {field} richiesto per alert VOLUME'})
+            
+            try:
+                volume_threshold = float(data['volume_threshold'])
+                timeframe = int(data['timeframe'])
+                threshold_type = data['threshold_type'].upper()  # ABSOLUTE, PERCENTAGE, AVERAGE_MULTIPLE
+            except ValueError:
+                return jsonify({'success': False, 'error': 'Soglia volume, timeframe devono essere numeri validi'})
+            
+            if volume_threshold <= 0:
+                return jsonify({'success': False, 'error': 'Soglia volume deve essere positiva'})
+                
+            if timeframe not in [1, 3, 5, 15, 30, 60, 240, 1440]:
+                return jsonify({'success': False, 'error': 'Timeframe non valido'})
+                
+            if threshold_type not in ['ABSOLUTE', 'PERCENTAGE', 'AVERAGE_MULTIPLE']:
+                return jsonify({'success': False, 'error': 'Tipo soglia deve essere ABSOLUTE, PERCENTAGE o AVERAGE_MULTIPLE'})
+            
+            # Calcola volume corrente e storico
+            try:
+                kline_data = get_kline_data('linear', symbol, str(timeframe), 50)
+                if not kline_data:
+                    return jsonify({'success': False, 'error': 'Impossibile ottenere dati volume'})
+                
+                # Estrai volume (index 5 nelle kline data di Bybit)
+                volumes = [float(candle[5]) for candle in kline_data]
+                current_volume = volumes[0] if volumes else 0  # Ultimo volume (prima candela nel return)
+                
+                # Calcola volume medio delle ultime 20 candele (escludendo quella corrente)
+                avg_volume = sum(volumes[1:21]) / min(20, len(volumes) - 1) if len(volumes) > 1 else current_volume
+                
+                # Calcola baseline per confronto
+                if threshold_type == 'ABSOLUTE':
+                    baseline_volume = volume_threshold
+                    comparison_text = f"{volume_threshold:,.0f}"
+                elif threshold_type == 'PERCENTAGE':
+                    # Percentuale sopra volume medio
+                    baseline_volume = avg_volume * (1 + volume_threshold / 100)
+                    comparison_text = f"{volume_threshold}% sopra media ({avg_volume:,.0f})"
+                else:  # AVERAGE_MULTIPLE
+                    # Multiplo del volume medio
+                    baseline_volume = avg_volume * volume_threshold
+                    comparison_text = f"{volume_threshold}x media ({avg_volume:,.0f})"
+                
+                # Determina se la condizione è già soddisfatta
+                condition_met = False
+                if direction == 'ABOVE' and current_volume > baseline_volume:
+                    condition_met = True
+                elif direction == 'BELOW' and current_volume < baseline_volume:
+                    condition_met = True
+                
+                if condition_met:
+                    return jsonify({
+                        'success': False, 
+                        'error': f'Condizione già soddisfatta. Volume corrente: {current_volume:,.0f}, Soglia: {comparison_text}'
+                    })
+                
+                # Crea alert volume
+                new_alert = {
+                    'id': f"{symbol}_{alert_type}_{direction}_{threshold_type}_{volume_threshold}_{timeframe}_{int(time.time())}",
+                    'symbol': symbol,
+                    'alert_type': alert_type,
+                    'volume_threshold': volume_threshold,
+                    'threshold_type': threshold_type,
+                    'timeframe': timeframe,
+                    'baseline_volume': baseline_volume,
+                    'current_volume': current_volume,
+                    'avg_volume': avg_volume,
+                    'current_price': current_price,
+                    'direction': direction,
+                    'message': data['message'],
+                    'created_at': datetime.now().isoformat(),
+                    'status': 'ACTIVE',
+                    'triggered_at': None
+                }
+                
+            except Exception as e:
+                return jsonify({'success': False, 'error': f'Errore calcolo volume: {str(e)}'})
+        
         active_alerts.append(new_alert)
         
         # Avvia il monitor se non è già attivo
@@ -183,7 +267,7 @@ def add_alert():
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
-            else:  # EMA
+            elif alert_type == 'EMA':
                 direction_emoji = "🚀" if direction == "ABOVE" else "📉"
                 message = f"""
 🔔 <b>Nuovo Alert EMA Breakout</b>
@@ -192,6 +276,30 @@ def add_alert():
 📊 EMA({ema_period}) su {timeframe}min: <code>${ema_value:.4f}</code>
 💰 Prezzo corrente: <code>${current_price:.4f}</code>
 📍 Breakout: <b>{direction}</b>
+💬 Messaggio: <i>{data['message']}</i>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            elif alert_type == 'VOLUME':
+                direction_emoji = "📊" if direction == "ABOVE" else "📉"
+                volume_emoji = "🔥" if direction == "ABOVE" else "💧"
+                
+                if new_alert['threshold_type'] == 'ABSOLUTE':
+                    threshold_text = f"{new_alert['volume_threshold']:,.0f}"
+                elif new_alert['threshold_type'] == 'PERCENTAGE':
+                    threshold_text = f"{new_alert['volume_threshold']}% sopra media"
+                else:  # AVERAGE_MULTIPLE
+                    threshold_text = f"{new_alert['volume_threshold']}x volume medio"
+                
+                message = f"""
+🔔 <b>Nuovo Alert Volume</b>
+
+{volume_emoji} <b>{symbol}</b>
+📊 Volume corrente: <code>{new_alert['current_volume']:,.0f}</code>
+🎯 Soglia: <code>{threshold_text}</code>
+📈 Volume medio: <code>{new_alert['avg_volume']:,.0f}</code>
+📍 Direzione: <b>{direction}</b>
+⏱️ Timeframe: <b>{new_alert['timeframe']}min</b>
 💬 Messaggio: <i>{data['message']}</i>
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
@@ -390,6 +498,44 @@ def alert_monitor_loop():
                         print(f"❌ Errore calcolo EMA per {alert['symbol']}: {e}")
                         continue
                 
+                elif alert.get('alert_type') == 'VOLUME':
+                    # Alert volume spike
+                    try:
+                        # Ottieni dati volume correnti
+                        kline_data = get_kline_data('linear', alert['symbol'], str(alert['timeframe']), 50)
+                        if kline_data:
+                            # Estrai volume corrente (ultima candela = indice 0)
+                            current_volume = float(kline_data[0][5])  # Volume è all'indice 5
+                            
+                            # Aggiorna volume corrente nell'alert
+                            alert['current_volume'] = current_volume
+                            
+                            # Calcola volume medio aggiornato (escludendo candela corrente)
+                            volumes = [float(candle[5]) for candle in kline_data[1:21]]  # 20 candele precedenti
+                            if volumes:
+                                avg_volume = sum(volumes) / len(volumes)
+                                alert['avg_volume'] = avg_volume
+                                
+                                # Ricalcola baseline in base al tipo di soglia
+                                if alert['threshold_type'] == 'ABSOLUTE':
+                                    baseline_volume = alert['volume_threshold']
+                                elif alert['threshold_type'] == 'PERCENTAGE':
+                                    baseline_volume = avg_volume * (1 + alert['volume_threshold'] / 100)
+                                else:  # AVERAGE_MULTIPLE
+                                    baseline_volume = avg_volume * alert['volume_threshold']
+                                
+                                alert['baseline_volume'] = baseline_volume
+                                
+                                # Controlla trigger
+                                if alert['direction'] == 'ABOVE' and current_volume > baseline_volume:
+                                    triggered = True
+                                elif alert['direction'] == 'BELOW' and current_volume < baseline_volume:
+                                    triggered = True
+                    
+                    except Exception as e:
+                        print(f"❌ Errore calcolo volume per {alert['symbol']}: {e}")
+                        continue
+                
                 if triggered:
                     # Marca alert come triggerato
                     alert['status'] = 'TRIGGERED'
@@ -471,6 +617,42 @@ def send_alert_notification(alert):
 📊 EMA({alert['ema_period']}) {alert['timeframe']}min: <code>${alert['ema_value']:.4f}</code>
 💰 Prezzo attuale: <code>${alert['current_price']:.4f}</code>
 📈 Distanza da EMA: <code>{((alert['current_price'] - alert['ema_value']) / alert['ema_value'] * 100):+.2f}%</code>
+
+💬 <i>{alert['message']}</i>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+📊 Dashboard: http://localhost:5000/alerts
+"""
+            
+            elif alert_type == 'VOLUME':
+                direction_emoji = "🔥" if alert['direction'] == "ABOVE" else "💧"
+                trend_text = "superato" if alert['direction'] == "ABOVE" else "sceso sotto"
+                
+                # Formato soglia in base al tipo
+                if alert['threshold_type'] == 'ABSOLUTE':
+                    threshold_text = f"{alert['volume_threshold']:,.0f}"
+                elif alert['threshold_type'] == 'PERCENTAGE':
+                    threshold_text = f"{alert['volume_threshold']}% sopra media"
+                else:  # AVERAGE_MULTIPLE
+                    threshold_text = f"{alert['volume_threshold']}x volume medio"
+                
+                # Calcola quanto è aumentato/diminuito il volume
+                if alert['avg_volume'] > 0:
+                    volume_change = ((alert['current_volume'] - alert['avg_volume']) / alert['avg_volume'] * 100)
+                else:
+                    volume_change = 0
+                
+                message = f"""
+🚨 <b>VOLUME SPIKE TRIGGERATO!</b> {direction_emoji}
+
+📊 <b>{alert['symbol']}</b> ha {trend_text} la soglia volume!
+
+🔥 Volume corrente: <code>{alert['current_volume']:,.0f}</code>
+🎯 Soglia: <code>{threshold_text}</code>
+📊 Volume medio: <code>{alert['avg_volume']:,.0f}</code>
+📈 Variazione: <code>{volume_change:+.1f}%</code>
+⏱️ Timeframe: <b>{alert['timeframe']}min</b>
+💰 Prezzo: <code>${alert['current_price']:.4f}</code>
 
 💬 <i>{alert['message']}</i>
 

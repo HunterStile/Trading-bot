@@ -210,6 +210,11 @@
                             <label class="btn btn-outline-info" for="alert_type_ema">
                                 <i class="fas fa-chart-line"></i> Breakout EMA
                             </label>
+                            
+                            <input type="radio" class="btn-check" name="alert_type" id="alert_type_volume" value="VOLUME">
+                            <label class="btn btn-outline-warning" for="alert_type_volume">
+                                <i class="fas fa-chart-bar"></i> Volume Spike
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -263,6 +268,35 @@
                         </select>
                     </div>
                     
+                    <!-- Campi per Alert Volume -->
+                    <div class="col-md-2" id="volume-threshold-field" style="display: none;">
+                        <label for="volume-threshold" class="form-label">Soglia Volume</label>
+                        <input type="number" class="form-control" id="volume-threshold" min="0" step="0.1" placeholder="100000">
+                    </div>
+                    
+                    <div class="col-md-2" id="threshold-type-field" style="display: none;">
+                        <label for="threshold-type" class="form-label">Tipo Soglia</label>
+                        <select class="form-select" id="threshold-type">
+                            <option value="ABSOLUTE">Volume Assoluto</option>
+                            <option value="PERCENTAGE" selected>% sopra Media</option>
+                            <option value="AVERAGE_MULTIPLE">Multiplo Media</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2" id="volume-timeframe-field" style="display: none;">
+                        <label for="volume-timeframe" class="form-label">Timeframe Vol</label>
+                        <select class="form-select" id="volume-timeframe">
+                            <option value="1">1m</option>
+                            <option value="3">3m</option>
+                            <option value="5">5m</option>
+                            <option value="15" selected>15m</option>
+                            <option value="30">30m</option>
+                            <option value="60">1h</option>
+                            <option value="240">4h</option>
+                            <option value="1440">1d</option>
+                        </select>
+                    </div>
+                    
                     <div class="col-md-2">
                         <label for="direction" class="form-label">Direzione</label>
                         <select class="form-select" id="direction" required>
@@ -285,6 +319,22 @@
                             <i class="fas fa-info-circle"></i>
                             <strong>Alert EMA:</strong> L'alert si attiverà quando il prezzo rompe la EMA nella direzione selezionata.
                             <span id="current-ema-info"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Info aggiuntiva per Volume -->
+                <div class="row mt-2" id="volume-info" style="display: none;">
+                    <div class="col-12">
+                        <div class="alert alert-warning">
+                            <i class="fas fa-chart-bar"></i>
+                            <strong>Alert Volume:</strong> L'alert si attiverà quando il volume supera/scende sotto la soglia impostata.
+                            <span id="current-volume-info"></span>
+                            <br><small>
+                                • <strong>Volume Assoluto:</strong> Volume fisso (es. 1,000,000)
+                                • <strong>% sopra Media:</strong> Percentuale sopra volume medio (es. 200% = 3x normale)
+                                • <strong>Multiplo Media:</strong> Multiplo del volume medio (es. 5x = 5 volte il normale)
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -441,6 +491,21 @@ function setupEventListeners() {
     document.getElementById('timeframe').addEventListener('change', function() {
         updateEMAInfo();
     });
+    
+    // Volume threshold change
+    document.getElementById('volume-threshold').addEventListener('input', function() {
+        updateVolumeInfo();
+    });
+    
+    // Threshold type change
+    document.getElementById('threshold-type').addEventListener('change', function() {
+        updateVolumeInfo();
+    });
+    
+    // Volume timeframe change
+    document.getElementById('volume-timeframe').addEventListener('change', function() {
+        updateVolumeInfo();
+    });
 }
 
 // Carica lista alert
@@ -565,6 +630,10 @@ async function addAlert() {
     } else if (alertType === 'EMA') {
         formData.ema_period = document.getElementById('ema-period').value;
         formData.timeframe = document.getElementById('timeframe').value;
+    } else if (alertType === 'VOLUME') {
+        formData.volume_threshold = document.getElementById('volume-threshold').value;
+        formData.threshold_type = document.getElementById('threshold-type').value;
+        formData.timeframe = document.getElementById('volume-timeframe').value;
     }
     
     // Validazione client
@@ -580,6 +649,11 @@ async function addAlert() {
     
     if (alertType === 'EMA' && (!formData.ema_period || !formData.timeframe)) {
         showAlert('Inserisci periodo EMA e timeframe', 'warning');
+        return;
+    }
+    
+    if (alertType === 'VOLUME' && (!formData.volume_threshold || !formData.threshold_type || !formData.timeframe)) {
+        showAlert('Inserisci soglia volume, tipo soglia e timeframe', 'warning');
         return;
     }
     
@@ -697,6 +771,41 @@ function updateAlertsDisplay() {
                     </div>
                 </div>
             `;
+        } else if (alertType === 'VOLUME') {
+            const currentVolume = alert.current_volume || 0;
+            const baselineVolume = alert.baseline_volume || 0;
+            const avgVolume = alert.avg_volume || 0;
+            
+            // Formato soglia
+            let thresholdText = '';
+            if (alert.threshold_type === 'ABSOLUTE') {
+                thresholdText = `${alert.volume_threshold.toLocaleString()}`;
+            } else if (alert.threshold_type === 'PERCENTAGE') {
+                thresholdText = `${alert.volume_threshold}% sopra media`;
+            } else {
+                thresholdText = `${alert.volume_threshold}x media`;
+            }
+            
+            // Calcola percentuale vs baseline
+            const volumeVsBaseline = baselineVolume > 0 ? ((currentVolume - baselineVolume) / baselineVolume * 100) : 0;
+            
+            targetInfo = `
+                <div class="col-md-3">
+                    <small class="text-muted">Soglia Volume</small>
+                    <div class="price-display text-warning">${thresholdText}</div>
+                    <div class="small text-muted">${alert.timeframe}min</div>
+                </div>
+            `;
+            
+            distanceInfo = `
+                <div class="col-md-3">
+                    <small class="text-muted">Volume vs Soglia</small>
+                    <div class="price-display ${volumeVsBaseline >= 0 ? 'text-success' : 'text-danger'}">
+                        ${volumeVsBaseline > 0 ? '+' : ''}${volumeVsBaseline.toFixed(1)}%
+                    </div>
+                    <div class="small text-muted">Corrente: ${currentVolume.toLocaleString()}</div>
+                </div>
+            `;
         }
         
         return `
@@ -751,26 +860,66 @@ function toggleAlertTypeFields() {
     const timeframeField = document.getElementById('timeframe-field');
     const emaInfo = document.getElementById('ema-info');
     
+    // Campi volume
+    const volumeThresholdField = document.getElementById('volume-threshold-field');
+    const thresholdTypeField = document.getElementById('threshold-type-field');
+    const volumeTimeframeField = document.getElementById('volume-timeframe-field');
+    const volumeInfo = document.getElementById('volume-info');
+    
     if (alertType === 'PRICE') {
         priceFields.style.display = 'block';
         emaPeriodField.style.display = 'none';
         timeframeField.style.display = 'none';
         emaInfo.style.display = 'none';
+        volumeThresholdField.style.display = 'none';
+        thresholdTypeField.style.display = 'none';
+        volumeTimeframeField.style.display = 'none';
+        volumeInfo.style.display = 'none';
         
         // Rendi obbligatorio il prezzo target
         document.getElementById('target-price').required = true;
         document.getElementById('ema-period').required = false;
         document.getElementById('timeframe').required = false;
+        document.getElementById('volume-threshold').required = false;
+        document.getElementById('threshold-type').required = false;
+        document.getElementById('volume-timeframe').required = false;
     } else if (alertType === 'EMA') {
         priceFields.style.display = 'none';
         emaPeriodField.style.display = 'block';
         timeframeField.style.display = 'block';
         emaInfo.style.display = 'block';
+        volumeThresholdField.style.display = 'none';
+        thresholdTypeField.style.display = 'none';
+        volumeTimeframeField.style.display = 'none';
+        volumeInfo.style.display = 'none';
         
         // Rendi obbligatori i campi EMA
         document.getElementById('target-price').required = false;
         document.getElementById('ema-period').required = true;
         document.getElementById('timeframe').required = true;
+        document.getElementById('volume-threshold').required = false;
+        document.getElementById('threshold-type').required = false;
+        document.getElementById('volume-timeframe').required = false;
+    } else if (alertType === 'VOLUME') {
+        priceFields.style.display = 'none';
+        emaPeriodField.style.display = 'none';
+        timeframeField.style.display = 'none';
+        emaInfo.style.display = 'none';
+        volumeThresholdField.style.display = 'block';
+        thresholdTypeField.style.display = 'block';
+        volumeTimeframeField.style.display = 'block';
+        volumeInfo.style.display = 'block';
+        
+        // Rendi obbligatori i campi volume
+        document.getElementById('target-price').required = false;
+        document.getElementById('ema-period').required = false;
+        document.getElementById('timeframe').required = false;
+        document.getElementById('volume-threshold').required = true;
+        document.getElementById('threshold-type').required = true;
+        document.getElementById('volume-timeframe').required = true;
+        
+        // Aggiorna info volume
+        updateVolumeInfo();
     }
 }
 
@@ -796,6 +945,41 @@ async function updateEMAInfo() {
     }
 }
 
+// Aggiorna info Volume in tempo reale
+async function updateVolumeInfo() {
+    const alertType = document.querySelector('input[name="alert_type"]:checked').value;
+    const symbol = document.getElementById('symbol').value;
+    const volumeThreshold = document.getElementById('volume-threshold').value;
+    const thresholdType = document.getElementById('threshold-type').value;
+    const timeframe = document.getElementById('volume-timeframe').value;
+    
+    if (alertType !== 'VOLUME') {
+        return;
+    }
+    
+    const infoElement = document.getElementById('current-volume-info');
+    
+    if (!symbol || !volumeThreshold || !thresholdType || !timeframe) {
+        infoElement.innerHTML = ' <br><strong>Seleziona tutti i parametri per vedere anteprima</strong>';
+        return;
+    }
+    
+    try {
+        let thresholdText = '';
+        if (thresholdType === 'ABSOLUTE') {
+            thresholdText = `${parseFloat(volumeThreshold).toLocaleString()} unità`;
+        } else if (thresholdType === 'PERCENTAGE') {
+            thresholdText = `${volumeThreshold}% sopra volume medio`;
+        } else if (thresholdType === 'AVERAGE_MULTIPLE') {
+            thresholdText = `${volumeThreshold}x volume medio`;
+        }
+        
+        infoElement.innerHTML = ` <br><strong>Soglia:</strong> ${thresholdText} su timeframe ${timeframe} minuti per ${symbol}`;
+    } catch (error) {
+        infoElement.innerHTML = ' <span class="text-danger">Errore configurazione volume</span>';
+    }
+}
+
 // Aggiorna metriche
 function updateMetrics() {
     const totalAlerts = alerts.length;
@@ -818,8 +1002,9 @@ function resetForm() {
     document.getElementById('alert_type_price').checked = true;
     toggleAlertTypeFields();
     
-    // Reset info EMA
+    // Reset info EMA e Volume
     document.getElementById('current-ema-info').innerHTML = '';
+    document.getElementById('current-volume-info').innerHTML = '';
 }
 
 // Refresh alert
