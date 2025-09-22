@@ -157,28 +157,87 @@ SEGNALE AI GENERATO:
 - Risk/Reward: {ai_signal.get('risk_reward_ratio', 'N/A')}
 - Position Size: {ai_signal.get('position_size_percent', 'N/A')}%
 
-DATI TECNICI ATTUALI:
-- Prezzo Corrente: ${ai_signal.get('current_price', market_data.get('current_price', 'N/A'))}
+PREZZO CORRENTE: ${market_data.get('current_price', ai_signal.get('entry_price', 'N/A'))}
+
+ANALISI MULTI-TIMEFRAME:"""
+        
+        # Aggiungi dati dettagliati per timeframe se disponibili
+        timeframes = market_data.get('timeframes', {})
+        if timeframes:
+            for tf_name, tf_data in timeframes.items():
+                context += f"""
+{tf_name.upper()}:
+  - RSI: {tf_data.get('rsi', 'N/A')}
+  - EMA 20: ${tf_data.get('ema_20', 'N/A')}
+  - EMA 50: ${tf_data.get('ema_50', 'N/A')}
+  - Trend: {tf_data.get('trend', 'N/A')}
+  - Segnali: {', '.join(tf_data.get('reversal_signals', [])) if tf_data.get('reversal_signals') else 'Nessuno'}"""
+        else:
+            # Fallback con dati base se non abbiamo timeframes strutturati
+            context += f"""
+DATI TECNICI DISPONIBILI:
 - RSI 14: {ai_signal.get('rsi', market_data.get('rsi', 'N/A'))}
 - EMA 20: ${ai_signal.get('ema_20', market_data.get('ema_20', 'N/A'))}
 - EMA 50: ${ai_signal.get('ema_50', market_data.get('ema_50', 'N/A'))}
-- Volume 24h: {market_data.get('volume_24h', 'N/A')}
-- Trend 15m: {market_data.get('trend_15m', 'N/A')}
-- Trend 1h: {market_data.get('trend_1h', 'N/A')}
-- Trend 4h: {market_data.get('trend_4h', 'N/A')}
-- Trend 1d: {market_data.get('trend_1d', 'N/A')}
+- Volume 24h: {market_data.get('volume_24h', 'N/A')}"""
+        
+        # Aggiungi summary se disponibile
+        summary = market_data.get('summary', {})
+        if summary and summary.get('overall_trend') != 'N/A':
+            context += f"""
 
-RAGIONAMENTO ORIGINALE:
-{ai_signal.get('reasoning', 'N/A')}
+RIASSUNTO TREND:
+- Trend Generale (4h): {summary.get('overall_trend', 'N/A')}
+- Trend Breve (15m): {summary.get('short_term_trend', 'N/A')}
+- RSI Attuale: {summary.get('current_rsi', 'N/A')}
+- Segnali Inversione: {', '.join(summary.get('all_reversal_signals', [])) if summary.get('all_reversal_signals') else 'Nessuno'}"""
+        
+        context += f"""
 
-CRONOLOGIA CONVERSAZIONE:
-"""
+RAGIONAMENTO ORIGINALE AI:
+{ai_signal.get('reasoning', 'Nessun ragionamento fornito')}
+
+CRONOLOGIA CONVERSAZIONE:"""
         
         # Aggiungi ultimi 5 messaggi per contesto
         recent_messages = self.chat_history[-5:] if len(self.chat_history) > 5 else self.chat_history
         for msg in recent_messages:
             if msg['role'] != 'system':
-                context += f"{msg['role'].upper()}: {msg['content']}\n"
+                context += f"\n{msg['role'].upper()}: {msg['content'][:200]}{'...' if len(msg['content']) > 200 else ''}"
+        
+        # Prompt specifico per tipo di messaggio
+        if message_type == 'question':
+            prompt_instruction = "L'utente ha una domanda sulla mia analisi. Rispondi usando i dati tecnici multi-timeframe forniti sopra. Sii specifico con i numeri."
+        elif message_type == 'opinion':
+            prompt_instruction = "L'utente condivide la sua opinione. Analizzala rispetto ai dati tecnici multi-timeframe sopra. Trova punti di accordo/disaccordo con dati specifici."
+        elif message_type == 'scenario':
+            prompt_instruction = "L'utente chiede uno scenario alternativo. Considera la nuova condizione usando tutti i dati tecnici forniti sopra."
+        elif message_type == 'update':
+            prompt_instruction = "L'utente fornisce informazioni aggiornate. Rivedi l'analisi considerando queste info + tutti i dati tecnici sopra."
+        else:
+            prompt_instruction = "Rispondi usando tutti i dati tecnici multi-timeframe forniti sopra."
+        
+        full_prompt = f"""{context}
+
+ISTRUZIONE: {prompt_instruction}
+
+REGOLE IMPORTANTI:
+- Usa SEMPRE i dati tecnici specifici forniti sopra (prezzo, RSI, EMA per ogni timeframe)
+- Fai riferimento a numeri concreti quando spieghi le tue decisioni
+- Non dire mai "mancano dati" - lavora con quello che hai fornito sopra
+- Se alcuni valori sono N/A, concentrati su quelli disponibili
+- Mantieni il focus su {symbol} e l'operazione in discussione
+
+MESSAGGIO UTENTE: {user_message}
+
+RISPONDI in modo:
+- Conversazionale e amichevole
+- Specifico sui dati tecnici (usa i numeri sopra)
+- Pratico con suggerimenti actionable
+- Coerente con l'analisi originale ma aggiornabile se necessario
+- Con emoji per rendere la chat più engaging 🤖📊📈"""
+
+        return full_prompt
         
         # Prompt specifico per tipo di messaggio
         if message_type == 'question':

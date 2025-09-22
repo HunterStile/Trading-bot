@@ -40,6 +40,7 @@ except ImportError as e:
 
 # Import dei blueprints
 from routes import register_blueprints
+from routes import init_ai_systems
 from routes.websocket import register_websocket_events
 
 # Creiamo health check blueprint integrato
@@ -186,6 +187,9 @@ else:
     print("⚠️ Notifiche Telegram disabilitate (token/chat_id mancanti)")
     app.config['TELEGRAM_NOTIFIER'] = None
     app.config['TELEGRAM_BOT'] = None
+
+# Inizializza i sistemi AI dopo la configurazione Telegram
+init_ai_systems(app)
 
 if __name__ == '__main__':
     print("🚀 Avvio Trading Bot Dashboard...")

@@ -9,7 +9,7 @@ from .symbols import symbols_bp
 from .backtest import backtest_bp
 from .alerts import alerts_bp, init_alerts_system
 from .market_analysis_routes import market_analysis_bp, init_market_analysis_routes
-from .ai_trading import ai_trading_bp
+from .ai_trading import ai_trading_bp, init_ai_trading_system
 
 def register_blueprints(app):
     """Registra tutti i blueprints nell'app Flask"""
@@ -30,3 +30,7 @@ def register_blueprints(app):
     # Inizializza il sistema di analisi mercato
     telegram_notifier = app.config.get('TELEGRAM_NOTIFIER')
     init_market_analysis_routes(app, telegram_notifier)
+
+def init_ai_systems(app):
+    """Inizializza i sistemi AI dopo la configurazione dell'app"""
+    init_ai_trading_system(app)

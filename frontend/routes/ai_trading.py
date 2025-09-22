@@ -2,6 +2,8 @@ from flask import Blueprint, request, jsonify, render_template, current_app
 from datetime import datetime
 import sys
 import os
+import threading
+import time
 from dotenv import load_dotenv
 
 # Carica variabili d'ambiente
@@ -25,6 +27,19 @@ ai_trading_bp = Blueprint('ai_trading', __name__, url_prefix='/ai-trading')
 # Variabile globale per l'AI assistant e chat
 ai_enhanced_analyzer = None
 ai_chat_system = None
+ai_telegram_notifier = None  # Notifier Telegram per AI
+
+# Variabili per sistema automatico AI
+ai_auto_analysis_thread = None
+ai_auto_analysis_active = False
+ai_auto_config = {
+    'analysis_interval': 30,  # minuti
+    'signal_interval': 60,    # minuti
+    'enabled': False,
+    'telegram_enabled': True,
+    'min_confidence': 70,     # confidenza minima per inviare segnali
+    'max_signals_per_hour': 5  # limite segnali per ora
+}
 
 def initialize_ai_trading(market_analyzer, api_key=None, provider='gemini'):
     """Inizializza AI Trading Assistant con Market Analyzer esistente"""
@@ -58,6 +73,23 @@ def initialize_ai_trading(market_analyzer, api_key=None, provider='gemini'):
     else:
         print(f"⚠️ AI Trading non disponibile - configurare {provider.upper()} API key")
         return False
+
+def set_ai_telegram_notifier(notifier):
+    """Imposta il notificatore Telegram per AI"""
+    global ai_telegram_notifier
+    ai_telegram_notifier = notifier
+    print(f"✅ Telegram notifier configurato per AI Trading: {notifier is not None}")
+    print(f"🔧 Notifier type: {type(notifier) if notifier else 'None'}")
+
+def init_ai_trading_system(app):
+    """Inizializza il sistema AI Trading con il notifier Telegram dell'app"""
+    telegram_notifier = app.config.get('TELEGRAM_NOTIFIER')
+    if telegram_notifier:
+        print(f"🔧 Configurando AI Trading notifier: {type(telegram_notifier)}")
+        set_ai_telegram_notifier(telegram_notifier)
+        print("✅ AI Trading sistema inizializzato con Telegram")
+    else:
+        print("⚠️ AI Trading inizializzato senza Telegram notifier")
 
 @ai_trading_bp.route('/')
 def ai_trading_dashboard():
@@ -333,43 +365,81 @@ def start_chat_discussion():
         data = request.get_json()
         symbol = data.get('symbol')
         ai_signal = data.get('ai_signal', {})
+        provided_market_data = data.get('market_data', {})
         
         if not symbol:
             return jsonify({'success': False, 'error': 'Simbolo richiesto'})
         
-        # Ottieni dati di mercato aggiornati per il simbolo
-        market_data = {}
-        if ai_enhanced_analyzer and ai_enhanced_analyzer.market_analyzer:
-            try:
-                # Esegui analisi per ottenere dati tecnici aggiornati
-                analysis = ai_enhanced_analyzer.market_analyzer.analyze_market([symbol])
-                
-                if 'analyses' in analysis and symbol in analysis['analyses']:
-                    symbol_data = analysis['analyses'][symbol]
+        print(f"🔍 Chat start per {symbol}")
+        print(f"📊 AI Signal ricevuto: {list(ai_signal.keys())}")
+        print(f"📈 Market data forniti: {list(provided_market_data.keys())}")
+        
+        # Usa i dati forniti dal frontend se disponibili, altrimenti raccogli nuovi dati
+        if provided_market_data and len(provided_market_data) > 2:
+            print("✅ Usando dati di mercato forniti dal frontend")
+            market_data = provided_market_data
+        else:
+            print("🔄 Raccogliendo nuovi dati di mercato...")
+            market_data = {}
+            if ai_enhanced_analyzer and ai_enhanced_analyzer.market_analyzer:
+                try:
+                    # Esegui analisi completa e filtra per il simbolo richiesto
+                    analysis = ai_enhanced_analyzer.market_analyzer.analyze_market()
                     
-                    # Estrai dati da tutti i timeframes
-                    for tf, tf_data in symbol_data.items():
-                        if isinstance(tf_data, dict):
-                            market_data.update({
-                                f'current_price': tf_data.get('current_price', ai_signal.get('entry_price', 0)),
-                                f'rsi': tf_data.get('rsi', 'N/A'),
-                                f'ema_20': tf_data.get('ema_20', 'N/A'),
-                                f'ema_50': tf_data.get('ema_50', 'N/A'),
-                                f'trend_{tf}m': tf_data.get('trend', {}).get('trend', 'N/A'),
-                                f'volume_24h': tf_data.get('volume_24h', 'N/A')
-                            })
-                
-                print(f"📊 Dati mercato ottenuti per {symbol}: {list(market_data.keys())}")
-                
-            except Exception as e:
-                print(f"⚠️ Errore ottenimento dati mercato: {e}")
-                # Usa dati dal segnale AI come fallback
-                market_data = {
-                    'current_price': ai_signal.get('entry_price', 0),
-                    'rsi': 'N/A',
-                    'ema_20': 'N/A', 
-                    'ema_50': 'N/A'
-                }
+                    if 'analyses' in analysis and symbol in analysis['analyses']:
+                        symbol_data = analysis['analyses'][symbol]
+                        
+                        # Costruisci dati completi multi-timeframe
+                        market_data = {
+                            'symbol': symbol,
+                            'current_price': 0,
+                            'timeframes': {},
+                            'summary': {}
+                        }
+                        
+                        # Estrai dati da tutti i timeframes
+                        for tf, tf_data in symbol_data.items():
+                            if isinstance(tf_data, dict) and str(tf).isdigit():
+                                # Aggiorna prezzo corrente dal primo timeframe disponibile
+                                if market_data['current_price'] == 0 and 'current_price' in tf_data:
+                                    market_data['current_price'] = tf_data['current_price']
+                                
+                                # Aggiungi dati per questo timeframe
+                                tf_name = f"{tf}m"
+                                market_data['timeframes'][tf_name] = {
+                                    'rsi': tf_data.get('rsi', 'N/A'),
+                                    'ema_20': tf_data.get('ema_20', 'N/A'),
+                                    'ema_50': tf_data.get('ema_50', 'N/A'),
+                                    'trend': tf_data.get('trend', {}).get('trend', 'N/A'),
+                                    'current_price': tf_data.get('current_price', 'N/A'),
+                                    'volume_24h': tf_data.get('volume_24h', 'N/A'),
+                                    'reversal_signals': tf_data.get('reversal_signals', [])
+                                }
+                        
+                        # Crea summary con dati più utilizzati
+                        market_data['summary'] = {
+                            'overall_trend': market_data['timeframes'].get('240m', {}).get('trend', 'N/A'),
+                            'short_term_trend': market_data['timeframes'].get('15m', {}).get('trend', 'N/A'),
+                            'current_rsi': market_data['timeframes'].get('60m', {}).get('rsi', 'N/A'),
+                            'all_reversal_signals': []
+                        }
+                        
+                        # Raccogli tutti i segnali di inversione
+                        for tf_data in market_data['timeframes'].values():
+                            if isinstance(tf_data.get('reversal_signals'), list):
+                                market_data['summary']['all_reversal_signals'].extend(tf_data['reversal_signals'])
+                        
+                        print(f"💾 Dati di mercato completi per {symbol}: {len(market_data['timeframes'])} timeframes")
+                    
+                except Exception as e:
+                    print(f"⚠️ Errore ottenimento dati mercato: {e}")
+                    # Fallback con dati minimi dal segnale AI
+                    market_data = {
+                        'current_price': ai_signal.get('entry_price', 0),
+                        'summary': {'note': 'Dati limitati - solo dal segnale AI'}
+                    }
+            
+            print(f"📊 Dati mercato ottenuti per {symbol}: {list(market_data.keys())}")
         
         welcome_message = ai_chat_system.start_trading_discussion(symbol, ai_signal, market_data)
         
@@ -477,6 +547,339 @@ def save_trading_note():
         return jsonify({
             'success': True,
             'message': 'Nota salvata con successo'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@ai_trading_bp.route('/api/chat/refresh-analysis', methods=['POST'])
+def refresh_analysis_for_chat():
+    """Aggiorna l'analisi per un simbolo specifico e invia i dati alla chat"""
+    global ai_chat_system, ai_enhanced_analyzer
+    
+    if not ai_chat_system:
+        return jsonify({'success': False, 'error': 'Sistema di chat non disponibile'})
+    
+    try:
+        data = request.get_json()
+        symbol = data.get('symbol')
+        
+        if not symbol:
+            return jsonify({'success': False, 'error': 'Simbolo richiesto'})
+        
+        print(f"🔄 Refresh analisi per {symbol}")
+        
+        # Ottieni analisi aggiornata
+        market_data = {}
+        if ai_enhanced_analyzer and ai_enhanced_analyzer.market_analyzer:
+            try:
+                # Esegui analisi completa e filtra per il simbolo richiesto
+                analysis = ai_enhanced_analyzer.market_analyzer.analyze_market()
+                
+                if 'analyses' in analysis and symbol in analysis['analyses']:
+                    symbol_data = analysis['analyses'][symbol]
+                    
+                    # Costruisci dati completi multi-timeframe
+                    market_data = {
+                        'symbol': symbol,
+                        'current_price': 0,
+                        'timeframes': {},
+                        'summary': {}
+                    }
+                    
+                    # Estrai dati da tutti i timeframes
+                    for tf, tf_data in symbol_data.items():
+                        if isinstance(tf_data, dict) and str(tf).isdigit():
+                            # Aggiorna prezzo corrente dal primo timeframe disponibile
+                            if market_data['current_price'] == 0 and 'current_price' in tf_data:
+                                market_data['current_price'] = tf_data['current_price']
+                            
+                            # Aggiungi dati per questo timeframe
+                            tf_name = f"{tf}m"
+                            market_data['timeframes'][tf_name] = {
+                                'rsi': tf_data.get('rsi', 'N/A'),
+                                'ema_20': tf_data.get('ema_20', 'N/A'),
+                                'ema_50': tf_data.get('ema_50', 'N/A'),
+                                'trend': tf_data.get('trend', {}).get('trend', 'N/A'),
+                                'current_price': tf_data.get('current_price', 'N/A'),
+                                'volume_24h': tf_data.get('volume_24h', 'N/A'),
+                                'reversal_signals': tf_data.get('reversal_signals', [])
+                            }
+                    
+                    # Crea summary con dati più utilizzati
+                    market_data['summary'] = {
+                        'overall_trend': market_data['timeframes'].get('240m', {}).get('trend', 'N/A'),
+                        'short_term_trend': market_data['timeframes'].get('15m', {}).get('trend', 'N/A'),
+                        'current_rsi': market_data['timeframes'].get('60m', {}).get('rsi', 'N/A'),
+                        'all_reversal_signals': []
+                    }
+                    
+                    # Raccogli tutti i segnali di inversione
+                    for tf_data in market_data['timeframes'].values():
+                        if isinstance(tf_data.get('reversal_signals'), list):
+                            market_data['summary']['all_reversal_signals'].extend(tf_data['reversal_signals'])
+                    
+                    print(f"💾 Analisi aggiornata per {symbol}: {len(market_data['timeframes'])} timeframes")
+                    
+                    # Invia messaggio di analisi aggiornata alla chat
+                    analysis_summary = f"""📊 **ANALISI AGGIORNATA per {symbol}**
+
+💰 **Prezzo attuale:** ${market_data['current_price']:.4f}
+
+📈 **Trend Analysis:**
+• Trend generale (4h): {market_data['summary']['overall_trend']}
+• Trend breve termine (15m): {market_data['summary']['short_term_trend']}
+
+📊 **Indicatori Tecnici:**"""
+                    
+                    # Aggiungi dettagli per ogni timeframe
+                    for tf_name, tf_data in market_data['timeframes'].items():
+                        analysis_summary += f"""
+**{tf_name}:**
+  - RSI: {tf_data['rsi']}
+  - EMA 20: {tf_data['ema_20']}
+  - EMA 50: {tf_data['ema_50']}
+  - Volume 24h: {tf_data['volume_24h']}"""
+                    
+                    # Aggiungi segnali di inversione se presenti
+                    if market_data['summary']['all_reversal_signals']:
+                        analysis_summary += f"\n\n🔄 **Segnali di inversione:** {', '.join(market_data['summary']['all_reversal_signals'])}"
+                    
+                    analysis_summary += f"\n\n⏰ Aggiornato: {datetime.now().strftime('%H:%M:%S')}"
+                    
+                    return jsonify({
+                        'success': True,
+                        'message': analysis_summary,
+                        'market_data': market_data,
+                        'timestamp': datetime.now().isoformat()
+                    })
+                else:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Simbolo {symbol} non trovato nell\'analisi corrente'
+                    })
+                    
+            except Exception as e:
+                print(f"⚠️ Errore refresh analisi: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': f'Errore durante l\'aggiornamento dell\'analisi: {str(e)}'
+                })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Analizzatore di mercato non disponibile'
+            })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+# ===== SISTEMA AUTOMATICO AI =====
+
+def ai_auto_analysis_loop():
+    """Loop principale per analisi automatica AI"""
+    global ai_auto_analysis_active, ai_enhanced_analyzer, ai_auto_config
+    
+    last_analysis_time = 0
+    last_signal_time = 0
+    signals_sent_this_hour = 0
+    current_hour = datetime.now().hour
+    
+    print("🤖 Sistema automatico AI avviato!")
+    
+    while ai_auto_analysis_active:
+        try:
+            current_time = time.time()
+            now = datetime.now()
+            
+            # Reset contatore segnali ogni ora
+            if now.hour != current_hour:
+                signals_sent_this_hour = 0
+                current_hour = now.hour
+                print(f"🔄 Reset contatore segnali AI per ora {current_hour}")
+            
+            # Verifica se è tempo di fare analisi
+            if (current_time - last_analysis_time) >= (ai_auto_config['analysis_interval'] * 60):
+                print(f"🔍 Esecuzione analisi automatica AI...")
+                
+                if ai_enhanced_analyzer and ai_enhanced_analyzer.ai_enabled:
+                    try:
+                        # Esegui analisi completa con AI
+                        analysis_result = ai_enhanced_analyzer.analyze_with_ai_signals()
+                        ai_signals = analysis_result.get('ai_signals', {})
+                        
+                        print(f"📊 Analisi completata: {len(ai_signals)} segnali AI trovati")
+                        
+                        # Verifica se è tempo di inviare segnali
+                        if ((current_time - last_signal_time) >= (ai_auto_config['signal_interval'] * 60) and
+                            ai_auto_config['telegram_enabled'] and
+                            signals_sent_this_hour < ai_auto_config['max_signals_per_hour']):
+                            
+                            # Filtra segnali per confidenza minima e aggiungi simbolo
+                            high_confidence_signals = []
+                            for symbol, signal in ai_signals.items():
+                                if signal.get('confidence', 0) >= ai_auto_config['min_confidence']:
+                                    # Aggiungi il simbolo al segnale se manca
+                                    signal['symbol'] = symbol
+                                    high_confidence_signals.append(signal)
+                            
+                            if high_confidence_signals:
+                                # Ordina per confidenza e prendi i migliori
+                                high_confidence_signals.sort(key=lambda x: x.get('confidence', 0), reverse=True)
+                                signals_to_send = high_confidence_signals[:2]  # Max 2 segnali per volta
+                                
+                                for signal in signals_to_send:
+                                    if signals_sent_this_hour < ai_auto_config['max_signals_per_hour']:
+                                        send_ai_signal_telegram(signal)
+                                        signals_sent_this_hour += 1
+                                        time.sleep(2)  # Pausa tra messaggi
+                                
+                                last_signal_time = current_time
+                                print(f"✅ Inviati {len(signals_to_send)} segnali AI via Telegram")
+                        
+                        last_analysis_time = current_time
+                        
+                    except Exception as e:
+                        print(f"❌ Errore durante analisi automatica AI: {e}")
+                
+            # Pausa prima del prossimo ciclo
+            time.sleep(30)  # Controlla ogni 30 secondi
+            
+        except Exception as e:
+            print(f"❌ Errore nel loop automatico AI: {e}")
+            time.sleep(60)  # Pausa più lunga in caso di errore
+
+def send_ai_signal_telegram(signal):
+    """Invia segnale AI via Telegram"""
+    global ai_telegram_notifier
+    
+    try:
+        if ai_telegram_notifier:
+            # Estrai dati con le chiavi corrette dall'AI
+            symbol = signal.get('symbol', 'N/A')  # Questo campo potrebbe mancare
+            action = signal.get('action', 'N/A')
+            confidence = signal.get('confidence', 0)
+            entry = signal.get('entry_price', 0)  # Corretto: entry_price
+            stop_loss = signal.get('stop_loss', 0)
+            take_profit_1 = signal.get('take_profit_1', 0)
+            risk_reward = signal.get('risk_reward_ratio', 0)  # Corretto: risk_reward_ratio
+            position_size = signal.get('position_size_percent', 0)  # Corretto: position_size_percent
+            reasoning = signal.get('reasoning', '')
+            
+            # Debug per trovare il simbolo
+            print(f"🔍 Debug simbolo: {symbol}")
+            if symbol == 'N/A':
+                print(f"⚠️ Simbolo mancante nel segnale! Chiavi disponibili: {list(signal.keys())}")
+                # Il simbolo potrebbe essere nella struttura parent, proviamo a recuperarlo
+            
+            action_emoji = "🚀" if action == "BUY" else "📉"
+            confidence_emoji = "🔥" if confidence >= 80 else "⚡" if confidence >= 70 else "💡"
+            
+            message = f"""🤖 **SEGNALE AI AUTOMATICO** {action_emoji}
+
+**{symbol}** - {action}
+{confidence_emoji} Confidenza: {confidence}%
+
+💰 **Entry:** ${entry:.4f}
+🛡️ **Stop Loss:** ${stop_loss:.4f}
+🎯 **Take Profit 1:** ${take_profit_1:.4f}
+📊 **Risk/Reward:** {risk_reward:.1f}:1
+📈 **Position Size:** {position_size}%
+
+🧠 **Analisi AI:**
+{reasoning[:200]}{'...' if len(reasoning) > 200 else ''}
+
+⏰ {datetime.now().strftime('%H:%M:%S')}"""
+            
+            ai_telegram_notifier.send_message_sync(message)
+            print(f"📤 Segnale AI inviato per {symbol}")
+        else:
+            print("⚠️ Telegram notifier non configurato per AI")
+            
+    except Exception as e:
+        print(f"❌ Errore invio Telegram AI: {e}")
+
+@ai_trading_bp.route('/api/auto/status', methods=['GET'])
+def get_ai_auto_status():
+    """Stato del sistema automatico AI"""
+    global ai_auto_analysis_active, ai_auto_config
+    
+    return jsonify({
+        'success': True,
+        'active': ai_auto_analysis_active,
+        'config': ai_auto_config,
+        'timestamp': datetime.now().isoformat()
+    })
+
+@ai_trading_bp.route('/api/auto/config', methods=['POST'])
+def update_ai_auto_config():
+    """Aggiorna configurazione sistema automatico AI"""
+    global ai_auto_config
+    
+    try:
+        data = request.get_json()
+        
+        # Aggiorna configurazione
+        if 'analysis_interval' in data:
+            ai_auto_config['analysis_interval'] = max(5, int(data['analysis_interval']))
+        if 'signal_interval' in data:
+            ai_auto_config['signal_interval'] = max(10, int(data['signal_interval']))
+        if 'telegram_enabled' in data:
+            ai_auto_config['telegram_enabled'] = bool(data['telegram_enabled'])
+        if 'min_confidence' in data:
+            ai_auto_config['min_confidence'] = max(50, min(95, int(data['min_confidence'])))
+        if 'max_signals_per_hour' in data:
+            ai_auto_config['max_signals_per_hour'] = max(1, min(10, int(data['max_signals_per_hour'])))
+        
+        print(f"⚙️ Configurazione AI automatico aggiornata: {ai_auto_config}")
+        
+        return jsonify({
+            'success': True,
+            'config': ai_auto_config
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@ai_trading_bp.route('/api/auto/start', methods=['POST'])
+def start_ai_auto_analysis():
+    """Avvia sistema automatico AI"""
+    global ai_auto_analysis_thread, ai_auto_analysis_active, ai_enhanced_analyzer
+    
+    try:
+        if not ai_enhanced_analyzer or not ai_enhanced_analyzer.ai_enabled:
+            return jsonify({'success': False, 'error': 'AI Trading non disponibile'})
+        
+        if ai_auto_analysis_active:
+            return jsonify({'success': False, 'error': 'Sistema automatico AI già attivo'})
+        
+        ai_auto_analysis_active = True
+        ai_auto_analysis_thread = threading.Thread(target=ai_auto_analysis_loop, daemon=True)
+        ai_auto_analysis_thread.start()
+        
+        print("🚀 Sistema automatico AI avviato!")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Sistema automatico AI avviato',
+            'config': ai_auto_config
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@ai_trading_bp.route('/api/auto/stop', methods=['POST'])
+def stop_ai_auto_analysis():
+    """Ferma sistema automatico AI"""
+    global ai_auto_analysis_active
+    
+    try:
+        ai_auto_analysis_active = False
+        print("⏹️ Sistema automatico AI fermato!")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Sistema automatico AI fermato'
         })
         
     except Exception as e:

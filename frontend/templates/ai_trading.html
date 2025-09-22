@@ -135,6 +135,15 @@
     text-align: center;
 }
 
+.chat-message.system {
+    background: linear-gradient(135deg, var(--bs-success), rgba(25, 135, 84, 0.8));
+    margin: 0.5rem;
+    color: white;
+    border-left: 4px solid var(--bs-warning);
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+}
+
 .chat-timestamp {
     font-size: 0.75rem;
     opacity: 0.7;
@@ -280,6 +289,74 @@
                 </div>
             </div>
             
+            <!-- Sistema Automatico AI -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">🤖 Sistema Automatico</h6>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="ai-auto-enabled">
+                        <label class="form-check-label" for="ai-auto-enabled">
+                            <span id="ai-auto-status" class="badge bg-secondary">Disattivo</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form id="ai-auto-config-form">
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <label for="ai-analysis-interval" class="form-label">Intervallo Analisi (min)</label>
+                                    <input type="number" class="form-control form-control-sm" 
+                                           id="ai-analysis-interval" value="30" min="5" max="180">
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <label for="ai-signal-interval" class="form-label">Intervallo Segnali (min)</label>
+                                    <input type="number" class="form-control form-control-sm" 
+                                           id="ai-signal-interval" value="60" min="10" max="360">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <label for="ai-min-confidence" class="form-label">Confidenza Min (%)</label>
+                                    <input type="number" class="form-control form-control-sm" 
+                                           id="ai-min-confidence" value="70" min="50" max="95">
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <label for="ai-max-signals" class="form-label">Max Segnali/ora</label>
+                                    <input type="number" class="form-control form-control-sm" 
+                                           id="ai-max-signals" value="5" min="1" max="10">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="ai-telegram-enabled" checked>
+                                <label class="form-check-label" for="ai-telegram-enabled">
+                                    📢 Notifiche Telegram
+                                </label>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-success btn-sm" onclick="startAIAutoSystem()">
+                                <i class="fas fa-play"></i> Avvia Sistema
+                            </button>
+                            <button type="button" class="btn btn-danger btn-sm" onclick="stopAIAutoSystem()">
+                                <i class="fas fa-stop"></i> Ferma Sistema
+                            </button>
+                            <button type="submit" class="btn btn-outline-primary btn-sm">
+                                <i class="fas fa-save"></i> Salva Config
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
             <!-- Azioni AI -->
             <div class="card mt-3">
                 <div class="card-header">
@@ -342,6 +419,9 @@
                         <button class="chat-type-btn" data-type="opinion">💭 La mia opinione</button>
                         <button class="chat-type-btn" data-type="scenario">🔄 Scenario alternativo</button>
                         <button class="chat-type-btn" data-type="update">📈 Update mercato</button>
+                        <button class="btn btn-outline-success btn-sm ms-2" onclick="refreshAnalysisForChat()" title="Aggiorna analisi tecnica">
+                            <i class="fas fa-sync-alt"></i> Refresh Analisi
+                        </button>
                     </div>
                     
                     <div class="input-group">
@@ -960,6 +1040,15 @@ async function startAIChat(symbol, signalData) {
     currentChatSymbol = symbol;
     currentChatData = signalData;
     
+    // Ottieni i dati di mercato completi per il simbolo dalla cache
+    let symbolMarketData = {};
+    if (window.marketDataCache && window.marketDataCache[symbol]) {
+        symbolMarketData = window.marketDataCache[symbol];
+        console.log(`📊 Dati di mercato per ${symbol}:`, symbolMarketData);
+    } else {
+        console.warn(`⚠️ Nessun dato di mercato in cache per ${symbol}`);
+    }
+    
     try {
         const response = await fetch('/ai-trading/api/chat/start', {
             method: 'POST',
@@ -967,7 +1056,7 @@ async function startAIChat(symbol, signalData) {
             body: JSON.stringify({
                 symbol: symbol,
                 ai_signal: signalData,
-                market_data: {}
+                market_data: symbolMarketData
             })
         });
         
@@ -1146,6 +1235,54 @@ function handleChatEnter(event) {
     }
 }
 
+// Aggiorna analisi per la chat corrente
+async function refreshAnalysisForChat() {
+    if (!currentChatSymbol) {
+        showAlert('Nessun simbolo attivo nella chat', 'warning');
+        return;
+    }
+    
+    try {
+        showAlert(`🔄 Aggiornamento analisi per ${currentChatSymbol}...`, 'info');
+        
+        const response = await fetch('/ai-trading/api/chat/refresh-analysis', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                symbol: currentChatSymbol
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Aggiorna i dati correnti della chat
+            if (data.market_data) {
+                currentChatData = data.market_data;
+                // Aggiorna anche la cache se esiste
+                if (window.marketDataCache) {
+                    window.marketDataCache[currentChatSymbol] = data.market_data;
+                }
+            }
+            
+            // Aggiungi messaggio di analisi aggiornata alla chat
+            addMessageToChat({
+                type: 'system',
+                content: data.message,
+                timestamp: new Date().toLocaleTimeString()
+            });
+            
+            showAlert(`✅ Analisi aggiornata per ${currentChatSymbol}`, 'success');
+        } else {
+            showAlert(`Errore: ${data.error}`, 'danger');
+        }
+        
+    } catch (error) {
+        console.error('Errore refresh analisi:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
 // Pulisci chat
 async function clearAIChat() {
     try {
@@ -1192,5 +1329,183 @@ function createAlertsFromOpportunity(opportunity) {
         showAlert(`Alert creati per ${opportunity.symbol}: Entry, Stop Loss e Take Profit`, 'success');
     }, 1000);
 }
+
+// ===== SISTEMA AUTOMATICO AI =====
+
+// Variabili globali per sistema automatico
+let aiAutoActive = false;
+let aiAutoStatusInterval = null;
+
+// Inizializza sistema automatico
+function initializeAIAutoSystem() {
+    loadAIAutoConfig();
+    updateAIAutoStatus();
+    
+    // Aggiorna status ogni 10 secondi se attivo
+    aiAutoStatusInterval = setInterval(() => {
+        if (aiAutoActive) updateAIAutoStatus();
+    }, 10000);
+}
+
+// Carica configurazione automatica
+async function loadAIAutoConfig() {
+    try {
+        const response = await fetch('/ai-trading/api/auto/status');
+        const data = await response.json();
+        
+        if (data.success) {
+            const config = data.config;
+            aiAutoActive = data.active;
+            
+            // Aggiorna form
+            document.getElementById('ai-analysis-interval').value = config.analysis_interval;
+            document.getElementById('ai-signal-interval').value = config.signal_interval;
+            document.getElementById('ai-min-confidence').value = config.min_confidence;
+            document.getElementById('ai-max-signals').value = config.max_signals_per_hour;
+            document.getElementById('ai-telegram-enabled').checked = config.telegram_enabled;
+            document.getElementById('ai-auto-enabled').checked = aiAutoActive;
+            
+            updateAIAutoStatusBadge();
+        }
+    } catch (error) {
+        console.error('Errore caricamento config automatica:', error);
+    }
+}
+
+// Aggiorna status del sistema automatico
+async function updateAIAutoStatus() {
+    try {
+        const response = await fetch('/ai-trading/api/auto/status');
+        const data = await response.json();
+        
+        if (data.success) {
+            aiAutoActive = data.active;
+            document.getElementById('ai-auto-enabled').checked = aiAutoActive;
+            updateAIAutoStatusBadge();
+        }
+    } catch (error) {
+        console.error('Errore aggiornamento status automatico:', error);
+    }
+}
+
+// Aggiorna badge status
+function updateAIAutoStatusBadge() {
+    const badge = document.getElementById('ai-auto-status');
+    if (aiAutoActive) {
+        badge.textContent = 'Attivo';
+        badge.className = 'badge bg-success';
+    } else {
+        badge.textContent = 'Disattivo';
+        badge.className = 'badge bg-secondary';
+    }
+}
+
+// Avvia sistema automatico
+async function startAIAutoSystem() {
+    if (!aiEnabled) {
+        showAlert('Configura prima l\'AI', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/ai-trading/api/auto/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            aiAutoActive = true;
+            updateAIAutoStatusBadge();
+            showAlert('🚀 Sistema automatico AI avviato!', 'success');
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore avvio sistema automatico:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Ferma sistema automatico
+async function stopAIAutoSystem() {
+    try {
+        const response = await fetch('/ai-trading/api/auto/stop', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            aiAutoActive = false;
+            updateAIAutoStatusBadge();
+            showAlert('⏹️ Sistema automatico AI fermato', 'info');
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore stop sistema automatico:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Salva configurazione automatica
+async function saveAIAutoConfig() {
+    try {
+        const config = {
+            analysis_interval: parseInt(document.getElementById('ai-analysis-interval').value),
+            signal_interval: parseInt(document.getElementById('ai-signal-interval').value),
+            min_confidence: parseInt(document.getElementById('ai-min-confidence').value),
+            max_signals_per_hour: parseInt(document.getElementById('ai-max-signals').value),
+            telegram_enabled: document.getElementById('ai-telegram-enabled').checked
+        };
+        
+        const response = await fetch('/ai-trading/api/auto/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(config)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('⚙️ Configurazione salvata', 'success');
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore salvataggio config:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Event listeners per sistema automatico
+document.addEventListener('DOMContentLoaded', function() {
+    // Inizializza sistema automatico
+    initializeAIAutoSystem();
+    
+    // Form configurazione automatica
+    const aiAutoForm = document.getElementById('ai-auto-config-form');
+    if (aiAutoForm) {
+        aiAutoForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveAIAutoConfig();
+        });
+    }
+    
+    // Toggle sistema automatico
+    const autoToggle = document.getElementById('ai-auto-enabled');
+    if (autoToggle) {
+        autoToggle.addEventListener('change', function() {
+            if (this.checked && !aiAutoActive) {
+                startAIAutoSystem();
+            } else if (!this.checked && aiAutoActive) {
+                stopAIAutoSystem();
+            }
+        });
+    }
+});
 </script>
 {% endblock %}
