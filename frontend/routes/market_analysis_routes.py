@@ -553,5 +553,9 @@ def init_market_analysis_routes(app, telegram_notifier=None):
     if telegram_notifier:
         market_analyzer.set_telegram_notifier(telegram_notifier)
     
+    # Salva market_analyzer nella configurazione dell'app
+    app.config['MARKET_ANALYZER'] = market_analyzer
+    
     print("🤖 Route Analisi Mercato inizializzate")
+    print("💾 Market Analyzer salvato nella configurazione app")
     return market_analysis_bp

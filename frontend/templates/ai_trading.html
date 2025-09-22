@@ -1,0 +1,806 @@
+{% extends "base.html" %}
+
+{% block title %}AI Trading Assistant - Trading Bot{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Stili per AI Trading Dashboard */
+.ai-signal-card {
+    background: linear-gradient(135deg, var(--bs-dark) 0%, rgba(13, 110, 253, 0.1) 100%);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.ai-signal-card:hover {
+    border-color: var(--bs-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+}
+
+.ai-signal-card.buy-signal {
+    border-left: 4px solid #28a745;
+    background: linear-gradient(135deg, var(--bs-dark) 0%, rgba(40, 167, 69, 0.1) 100%);
+}
+
+.ai-signal-card.sell-signal {
+    border-left: 4px solid #dc3545;
+    background: linear-gradient(135deg, var(--bs-dark) 0%, rgba(220, 53, 69, 0.1) 100%);
+}
+
+.confidence-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 0.9rem;
+    font-weight: bold;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+}
+
+.confidence-high { background: rgba(40, 167, 69, 0.2); color: #28a745; }
+.confidence-medium { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+.confidence-low { background: rgba(220, 53, 69, 0.2); color: #dc3545; }
+
+.price-level {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 0.25rem;
+    padding: 0.5rem;
+    margin: 0.25rem 0;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+}
+
+.entry-price { border-left: 3px solid #17a2b8; }
+.stop-loss { border-left: 3px solid #dc3545; }
+.take-profit { border-left: 3px solid #28a745; }
+
+.ai-status-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+    animation: pulse 2s infinite;
+}
+
+.ai-active { background-color: #28a745; }
+.ai-inactive { background-color: #6c757d; }
+
+.risk-reward-meter {
+    height: 8px;
+    background: linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #28a745 100%);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+}
+
+.risk-reward-indicator {
+    position: absolute;
+    top: -2px;
+    width: 4px;
+    height: 12px;
+    background: white;
+    border-radius: 2px;
+    box-shadow: 0 0 4px rgba(0,0,0,0.5);
+}
+
+.ai-reasoning {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-top: 1rem;
+    font-style: italic;
+    border-left: 3px solid var(--bs-info);
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.metric-card-ai {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    text-align: center;
+    margin-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.metric-card-ai::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    transition: left 0.5s;
+}
+
+.metric-card-ai:hover::before {
+    left: 100%;
+}
+
+.symbol-analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Sidebar AI Status -->
+    <div class="col-lg-3 col-md-4">
+        <div class="sidebar p-3">
+            <h5 class="mb-3">🤖 AI Trading Status</h5>
+            
+            <!-- Status AI -->
+            <div class="metric-card-ai">
+                <div class="d-flex align-items-center justify-content-center mb-2">
+                    <span id="ai-status-indicator" class="ai-status-indicator ai-inactive"></span>
+                    <span id="ai-status-text">Disconnesso</span>
+                </div>
+                <small class="text-muted" id="ai-provider-status">Provider: N/A</small>
+            </div>
+            
+            <!-- Metriche AI -->
+            <div class="metric-card-ai">
+                <div class="metric-value text-info" id="active-signals">0</div>
+                <div class="metric-label">Segnali Attivi</div>
+            </div>
+            
+            <div class="metric-card-ai">
+                <div class="metric-value text-success" id="high-confidence">0</div>
+                <div class="metric-label">Alta Confidenza</div>
+            </div>
+            
+            <div class="metric-card-ai">
+                <div class="metric-value text-warning" id="avg-risk-reward">0.0</div>
+                <div class="metric-label">R/R Medio</div>
+            </div>
+            
+            <!-- Configurazione AI -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">⚙️ Configurazione AI</h6>
+                </div>
+                <div class="card-body">
+                    <form id="ai-config-form">
+                        <div class="mb-3">
+                            <label for="ai-provider" class="form-label">Provider AI</label>
+                            <select class="form-select" id="ai-provider">
+                                <option value="gemini" selected>Google Gemini (Gratuito)</option>
+                                <option value="openai">OpenAI GPT-4 (A pagamento)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="gemini-api-key" class="form-label">Gemini API Key</label>
+                            <input type="password" class="form-control" id="gemini-api-key" 
+                                   placeholder="AIza..." required>
+                            <div class="form-text">Ottieni gratis da <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a></div>
+                        </div>
+                        <div class="mb-3" id="openai-section" style="display:none;">
+                            <label for="openai-api-key" class="form-label">OpenAI API Key</label>
+                            <input type="password" class="form-control" id="openai-api-key" 
+                                   placeholder="sk-..." >
+                            <div class="form-text">Per segnali AI con GPT-4</div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-100">
+                            <i class="fas fa-save"></i> Salva & Attiva AI
+                        </button>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Azioni AI -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">🚀 Azioni AI</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-sm" onclick="testAIConnection()">
+                            <i class="fas fa-wifi"></i> Test Connessione
+                        </button>
+                        <button class="btn btn-success btn-sm" onclick="scanAllOpportunities()">
+                            <i class="fas fa-search"></i> Scan Mercato
+                        </button>
+                        <button class="btn btn-info btn-sm" onclick="getTopOpportunities()">
+                            <i class="fas fa-star"></i> Top Opportunità
+                        </button>
+                        <button class="btn btn-warning btn-sm" onclick="analyzeCustomSymbol()">
+                            <i class="fas fa-crosshairs"></i> Analizza Simbolo
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Area principale -->
+    <div class="col-lg-9 col-md-8">
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>🤖 AI Trading Assistant</h2>
+            <button class="btn btn-outline-primary" onclick="refreshAIStatus()">
+                <i class="fas fa-sync"></i> Refresh
+            </button>
+        </div>
+        
+        <!-- Top Opportunities -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">⭐ Top Opportunità AI</h5>
+                <span class="badge bg-primary" id="opportunities-count">0</span>
+            </div>
+            <div class="card-body">
+                <div id="top-opportunities-container">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-robot fa-3x mb-3"></i>
+                        <p>Configura AI per vedere opportunità di trading</p>
+                        <p class="small">L'AI analizzerà il mercato e suggerirà operazioni con TP/SL</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Analisi Simbolo Specifico -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">🎯 Analisi Simbolo Specifico</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" class="form-control" id="custom-symbol-input" 
+                               placeholder="Es: BTCUSDT" onkeypress="handleSymbolEnter(event)">
+                    </div>
+                    <div class="col-md-6">
+                        <button class="btn btn-primary" onclick="analyzeCustomSymbol()">
+                            <i class="fas fa-chart-line"></i> Analizza con AI
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="custom-analysis-result"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal per dettagli segnale -->
+<div class="modal fade" id="signalDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title">📊 Dettagli Segnale AI</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="signal-details-content">
+                <!-- Contenuto dinamico -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                <button type="button" class="btn btn-success" onclick="createAlertsFromSignal()">
+                    <i class="fas fa-bell"></i> Crea Alert Automatici
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let aiEnabled = false;
+let currentSignalData = null;
+
+// Inizializzazione
+document.addEventListener('DOMContentLoaded', function() {
+    refreshAIStatus();
+    setupEventListeners();
+});
+
+function setupEventListeners() {
+    // Form configurazione AI
+    document.getElementById('ai-config-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        configureAI();
+    });
+    
+    // Cambio provider AI
+    document.getElementById('ai-provider').addEventListener('change', function(e) {
+        const provider = e.target.value;
+        const openaiSection = document.getElementById('openai-section');
+        const geminiKey = document.getElementById('gemini-api-key');
+        
+        if (provider === 'openai') {
+            openaiSection.style.display = 'block';
+            geminiKey.required = false;
+            document.getElementById('openai-api-key').required = true;
+        } else {
+            openaiSection.style.display = 'none';
+            geminiKey.required = true;
+            document.getElementById('openai-api-key').required = false;
+        }
+    });
+}
+
+// Status AI
+async function refreshAIStatus() {
+    try {
+        const response = await fetch('/ai-trading/api/status');
+        const data = await response.json();
+        
+        if (data.success) {
+            aiEnabled = data.ai_enabled;
+            updateAIStatusDisplay(data);
+            
+            if (aiEnabled) {
+                getTopOpportunities();
+            }
+        }
+    } catch (error) {
+        console.error('Errore refresh status AI:', error);
+    }
+}
+
+function updateAIStatusDisplay(data) {
+    const indicator = document.getElementById('ai-status-indicator');
+    const statusText = document.getElementById('ai-status-text');
+    const providerStatus = document.getElementById('ai-provider-status');
+    
+    if (data.ai_enabled) {
+        indicator.className = 'ai-status-indicator ai-active';
+        statusText.textContent = 'Attivo';
+        providerStatus.textContent = `Provider: ${data.ai_provider || 'N/A'}`;
+    } else {
+        indicator.className = 'ai-status-indicator ai-inactive';
+        statusText.textContent = 'Disconnesso';
+        providerStatus.textContent = 'Provider: N/A';
+    }
+}
+
+// Configurazione AI
+async function configureAI() {
+    const provider = document.getElementById('ai-provider').value;
+    const geminiKey = document.getElementById('gemini-api-key').value;
+    const openaiKey = document.getElementById('openai-api-key').value;
+    
+    let apiKey, providerName;
+    
+    if (provider === 'gemini') {
+        if (!geminiKey) {
+            showAlert('Inserisci API key Gemini', 'warning');
+            return;
+        }
+        apiKey = geminiKey;
+        providerName = 'gemini';
+    } else {
+        if (!openaiKey) {
+            showAlert('Inserisci API key OpenAI', 'warning');
+            return;
+        }
+        apiKey = openaiKey;
+        providerName = 'openai';
+    }
+    
+    try {
+        const requestBody = {
+            provider: providerName
+        };
+        
+        if (providerName === 'gemini') {
+            requestBody.gemini_api_key = apiKey;
+        } else {
+            requestBody.openai_api_key = apiKey;
+        }
+        
+        const response = await fetch('/ai-trading/api/configure', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(requestBody)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('AI Trading configurato con successo!', 'success');
+            document.getElementById('gemini-api-key').value = '';
+            document.getElementById('openai-api-key').value = '';
+            refreshAIStatus();
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore configurazione AI:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Test Connessione AI
+async function testAIConnection() {
+    if (!aiEnabled) {
+        showAlert('AI non configurato', 'warning');
+        return;
+    }
+    
+    try {
+        showAlert('🧪 Testando connessione AI...', 'info');
+        
+        const response = await fetch('/ai-trading/api/test-connection', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.connected) {
+            showAlert('✅ Connessione AI funzionante!', 'success');
+        } else {
+            showAlert(`❌ Test fallito: ${data.error || 'Connessione non riuscita'}`, 'danger');
+        }
+        
+    } catch (error) {
+        console.error('Errore test connessione:', error);
+        showAlert('❌ Errore durante il test', 'danger');
+    }
+}
+
+// Top Opportunità
+async function getTopOpportunities() {
+    if (!aiEnabled) {
+        showAlert('AI non configurato', 'warning');
+        return;
+    }
+    
+    try {
+        showLoading('top-opportunities-container');
+        
+        const response = await fetch('/ai-trading/api/top-opportunities?limit=5');
+        const data = await response.json();
+        
+        if (data.success) {
+            displayTopOpportunities(data.opportunities);
+            updateMetrics(data.opportunities);
+        } else {
+            showError('top-opportunities-container', data.error);
+        }
+    } catch (error) {
+        console.error('Errore top opportunities:', error);
+        showError('top-opportunities-container', 'Errore di connessione');
+    }
+}
+
+function displayTopOpportunities(opportunities) {
+    const container = document.getElementById('top-opportunities-container');
+    document.getElementById('opportunities-count').textContent = opportunities.length;
+    
+    if (opportunities.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted">
+                <i class="fas fa-search fa-2x mb-3"></i>
+                <p>Nessuna opportunità AI trovata al momento</p>
+                <p class="small">L'AI non ha identificato setup interessanti con alta confidenza</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = opportunities.map(opp => {
+        const confidenceClass = opp.confidence >= 80 ? 'confidence-high' : 
+                               opp.confidence >= 60 ? 'confidence-medium' : 'confidence-low';
+        
+        const actionClass = opp.action === 'BUY' ? 'buy-signal' : 'sell-signal';
+        const actionEmoji = opp.action === 'BUY' ? '🚀' : '📉';
+        
+        return `
+            <div class="ai-signal-card ${actionClass}" onclick="showSignalDetails('${opp.symbol}', ${JSON.stringify(opp).replace(/"/g, '&quot;')})">
+                <div class="confidence-badge ${confidenceClass}">
+                    ${opp.confidence}%
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-8">
+                        <h5 class="mb-2">
+                            ${actionEmoji} ${opp.symbol} - ${opp.action}
+                        </h5>
+                        
+                        <div class="price-level entry-price">
+                            <small>Entry:</small> $${opp.entry.toFixed(4)}
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="price-level stop-loss">
+                                    <small>Stop Loss:</small> $${opp.stop_loss.toFixed(4)}
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="price-level take-profit">
+                                    <small>TP1:</small> $${opp.take_profit_1.toFixed(4)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4 text-end">
+                        <div class="mb-2">
+                            <small class="text-muted">Risk/Reward</small>
+                            <div class="h4 text-success">${opp.risk_reward.toFixed(1)}:1</div>
+                        </div>
+                        
+                        <div class="mb-2">
+                            <small class="text-muted">Position Size</small>
+                            <div class="text-warning">${opp.position_size}%</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="ai-reasoning">
+                    <i class="fas fa-brain"></i> 
+                    ${opp.reasoning.substring(0, 120)}${opp.reasoning.length > 120 ? '...' : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function updateMetrics(opportunities) {
+    document.getElementById('active-signals').textContent = opportunities.length;
+    
+    const highConf = opportunities.filter(o => o.confidence >= 80).length;
+    document.getElementById('high-confidence').textContent = highConf;
+    
+    const avgRR = opportunities.length > 0 ? 
+        (opportunities.reduce((sum, o) => sum + o.risk_reward, 0) / opportunities.length).toFixed(1) : 
+        '0.0';
+    document.getElementById('avg-risk-reward').textContent = avgRR;
+}
+
+// Analisi simbolo specifico
+async function analyzeCustomSymbol() {
+    const symbol = document.getElementById('custom-symbol-input').value.trim().toUpperCase();
+    
+    if (!symbol) {
+        showAlert('Inserisci un simbolo', 'warning');
+        return;
+    }
+    
+    if (!aiEnabled) {
+        showAlert('AI non configurato', 'warning');
+        return;
+    }
+    
+    try {
+        showLoading('custom-analysis-result');
+        
+        const response = await fetch('/ai-trading/api/analyze-symbol', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({symbol: symbol})
+        });
+        
+        console.log('Response status:', response.status);
+        const data = await response.json();
+        console.log('Response data:', data);
+        
+        if (data.success) {
+            displayCustomAnalysis(data);
+        } else {
+            showError('custom-analysis-result', data.error);
+        }
+    } catch (error) {
+        console.error('Errore analisi simbolo:', error);
+        showError('custom-analysis-result', `Errore di connessione: ${error.message}`);
+    }
+}
+
+function displayCustomAnalysis(data) {
+    const container = document.getElementById('custom-analysis-result');
+    const signal = data.ai_signal;
+    const marketData = data.market_data;
+    
+    const actionClass = signal.action === 'BUY' ? 'buy-signal' : 
+                       signal.action === 'SELL' ? 'sell-signal' : '';
+    const actionEmoji = signal.action === 'BUY' ? '🚀' : 
+                       signal.action === 'SELL' ? '📉' : '⏸️';
+    
+    container.innerHTML = `
+        <div class="ai-signal-card ${actionClass}">
+            <h5>${actionEmoji} ${data.symbol} - AI Analysis</h5>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <strong>Azione AI:</strong> ${signal.action}<br>
+                    <strong>Confidenza:</strong> ${signal.confidence}%<br>
+                    <strong>Risk/Reward:</strong> ${signal.risk_reward_ratio || 'N/A'}:1<br>
+                    <strong>Risk Level:</strong> ${signal.risk_level || 'N/A'}
+                </div>
+                <div class="col-md-6">
+                    <strong>Entry Suggerito:</strong> $${signal.entry_price ? signal.entry_price.toFixed(6) : 'N/A'}<br>
+                    <strong>Stop Loss:</strong> $${signal.stop_loss ? signal.stop_loss.toFixed(6) : 'N/A'}<br>
+                    <strong>Position Size:</strong> ${signal.position_size_percent || 'N/A'}%<br>
+                    <strong>Timeframe Focus:</strong> ${signal.timeframe_focus || 'N/A'}
+                </div>
+            </div>
+            
+            ${signal.take_profit_1 ? `
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="price-level take-profit">
+                            Take Profit 1: $${signal.take_profit_1.toFixed(6)}
+                        </div>
+                    </div>
+                    ${signal.take_profit_2 ? `
+                        <div class="col-md-6">
+                            <div class="price-level take-profit">
+                                Take Profit 2: $${signal.take_profit_2.toFixed(6)}
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            ` : ''}
+            
+            <!-- Dati Tecnici Dettagliati -->
+            <div class="mt-3 mb-3">
+                <h6>📈 Dati Tecnici Multi-Timeframe</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-dark">
+                        <thead>
+                            <tr>
+                                <th>Timeframe</th>
+                                <th>RSI</th>
+                                <th>Trend</th>
+                                <th>EMA(20)</th>
+                                <th>EMA(50)</th>
+                                <th>Prezzo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${Object.entries(marketData).map(([tf, tfData]) => `
+                                <tr>
+                                    <td><strong>${tf}</strong></td>
+                                    <td>${tfData.rsi ? tfData.rsi.toFixed(1) : 'N/A'}</td>
+                                    <td><span class="badge bg-${tfData.trend?.trend === 'BULLISH' ? 'success' : 'danger'}">${tfData.trend?.trend || 'N/A'}</span></td>
+                                    <td>$${tfData.ema_20 ? tfData.ema_20.toFixed(6) : 'N/A'}</td>
+                                    <td>$${tfData.ema_50 ? tfData.ema_50.toFixed(6) : 'N/A'}</td>
+                                    <td>$${tfData.current_price ? tfData.current_price.toFixed(6) : 'N/A'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="ai-reasoning">
+                <strong>🤖 Reasoning AI:</strong><br>
+                ${signal.reasoning || 'Nessun ragionamento fornito'}
+            </div>
+            
+            ${signal.key_levels && signal.key_levels.length > 0 ? `
+                <div class="mt-3">
+                    <strong>🎯 Livelli Chiave:</strong><br>
+                    ${signal.key_levels.map(level => `<span class="badge bg-info me-1">$${level.toFixed(6)}</span>`).join('')}
+                </div>
+            ` : ''}
+            
+            <div class="mt-3">
+                <button class="btn btn-success btn-sm" onclick="createAlertsFromCustomSignal('${data.symbol}', ${JSON.stringify(signal).replace(/"/g, '&quot;')})">
+                    <i class="fas fa-bell"></i> Crea Alert Automatici
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// Gestione modal dettagli
+function showSignalDetails(symbol, signal) {
+    currentSignalData = {symbol, signal};
+    
+    const content = document.getElementById('signal-details-content');
+    content.innerHTML = `
+        <h6>📊 ${symbol} - Analisi Completa</h6>
+        <div class="row">
+            <div class="col-md-6">
+                <strong>Entry:</strong> $${signal.entry.toFixed(4)}<br>
+                <strong>Stop Loss:</strong> $${signal.stop_loss.toFixed(4)}<br>
+                <strong>Take Profit 1:</strong> $${signal.take_profit_1.toFixed(4)}<br>
+                <strong>Risk/Reward:</strong> ${signal.risk_reward.toFixed(1)}:1
+            </div>
+            <div class="col-md-6">
+                <strong>Confidenza:</strong> ${signal.confidence}%<br>
+                <strong>Position Size:</strong> ${signal.position_size}%<br>
+                <strong>Azione:</strong> ${signal.action}
+            </div>
+        </div>
+        <hr>
+        <div class="ai-reasoning">
+            <strong>Reasoning Completo:</strong><br>
+            ${signal.reasoning}
+        </div>
+    `;
+    
+    new bootstrap.Modal(document.getElementById('signalDetailsModal')).show();
+}
+
+// Utility functions
+function handleSymbolEnter(event) {
+    if (event.key === 'Enter') {
+        analyzeCustomSymbol();
+    }
+}
+
+function showLoading(containerId) {
+    document.getElementById(containerId).innerHTML = `
+        <div class="text-center">
+            <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+            <p>🤖 AI sta analizzando...</p>
+        </div>
+    `;
+}
+
+function showError(containerId, message) {
+    document.getElementById(containerId).innerHTML = `
+        <div class="text-center text-danger">
+            <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+            <p>Errore: ${message}</p>
+        </div>
+    `;
+}
+
+async function scanAllOpportunities() {
+    if (!aiEnabled) {
+        showAlert('AI non configurato', 'warning');
+        return;
+    }
+    
+    showAlert('🤖 Scansione mercato avviata...', 'info');
+    
+    try {
+        const response = await fetch('/ai-trading/api/analyze-all', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({})
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Analisi completata! ${data.ai_signals_count} segnali generati`, 'success');
+            getTopOpportunities(); // Refresh
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Errore scan mercato:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+function createAlertsFromCustomSignal(symbol, signal) {
+    showAlert(`🔔 Creazione alert automatici per ${symbol}...`, 'info');
+    // Implementare integrazione con sistema alert esistente
+}
+
+function createAlertsFromSignal() {
+    if (!currentSignalData) return;
+    
+    const {symbol, signal} = currentSignalData;
+    showAlert(`🔔 Creazione alert automatici per ${symbol}...`, 'info');
+    // Implementare integrazione con sistema alert esistente
+}
+</script>
+{% endblock %}
