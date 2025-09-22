@@ -1,10 +1,4 @@
-# Requireme# 🤖 Telegram Bot (essenziale)
-python-telegram-bot>=20.0
-
-# 📈 Grafici e visualizzazione (per evitare warning)
-matplotlib>=3.7.0
-
-# 🌐 Web Scraping (per compatibilità)minimi per il Trading Bot
+# Requirements minimi per il Trading Bot
 # Per installazione rapida: pip install -r requirements-minimal.txt
 
 # 🌐 Web Framework (essenziale)
@@ -18,16 +12,23 @@ requests>=2.31.0
 # 🤖 Telegram Bot (essenziale)
 python-telegram-bot>=20.0
 
-# � Web Scraping (per compatibilità)
+# 🤖 AI Trading Assistant APIs (essenziale per AI)
+openai>=1.0.0
+google-generativeai>=0.3.0
+
+# 🔍 Web Scraping (per compatibilità)
 selenium>=4.15.0
 beautifulsoup4>=4.12.0
 
-# �🔧 Configurazione (essenziale)
+# 🔧 Configurazione (essenziale)
 python-dotenv>=1.0.0
 
 # 📈 Analisi Tecnica Base (essenziale)
 pandas>=2.1.0
 numpy>=1.26.0
+
+# 📈 Grafici e visualizzazione (per evitare warning)
+matplotlib>=3.7.0
 
 # 🔐 Sicurezza
 cryptography>=41.0.0

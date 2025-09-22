@@ -12,6 +12,10 @@ requests>=2.31.0
 # 🤖 Telegram Bot (versione compatibile Python 3.12)
 python-telegram-bot>=20.0
 
+# 🤖 AI Trading Assistant APIs
+openai>=1.0.0
+google-generativeai>=0.3.0
+
 # 🔍 Web Scraping (versioni compatibili)
 selenium>=4.15.0
 beautifulsoup4>=4.12.0
