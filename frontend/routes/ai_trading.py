@@ -13,14 +13,18 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 try:
     from ai_enhanced_analysis import AIEnhancedMarketAnalysis
     from ai_trading_assistant import AITradingAssistant
+    from ai_trading_chat import AITradingChat, GeminiTradingAssistantWithChat
 except ImportError:
     AIEnhancedMarketAnalysis = None
     AITradingAssistant = None
+    AITradingChat = None
+    GeminiTradingAssistantWithChat = None
 
 ai_trading_bp = Blueprint('ai_trading', __name__, url_prefix='/ai-trading')
 
-# Variabile globale per l'AI assistant
+# Variabile globale per l'AI assistant e chat
 ai_enhanced_analyzer = None
+ai_chat_system = None
 
 def initialize_ai_trading(market_analyzer, api_key=None, provider='gemini'):
     """Inizializza AI Trading Assistant con Market Analyzer esistente"""
@@ -295,14 +299,185 @@ def configure_ai_trading():
         success = initialize_ai_trading(market_analyzer, api_key, provider)
         
         if success:
+            # Inizializza anche il sistema di chat
+            global ai_chat_system
+            if ai_enhanced_analyzer and ai_enhanced_analyzer.ai_assistant and AITradingChat:
+                ai_chat_system = AITradingChat(
+                    ai_enhanced_analyzer.ai_assistant, 
+                    market_analyzer
+                )
+                print("💬 Sistema di chat AI inizializzato!")
+            
             return jsonify({
                 'success': True,
                 'message': f'AI Trading configurato con successo usando {provider.upper()}',
                 'ai_enabled': True,
+                'chat_enabled': ai_chat_system is not None,
                 'provider': provider
             })
         else:
             return jsonify({'success': False, 'error': 'Errore configurazione AI'})
     
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@ai_trading_bp.route('/api/chat/start', methods=['POST'])
+def start_chat_discussion():
+    """Inizia una chat su un segnale di trading specifico"""
+    global ai_chat_system, ai_enhanced_analyzer
+    
+    if not ai_chat_system:
+        return jsonify({'success': False, 'error': 'Sistema di chat non disponibile'})
+    
+    try:
+        data = request.get_json()
+        symbol = data.get('symbol')
+        ai_signal = data.get('ai_signal', {})
+        
+        if not symbol:
+            return jsonify({'success': False, 'error': 'Simbolo richiesto'})
+        
+        # Ottieni dati di mercato aggiornati per il simbolo
+        market_data = {}
+        if ai_enhanced_analyzer and ai_enhanced_analyzer.market_analyzer:
+            try:
+                # Esegui analisi per ottenere dati tecnici aggiornati
+                analysis = ai_enhanced_analyzer.market_analyzer.analyze_market([symbol])
+                
+                if 'analyses' in analysis and symbol in analysis['analyses']:
+                    symbol_data = analysis['analyses'][symbol]
+                    
+                    # Estrai dati da tutti i timeframes
+                    for tf, tf_data in symbol_data.items():
+                        if isinstance(tf_data, dict):
+                            market_data.update({
+                                f'current_price': tf_data.get('current_price', ai_signal.get('entry_price', 0)),
+                                f'rsi': tf_data.get('rsi', 'N/A'),
+                                f'ema_20': tf_data.get('ema_20', 'N/A'),
+                                f'ema_50': tf_data.get('ema_50', 'N/A'),
+                                f'trend_{tf}m': tf_data.get('trend', {}).get('trend', 'N/A'),
+                                f'volume_24h': tf_data.get('volume_24h', 'N/A')
+                            })
+                
+                print(f"📊 Dati mercato ottenuti per {symbol}: {list(market_data.keys())}")
+                
+            except Exception as e:
+                print(f"⚠️ Errore ottenimento dati mercato: {e}")
+                # Usa dati dal segnale AI come fallback
+                market_data = {
+                    'current_price': ai_signal.get('entry_price', 0),
+                    'rsi': 'N/A',
+                    'ema_20': 'N/A', 
+                    'ema_50': 'N/A'
+                }
+        
+        welcome_message = ai_chat_system.start_trading_discussion(symbol, ai_signal, market_data)
+        
+        return jsonify({
+            'success': True,
+            'welcome_message': welcome_message,
+            'chat_id': len(ai_chat_system.chat_history),
+            'symbol': symbol,
+            'market_data_loaded': len(market_data) > 0
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@ai_trading_bp.route('/api/chat/message', methods=['POST'])
+def send_chat_message():
+    """Invia un messaggio nella chat AI"""
+    global ai_chat_system
+    
+    if not ai_chat_system:
+        return jsonify({'success': False, 'error': 'Sistema di chat non disponibile'})
+    
+    try:
+        data = request.get_json()
+        message = data.get('message', '').strip()
+        message_type = data.get('type', 'question')  # question, opinion, scenario, update
+        
+        if not message:
+            return jsonify({'success': False, 'error': 'Messaggio richiesto'})
+        
+        response = ai_chat_system.send_message(message, message_type)
+        
+        # Aggiungi la cronologia recente
+        recent_history = ai_chat_system.get_chat_history()[-10:]  # Ultimi 10 messaggi
+        
+        return jsonify({
+            'success': True,
+            'ai_response': response.get('response', ''),
+            'conversation_id': response.get('conversation_id', 0),
+            'chat_history': recent_history,
+            'context_symbol': response.get('context', '')
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@ai_trading_bp.route('/api/chat/history', methods=['GET'])
+def get_chat_history():
+    """Ottieni cronologia completa della chat"""
+    global ai_chat_system
+    
+    if not ai_chat_system:
+        return jsonify({'success': False, 'error': 'Sistema di chat non disponibile'})
+    
+    try:
+        history = ai_chat_system.get_chat_history()
+        context = ai_chat_system.current_trading_context
+        
+        return jsonify({
+            'success': True,
+            'chat_history': history,
+            'trading_context': context,
+            'total_messages': len(history)
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@ai_trading_bp.route('/api/chat/clear', methods=['POST'])
+def clear_chat():
+    """Pulisce la chat corrente"""
+    global ai_chat_system
+    
+    if not ai_chat_system:
+        return jsonify({'success': False, 'error': 'Sistema di chat non disponibile'})
+    
+    try:
+        ai_chat_system.clear_chat()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Chat pulita con successo'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@ai_trading_bp.route('/api/chat/save-note', methods=['POST'])
+def save_trading_note():
+    """Salva una nota personale sulla discussione"""
+    global ai_chat_system
+    
+    if not ai_chat_system:
+        return jsonify({'success': False, 'error': 'Sistema di chat non disponibile'})
+    
+    try:
+        data = request.get_json()
+        note = data.get('note', '').strip()
+        
+        if not note:
+            return jsonify({'success': False, 'error': 'Nota richiesta'})
+        
+        ai_chat_system.save_trading_notes(note)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Nota salvata con successo'
+        })
+        
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})

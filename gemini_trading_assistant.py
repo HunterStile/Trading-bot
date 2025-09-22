@@ -206,6 +206,62 @@ FORNISCI RISPOSTA IN QUESTO FORMATO JSON:
                 'reasoning': f'Errore parsing AI: {str(e)}',
                 'error': True
             }
+    
+    def chat_about_trading(self, conversation_prompt: str) -> Dict:
+        """Metodo specifico per conversazioni di trading"""
+        try:
+            print("💬 Gemini: Elaborando messaggio chat...")
+            
+            # Configurazione per conversazione
+            generation_config = genai.types.GenerationConfig(
+                temperature=0.7,  # Un po' più creativa per conversazioni
+                max_output_tokens=1000,
+                candidate_count=1,
+            )
+            
+            # Prompt per conversazione naturale
+            chat_prompt = f"""Sei un esperto trader professionista che sta discutendo strategie di trading con un cliente.
+
+{conversation_prompt}
+
+ISTRUZIONI PER LA RISPOSTA:
+- Rispondi in modo conversazionale e professionale
+- Usa i dati tecnici forniti nel contesto
+- Sii specifico sui livelli di prezzo e indicatori
+- Considera diversi scenari di mercato
+- Fornisci consigli pratici e actionable
+- Mantieni un tono amichevole ma professionale
+- Se l'utente condivide la sua opinione, analizzala rispetto ai dati
+- Non dire mai che mancano dati - usa quelli forniti nel contesto
+
+Rispondi in italiano in modo dettagliato e utile:"""
+            
+            response = self.model.generate_content(
+                chat_prompt,
+                generation_config=generation_config
+            )
+            
+            if response.text:
+                return {
+                    'success': True,
+                    'response': response.text.strip(),
+                    'type': 'chat_response'
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': 'Risposta vuota da Gemini',
+                    'response': 'Mi dispiace, non sono riuscito a elaborare una risposta. Puoi riprovare?'
+                }
+                
+        except Exception as e:
+            error_msg = f"Errore chat Gemini: {str(e)}"
+            print(f"❌ {error_msg}")
+            return {
+                'success': False,
+                'error': error_msg,
+                'response': 'Mi dispiace, ho avuto un problema tecnico. Puoi riprovare la domanda?'
+            }
 
 # Test con Gemini
 if __name__ == "__main__":

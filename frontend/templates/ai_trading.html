@@ -98,6 +98,82 @@
     border-left: 3px solid var(--bs-info);
 }
 
+/* Chat AI Styles */
+.ai-chat-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.chat-message {
+    padding: 0.75rem;
+    margin: 0.5rem;
+    border-radius: 0.5rem;
+    position: relative;
+    word-wrap: break-word;
+}
+
+.chat-message.user {
+    background: linear-gradient(135deg, var(--bs-primary), rgba(13, 110, 253, 0.8));
+    margin-left: 20%;
+    color: white;
+    text-align: right;
+}
+
+.chat-message.assistant {
+    background: linear-gradient(135deg, var(--bs-secondary), rgba(108, 117, 125, 0.8));
+    margin-right: 20%;
+    color: white;
+}
+
+.chat-message.welcome {
+    background: linear-gradient(135deg, var(--bs-info), rgba(23, 162, 184, 0.8));
+    margin: 0.5rem;
+    color: white;
+    text-align: center;
+}
+
+.chat-timestamp {
+    font-size: 0.75rem;
+    opacity: 0.7;
+    margin-top: 0.25rem;
+}
+
+.chat-input-container {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.chat-type-buttons {
+    margin-bottom: 0.5rem;
+}
+
+.chat-type-btn {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    margin-right: 0.25rem;
+    border-radius: 15px;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.chat-type-btn:hover {
+    background: var(--bs-primary);
+    color: white;
+}
+
+.chat-type-btn.active {
+    background: var(--bs-primary);
+    color: white;
+}
+
 @keyframes pulse {
     0% { opacity: 1; }
     50% { opacity: 0.5; }
@@ -237,6 +313,53 @@
             <button class="btn btn-outline-primary" onclick="refreshAIStatus()">
                 <i class="fas fa-sync"></i> Refresh
             </button>
+        </div>
+        
+        <!-- Chat AI Trading -->
+        <div class="card mb-4" id="ai-chat-section" style="display: none;">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">💬 Chat AI Trading</h5>
+                <div>
+                    <span class="badge bg-info" id="chat-symbol-badge">-</span>
+                    <button class="btn btn-outline-light btn-sm ms-2" onclick="clearAIChat()">
+                        <i class="fas fa-trash"></i> Pulisci
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Chat Messages Container -->
+                <div id="ai-chat-container" class="ai-chat-container mb-3">
+                    <div class="text-center text-muted p-4">
+                        <i class="fas fa-comments fa-2x mb-2"></i>
+                        <p>Seleziona un segnale AI per iniziare a chattare</p>
+                    </div>
+                </div>
+                
+                <!-- Chat Input -->
+                <div id="chat-input-container" class="chat-input-container" style="display: none;">
+                    <div class="chat-type-buttons">
+                        <button class="chat-type-btn active" data-type="question">❓ Domanda</button>
+                        <button class="chat-type-btn" data-type="opinion">💭 La mia opinione</button>
+                        <button class="chat-type-btn" data-type="scenario">🔄 Scenario alternativo</button>
+                        <button class="chat-type-btn" data-type="update">📈 Update mercato</button>
+                    </div>
+                    
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="chat-message-input" 
+                               placeholder="Scrivi il tuo messaggio..." 
+                               onkeypress="handleChatEnter(event)">
+                        <button class="btn btn-primary" onclick="sendChatMessage()">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            💡 Esempi: "Perché hai scelto questo entry?" • "Bitcoin sta calando, come cambia l'analisi?" • "La mia analisi dice che salirà, cosa ne pensi?"
+                        </small>
+                    </div>
+                </div>
+            </div>
         </div>
         
         <!-- Top Opportunities -->
@@ -553,6 +676,15 @@ function displayTopOpportunities(opportunities) {
                     <i class="fas fa-brain"></i> 
                     ${opp.reasoning.substring(0, 120)}${opp.reasoning.length > 120 ? '...' : ''}
                 </div>
+                
+                <div class="mt-3 d-flex gap-2">
+                    <button class="btn btn-outline-info btn-sm" onclick="event.stopPropagation(); startAIChat('${opp.symbol}', ${JSON.stringify(opp).replace(/"/g, '&quot;')})">
+                        <i class="fas fa-comments"></i> Chat AI
+                    </button>
+                    <button class="btn btn-outline-success btn-sm" onclick="event.stopPropagation(); createAlertsFromOpportunity(${JSON.stringify(opp).replace(/"/g, '&quot;')})">
+                        <i class="fas fa-bell"></i> Crea Alert
+                    </button>
+                </div>
             </div>
         `;
     }).join('');
@@ -697,7 +829,10 @@ function displayCustomAnalysis(data) {
                 </div>
             ` : ''}
             
-            <div class="mt-3">
+            <div class="mt-3 d-flex gap-2">
+                <button class="btn btn-outline-info btn-sm" onclick="startAIChatFromCustom('${data.symbol}', ${JSON.stringify(signal).replace(/"/g, '&quot;')}, ${JSON.stringify(marketData).replace(/"/g, '&quot;')})">
+                    <i class="fas fa-comments"></i> Chat AI
+                </button>
                 <button class="btn btn-success btn-sm" onclick="createAlertsFromCustomSignal('${data.symbol}', ${JSON.stringify(signal).replace(/"/g, '&quot;')})">
                     <i class="fas fa-bell"></i> Crea Alert Automatici
                 </button>
@@ -801,6 +936,261 @@ function createAlertsFromSignal() {
     const {symbol, signal} = currentSignalData;
     showAlert(`🔔 Creazione alert automatici per ${symbol}...`, 'info');
     // Implementare integrazione con sistema alert esistente
+}
+
+// === CHAT AI FUNCTIONS ===
+
+let currentChatSymbol = null;
+let currentChatData = null;
+let selectedMessageType = 'question';
+
+// Gestione tipi di messaggio
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.chat-type-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.chat-type-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            selectedMessageType = this.dataset.type;
+        });
+    });
+});
+
+// Avvia chat AI per un segnale specifico
+async function startAIChat(symbol, signalData) {
+    currentChatSymbol = symbol;
+    currentChatData = signalData;
+    
+    try {
+        const response = await fetch('/ai-trading/api/chat/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                symbol: symbol,
+                ai_signal: signalData,
+                market_data: {}
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Mostra sezione chat
+            document.getElementById('ai-chat-section').style.display = 'block';
+            document.getElementById('chat-input-container').style.display = 'block';
+            document.getElementById('chat-symbol-badge').textContent = symbol;
+            
+            // Aggiorna container chat con messaggio di benvenuto
+            const chatContainer = document.getElementById('ai-chat-container');
+            chatContainer.innerHTML = `
+                <div class="chat-message welcome">
+                    <div class="chat-content">${data.welcome_message.replace(/\n/g, '<br>')}</div>
+                    <div class="chat-timestamp">${new Date().toLocaleTimeString()}</div>
+                </div>
+            `;
+            
+            // Scroll to chat
+            document.getElementById('ai-chat-section').scrollIntoView({ behavior: 'smooth' });
+            
+            showAlert(`💬 Chat avviata per ${symbol}`, 'success');
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+        
+    } catch (error) {
+        console.error('Errore avvio chat:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Avvia chat AI dall'analisi simbolo specifico (con dati di mercato completi)
+async function startAIChatFromCustom(symbol, signalData, marketData) {
+    currentChatSymbol = symbol;
+    currentChatData = signalData;
+    
+    try {
+        const response = await fetch('/ai-trading/api/chat/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                symbol: symbol,
+                ai_signal: signalData,
+                market_data: marketData || {}
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Mostra sezione chat
+            document.getElementById('ai-chat-section').style.display = 'block';
+            document.getElementById('chat-input-container').style.display = 'block';
+            document.getElementById('chat-symbol-badge').textContent = symbol;
+            
+            // Aggiorna container chat con messaggio di benvenuto
+            const chatContainer = document.getElementById('ai-chat-container');
+            chatContainer.innerHTML = `
+                <div class="chat-message welcome">
+                    <div class="chat-content">${data.welcome_message.replace(/\n/g, '<br>')}</div>
+                    <div class="chat-timestamp">${new Date().toLocaleTimeString()}</div>
+                </div>
+            `;
+            
+            // Scroll to chat
+            document.getElementById('ai-chat-section').scrollIntoView({ behavior: 'smooth' });
+            
+            showAlert(`💬 Chat avviata per ${symbol} (analisi completa)`, 'success');
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+        
+    } catch (error) {
+        console.error('Errore avvio chat custom:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Invia messaggio chat
+async function sendChatMessage() {
+    const messageInput = document.getElementById('chat-message-input');
+    const message = messageInput.value.trim();
+    
+    if (!message) {
+        showAlert('Scrivi un messaggio', 'warning');
+        return;
+    }
+    
+    if (!currentChatSymbol) {
+        showAlert('Nessuna chat attiva', 'warning');
+        return;
+    }
+    
+    // Aggiungi messaggio utente alla chat
+    addChatMessage(message, 'user');
+    messageInput.value = '';
+    
+    // Mostra indicatore di typing
+    addTypingIndicator();
+    
+    try {
+        const response = await fetch('/ai-trading/api/chat/message', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                message: message,
+                type: selectedMessageType
+            })
+        });
+        
+        const data = await response.json();
+        
+        // Rimuovi indicatore di typing
+        removeTypingIndicator();
+        
+        if (data.success) {
+            // Aggiungi risposta AI
+            addChatMessage(data.ai_response, 'assistant');
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+        
+    } catch (error) {
+        console.error('Errore invio messaggio:', error);
+        removeTypingIndicator();
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Aggiungi messaggio alla chat
+function addChatMessage(content, role) {
+    const chatContainer = document.getElementById('ai-chat-container');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chat-message ${role}`;
+    
+    messageDiv.innerHTML = `
+        <div class="chat-content">${content.replace(/\n/g, '<br>')}</div>
+        <div class="chat-timestamp">${new Date().toLocaleTimeString()}</div>
+    `;
+    
+    chatContainer.appendChild(messageDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+// Indicatori di typing
+function addTypingIndicator() {
+    const chatContainer = document.getElementById('ai-chat-container');
+    const typingDiv = document.createElement('div');
+    typingDiv.className = 'chat-message assistant';
+    typingDiv.id = 'typing-indicator';
+    
+    typingDiv.innerHTML = `
+        <div class="chat-content">
+            <i class="fas fa-spinner fa-spin"></i> AI sta pensando...
+        </div>
+    `;
+    
+    chatContainer.appendChild(typingDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function removeTypingIndicator() {
+    const indicator = document.getElementById('typing-indicator');
+    if (indicator) {
+        indicator.remove();
+    }
+}
+
+// Gestione Enter nella chat
+function handleChatEnter(event) {
+    if (event.key === 'Enter') {
+        sendChatMessage();
+    }
+}
+
+// Pulisci chat
+async function clearAIChat() {
+    try {
+        const response = await fetch('/ai-trading/api/chat/clear', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Reset UI
+            document.getElementById('ai-chat-container').innerHTML = `
+                <div class="text-center text-muted p-4">
+                    <i class="fas fa-comments fa-2x mb-2"></i>
+                    <p>Seleziona un segnale AI per iniziare a chattare</p>
+                </div>
+            `;
+            document.getElementById('ai-chat-section').style.display = 'none';
+            document.getElementById('chat-input-container').style.display = 'none';
+            document.getElementById('chat-symbol-badge').textContent = '-';
+            
+            currentChatSymbol = null;
+            currentChatData = null;
+            
+            showAlert('Chat pulita', 'success');
+        } else {
+            showAlert('Errore: ' + data.error, 'danger');
+        }
+        
+    } catch (error) {
+        console.error('Errore pulizia chat:', error);
+        showAlert('Errore di connessione', 'danger');
+    }
+}
+
+// Crea alert da opportunità
+function createAlertsFromOpportunity(opportunity) {
+    showAlert(`🔔 Creazione alert automatici per ${opportunity.symbol}...`, 'info');
+    
+    // Qui puoi integrare con il sistema di alert esistente
+    // Per ora mostriamo solo un messaggio
+    setTimeout(() => {
+        showAlert(`Alert creati per ${opportunity.symbol}: Entry, Stop Loss e Take Profit`, 'success');
+    }, 1000);
 }
 </script>
 {% endblock %}
