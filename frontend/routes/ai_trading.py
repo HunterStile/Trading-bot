@@ -2,6 +2,10 @@ from flask import Blueprint, request, jsonify, render_template, current_app
 from datetime import datetime
 import sys
 import os
+from dotenv import load_dotenv
+
+# Carica variabili d'ambiente
+load_dotenv()
 
 # Aggiungi path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -21,6 +25,19 @@ ai_enhanced_analyzer = None
 def initialize_ai_trading(market_analyzer, api_key=None, provider='gemini'):
     """Inizializza AI Trading Assistant con Market Analyzer esistente"""
     global ai_enhanced_analyzer
+    
+    # Se non viene passata una API key, prova a leggerla dal file .env
+    if not api_key:
+        if provider == 'gemini':
+            api_key = os.getenv('GEMINI_API_KEY')
+        elif provider == 'openai':
+            api_key = os.getenv('OPENAI_API_KEY')
+        
+        if api_key and api_key != 'inserisci_qui_la_tua_gemini_api_key':
+            print(f"🔑 Usando {provider.upper()} API key dal file .env")
+        else:
+            print(f"⚠️ {provider.upper()} API key non trovata nel file .env")
+            return False
     
     if AIEnhancedMarketAnalysis and api_key:
         try:
@@ -235,6 +252,38 @@ def configure_ai_trading():
         
         if not api_key:
             return jsonify({'success': False, 'error': f'API key {provider.upper()} richiesta'})
+        
+        # Salva la nuova API key nel file .env
+        try:
+            env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+            if os.path.exists(env_path):
+                # Leggi il file .env
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                
+                # Aggiorna o aggiungi la chiave
+                key_name = f'{provider.upper()}_API_KEY'
+                key_found = False
+                
+                for i, line in enumerate(lines):
+                    if line.startswith(f'{key_name}='):
+                        lines[i] = f'{key_name}={api_key}\n'
+                        key_found = True
+                        break
+                
+                # Se non trovata, aggiungila
+                if not key_found:
+                    lines.append(f'{key_name}={api_key}\n')
+                
+                # Scrivi il file aggiornato
+                with open(env_path, 'w', encoding='utf-8') as f:
+                    f.writelines(lines)
+                
+                print(f"💾 API key {provider.upper()} salvata nel file .env")
+            else:
+                print(f"⚠️ File .env non trovato in {env_path}")
+        except Exception as e:
+            print(f"⚠️ Errore nel salvataggio dell'API key: {e}")
         
         # Ottieni market analyzer dall'app
         market_analyzer = current_app.config.get('MARKET_ANALYZER')
