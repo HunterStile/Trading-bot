@@ -551,9 +551,8 @@ async function refreshAIStatus() {
             aiEnabled = data.ai_enabled;
             updateAIStatusDisplay(data);
             
-            if (aiEnabled) {
-                getTopOpportunities();
-            }
+            // Rimossa chiamata automatica a getTopOpportunities()
+            // L'utente deve premere manualmente "Trova Top Opportunità"
         }
     } catch (error) {
         console.error('Errore refresh status AI:', error);
