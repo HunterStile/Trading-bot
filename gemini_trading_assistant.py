@@ -7,46 +7,56 @@ class GeminiTradingAssistant:
     """AI Trading Assistant usando Google Gemini (Gratuito)"""
     
     def __init__(self, api_key: str):
-        genai.configure(api_key=api_key)
+        # Pulizia completa dell'ambiente prima della configurazione
+        import os
+        os.environ.pop('GOOGLE_API_USE_CLIENT_CERTIFICATE', None)
+        os.environ.pop('GOOGLE_APPLICATION_CREDENTIALS', None)
+        os.environ.pop('GOOGLE_CLOUD_PROJECT', None)
+        os.environ.pop('GCLOUD_PROJECT', None)
         
-        # Lista dei modelli da provare in ordine di preferenza
+        # Configurazione diretta con API key
+        genai.configure(api_key=api_key, transport='rest')
+        
+        # Lista modelli disponibili prima
+        available_models = []
+        try:
+            models = genai.list_models()
+            for model in models:
+                if 'generateContent' in model.supported_generation_methods:
+                    model_name = model.name.replace('models/', '')
+                    available_models.append(model_name)
+            print(f"📋 Modelli Gemini disponibili: {len(available_models)}")
+        except Exception as e:
+            print(f"⚠️ Errore lista modelli: {e}")
+        
+        # Modelli da provare in ordine - Prova prima i Gemini 2.0
         models_to_try = [
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-latest', 
-            'gemini-1.5-pro',
-            'gemini-pro',
-            'gemini-1.0-pro'
+            'gemini-2.0-flash-exp',      # Modello sperimentale più recente  
+            'gemini-2.0-flash',          # Versione stabile
+            'gemini-exp-1206',           # Modello sperimentale alternativo
+            'gemini-1.5-pro-002',        # Versione specifica disponibile
+            'gemini-1.5-flash-002',      # Versione specifica dalla lista
+            'gemini-1.5-pro-latest',
+            'gemini-pro-latest'
         ]
         
         self.model = None
+        self.current_model_name = None
         
-        # Prima lista i modelli disponibili
-        try:
-            available_models = genai.list_models()
-            available_names = []
-            print("📋 Modelli Gemini disponibili:")
-            for model in available_models:
-                if 'generateContent' in model.supported_generation_methods:
-                    model_name = model.name.replace('models/', '')
-                    available_names.append(model_name)
-                    print(f"  - {model_name}")
-        except Exception as e:
-            print(f"⚠️ Impossibile listare modelli: {e}")
-            available_names = models_to_try  # Fallback alla lista predefinita
-        
-        # Prova ogni modello finché uno non funziona
         for model_name in models_to_try:
-            try:
-                if model_name in available_names or not available_names:
+            if not available_models or model_name in available_models:
+                try:
+                    print(f"🔄 Tentativo inizializzazione: {model_name}")
                     self.model = genai.GenerativeModel(model_name)
+                    self.current_model_name = model_name
                     print(f"🤖 {model_name} inizializzato con successo")
                     break
-            except Exception as e:
-                print(f"⚠️ {model_name} non disponibile: {e}")
-                continue
+                except Exception as e:
+                    print(f"⚠️ {model_name} fallito: {e}")
+                    continue
         
         if not self.model:
-            raise Exception("❌ Nessun modello Gemini compatibile trovato")
+            raise Exception("❌ Nessun modello Gemini funzionante trovato")
     
     def test_connection(self) -> bool:
         """Testa la connessione a Gemini con una richiesta semplice"""
@@ -69,44 +79,6 @@ class GeminiTradingAssistant:
                 
         except Exception as e:
             print(f"❌ Test connessione Gemini fallito: {e}")
-            # Se il test fallisce, prova a reinizializzare
-            if "404" in str(e) or "not found" in str(e).lower():
-                print("🔄 Tentativo di reinizializzazione modello...")
-                return self._reinitialize_model()
-            return False
-    
-    def _reinitialize_model(self) -> bool:
-        """Reinizializza il modello con la lista aggiornata"""
-        try:
-            # Ottieni modelli attualmente disponibili
-            available_models = genai.list_models()
-            available_names = []
-            for model in available_models:
-                if 'generateContent' in model.supported_generation_methods:
-                    model_name = model.name.replace('models/', '')
-                    available_names.append(model_name)
-            
-            # Prova il primo modello disponibile
-            models_to_try = [
-                'gemini-1.5-flash',
-                'gemini-1.5-flash-latest', 
-                'gemini-1.5-pro',
-                'gemini-pro',
-                'gemini-1.0-pro'
-            ]
-            
-            for model_name in models_to_try:
-                if model_name in available_names:
-                    try:
-                        self.model = genai.GenerativeModel(model_name)
-                        print(f"🔄 Modello reinizializzato: {model_name}")
-                        return True
-                    except:
-                        continue
-            
-            return False
-        except Exception as e:
-            print(f"❌ Errore reinizializzazione: {e}")
             return False
         
     def analyze_trading_opportunity(self, symbol_data: Dict) -> Dict:
@@ -115,76 +87,113 @@ class GeminiTradingAssistant:
         prompt = self._build_trading_prompt(symbol_data)
         symbol = symbol_data.get('symbol', 'Unknown')
         
-        print(f"🤖 Inviando richiesta Gemini per {symbol}...")
+        print(f"🤖 Inviando richiesta Gemini per {symbol} (modello: {self.current_model_name})...")
         
-        try:
-            # Retry logic per errori temporanei
-            max_retries = 2
-            response = None
-            
-            for attempt in range(max_retries + 1):
-                try:
-                    response = self.model.generate_content(
-                        prompt,
-                        generation_config=genai.types.GenerationConfig(
-                            temperature=0.3,
-                            max_output_tokens=1000,
-                        )
+        # Retry con reinizializzazione se necessario
+        max_retries = 3
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"🔄 Tentativo {attempt + 1}/{max_retries}")
+                
+                response = self.model.generate_content(
+                    prompt,
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=0.3,
+                        max_output_tokens=1000,
                     )
-                    break  # Se arriva qui, la richiesta è riuscita
-                    
+                )
+                
+                print(f"✅ Risposta ricevuta da Gemini per {symbol}")
+                
+                if not response.text:
+                    raise Exception("Risposta vuota da Gemini")
+                
+                ai_analysis = response.text
+                trading_signal = self._parse_ai_response(ai_analysis)
+                
+                print(f"📊 Segnale AI generato per {symbol}: {trading_signal.get('action', 'N/A')}")
+                
+                return {
+                    'success': True,
+                    'signal': trading_signal,
+                    'raw_analysis': ai_analysis,
+                    'timestamp': datetime.now().isoformat(),
+                    'cost': 'FREE'
+                }
+                
+            except Exception as e:
+                last_error = e
+                error_msg = str(e)
+                print(f"❌ Tentativo {attempt + 1} fallito per {symbol}: {error_msg}")
+                
+                # Se è un errore 404 o model not found, prova a reinizializzare
+                if ("404" in error_msg or "not found" in error_msg.lower() or 
+                    "publisher model" in error_msg.lower()) and attempt < max_retries - 1:
+                    print(f"🔄 Reinizializzando modello...")
+                    if self._reinitialize_model():
+                        continue
+                
+                # Se non è l'ultimo tentativo, aspetta un po'
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(1)
+        
+        # Se arriviamo qui, tutti i tentativi sono falliti
+        error_msg = str(last_error)
+        print(f"❌ Tutti i tentativi falliti per {symbol}: {error_msg}")
+        
+        return {
+            'success': False,
+            'error': self._format_error_message(error_msg),
+            'raw_error': error_msg,
+            'timestamp': datetime.now().isoformat()
+        }
+    
+    def _reinitialize_model(self) -> bool:
+        """Reinizializza il modello"""
+        try:
+            models_to_try = [
+                'gemini-2.0-flash-exp',
+                'gemini-2.0-flash',
+                'gemini-exp-1206',
+                'gemini-1.5-pro-002',
+                'gemini-1.5-flash-002'
+            ]
+            
+            for model_name in models_to_try:
+                try:
+                    print(f"🔄 Tentativo reinizializzazione: {model_name}")
+                    self.model = genai.GenerativeModel(model_name)
+                    self.current_model_name = model_name
+                    print(f"✅ Modello reinizializzato: {model_name}")
+                    return True
                 except Exception as e:
-                    if attempt < max_retries and ("404" in str(e) or "not found" in str(e).lower()):
-                        print(f"🔄 Tentativo {attempt + 1}/{max_retries + 1} - Errore modello, reinizializzando...")
-                        if self._reinitialize_model():
-                            continue  # Riprova con il nuovo modello
-                    
-                    # Se tutti i tentativi falliscono o è un errore diverso, rilancia
-                    if attempt == max_retries:
-                        raise e
+                    print(f"⚠️ {model_name} fallito: {e}")
+                    continue
             
-            print(f"✅ Risposta ricevuta da Gemini per {symbol}")
-            
-            if not response or not response.text:
-                raise Exception("Risposta vuota da Gemini")
-            
-            ai_analysis = response.text
-            trading_signal = self._parse_ai_response(ai_analysis)
-            
-            print(f"📊 Segnale AI generato per {symbol}: {trading_signal.get('action', 'N/A')}")
-            
-            return {
-                'success': True,
-                'signal': trading_signal,
-                'raw_analysis': ai_analysis,
-                'timestamp': datetime.now().isoformat(),
-                'cost': 'FREE'  # Gemini ha piano gratuito generoso
-            }
-            
+            return False
         except Exception as e:
-            error_msg = str(e)
-            print(f"❌ Errore Gemini per {symbol}: {error_msg}")
-            
-            # Gestione errori specifici
-            if "quota" in error_msg.lower() or "resource exhausted" in error_msg.lower():
-                error_msg = "Quota Gemini esaurita - riprova più tardi"
-            elif "timeout" in error_msg.lower():
-                error_msg = "Timeout connessione Gemini - riprova"
-            elif "api" in error_msg.lower() and "key" in error_msg.lower():
-                error_msg = "API key Gemini non valida"
-            elif "404" in error_msg or "not found" in error_msg.lower():
-                error_msg = "Modello Gemini non disponibile - prova a riavviare il bot"
-            elif "publisher model" in error_msg.lower():
-                error_msg = "Errore versione modello Gemini - riavvia il bot per aggiornare"
-            elif "permission" in error_msg.lower() or "access" in error_msg.lower():
-                error_msg = "Permessi insufficienti per accedere a Gemini"
-            
-            return {
-                'success': False,
-                'error': error_msg,
-                'raw_error': str(e),
-                'timestamp': datetime.now().isoformat()
-            }
+            print(f"❌ Errore reinizializzazione: {e}")
+            return False
+    
+    def _format_error_message(self, error_msg: str) -> str:
+        """Formatta il messaggio di errore per l'utente"""
+        if "quota" in error_msg.lower() or "resource exhausted" in error_msg.lower():
+            return "Quota Gemini esaurita - riprova più tardi"
+        elif "timeout" in error_msg.lower():
+            return "Timeout connessione Gemini - riprova"
+        elif "api" in error_msg.lower() and "key" in error_msg.lower():
+            return "API key Gemini non valida"
+        elif "404" in error_msg or "not found" in error_msg.lower():
+            return "Modello Gemini non disponibile - riavvia il sistema"
+        elif "publisher model" in error_msg.lower():
+            return "Errore versione modello Gemini - sistema reinizializzato"
+        elif "permission" in error_msg.lower() or "access" in error_msg.lower():
+            return "Permessi insufficienti per accedere a Gemini"
+        else:
+            return f"Errore Gemini: {error_msg}"
     
     def _build_trading_prompt(self, data: Dict) -> str:
         """Costruisce prompt ottimizzato per analisi trading"""
