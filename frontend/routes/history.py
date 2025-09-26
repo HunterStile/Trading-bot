@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app, render_template
-from trading_functions import vedi_prezzo_moneta
+from core.trading_functions import vedi_prezzo_moneta
 
 history_bp = Blueprint('history', __name__)
 

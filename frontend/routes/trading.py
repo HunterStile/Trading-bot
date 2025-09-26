@@ -1,8 +1,8 @@
 from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime
 from pybit.unified_trading import HTTP
-from trading_functions import vedi_prezzo_moneta, mostra_saldo
-from config import api, api_sec
+from core.trading_functions import vedi_prezzo_moneta, mostra_saldo
+from core.config import api, api_sec
 
 trading_bp = Blueprint('trading', __name__)
 

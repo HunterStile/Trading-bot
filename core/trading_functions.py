@@ -1,4 +1,4 @@
-from config import *
+from .config import *
 import threading
 from selenium.webdriver import Chrome
 from selenium import webdriver

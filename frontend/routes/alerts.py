@@ -9,7 +9,7 @@ import os
 # Aggiungi il path per trading_functions
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from trading_functions import vedi_prezzo_moneta, get_kline_data, media_esponenziale
+from core.trading_functions import vedi_prezzo_moneta, get_kline_data, media_esponenziale
 
 alerts_bp = Blueprint('alerts', __name__)
 

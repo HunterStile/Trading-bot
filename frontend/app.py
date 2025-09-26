@@ -28,8 +28,8 @@ except ImportError as e:
 
 # Import delle funzioni del trading bot
 try:
-    from config import api, api_sec, TELEGRAM_TOKEN, CHAT_ID
-    from trading_functions import (
+    from core.config import api, api_sec, TELEGRAM_TOKEN, CHAT_ID
+    from core.trading_functions import (
         mostra_saldo, vedi_prezzo_moneta, get_kline_data, 
         analizza_prezzo_sopra_media, controlla_candele_sopra_ema,
         controlla_candele_sotto_ema, bot_open_position, bot_trailing_stop,

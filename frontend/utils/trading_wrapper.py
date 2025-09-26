@@ -20,13 +20,13 @@ from utils.database import trading_db
 
 # Import funzioni originali del bot
 try:
-    from trading_functions import (
+    from core.trading_functions import (
         bot_open_position,
         bot_trailing_stop,
         mostra_saldo,
         vedi_prezzo_moneta
     )
-    from config import api, api_sec
+    from core.config import api, api_sec
     print("[TRADING_WRAPPER] ✅ Funzioni di trading importate con successo")
     TRADING_FUNCTIONS_AVAILABLE = True
 except ImportError as e:
@@ -138,7 +138,7 @@ class TradingWrapper:
             
             try:
                 # Per catturare il numero di monete, dobbiamo usare direttamente le funzioni bybit
-                from trading_functions import compra_moneta_bybit_by_quantita, vendi_moneta_bybit_by_quantita
+                from core.trading_functions import compra_moneta_bybit_by_quantita, vendi_moneta_bybit_by_quantita
                 
                 if side.lower() == 'buy':
                     # LONG: compra monete
@@ -217,7 +217,7 @@ class TradingWrapper:
                     import sys
                     import os
                     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                    from config import api, api_sec
+                    from core.config import api, api_sec
                     
                     # Ottieni le posizioni aggiornate da Bybit
                     from pybit.unified_trading import HTTP
@@ -447,7 +447,7 @@ class TradingWrapper:
             # CHIUSURA REALE SU BYBIT usando le funzioni originali
             success_bybit = False
             try:
-                from trading_functions import chiudi_operazione_long, chiudi_operazione_short
+                from core.trading_functions import chiudi_operazione_long, chiudi_operazione_short
                 
                 symbol = trade_info['symbol']
                 quantity = trade_info['quantity']

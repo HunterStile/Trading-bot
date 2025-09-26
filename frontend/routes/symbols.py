@@ -7,7 +7,7 @@ from datetime import datetime
 # Aggiungi il path per trading_functions
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from trading_functions import vedi_prezzo_moneta
+from core.trading_functions import vedi_prezzo_moneta
 
 symbols_bp = Blueprint('symbols', __name__)
 

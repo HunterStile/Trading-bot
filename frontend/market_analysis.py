@@ -15,7 +15,7 @@ import statistics
 # Aggiungi il path per trading_functions
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from trading_functions import vedi_prezzo_moneta, get_kline_data, media_esponenziale
+from core.trading_functions import vedi_prezzo_moneta, get_kline_data, media_esponenziale
 
 def convert_timeframe_to_bybit(timeframe):
     """Converte timeframe in minuti al formato richiesto da Bybit"""

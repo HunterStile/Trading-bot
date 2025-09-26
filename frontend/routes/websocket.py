@@ -1,6 +1,6 @@
 from flask_socketio import emit
 from datetime import datetime
-from trading_functions import vedi_prezzo_moneta
+from core.trading_functions import vedi_prezzo_moneta
 
 def register_websocket_events(socketio, trading_wrapper, trading_db):
     """Registra tutti gli eventi WebSocket"""

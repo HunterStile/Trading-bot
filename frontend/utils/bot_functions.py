@@ -1,6 +1,6 @@
 import time
 from datetime import datetime
-from trading_functions import (
+from core.trading_functions import (
     vedi_prezzo_moneta, get_kline_data, analizza_prezzo_sopra_media, 
     controlla_candele_sopra_ema, controlla_candele_sotto_ema, 
     media_esponenziale, mostra_saldo
