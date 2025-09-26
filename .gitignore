@@ -3,6 +3,58 @@
 config.py
 screenshots/
 
+# Next.js / Node.js
+saas-frontend/node_modules/
+saas-frontend/.next/
+saas-frontend/.swc/
+saas-frontend/out/
+saas-frontend/build/
+saas-frontend/dist/
+
+# Logs
+saas-frontend/npm-debug.log*
+saas-frontend/yarn-debug.log*
+saas-frontend/yarn-error.log*
+saas-frontend/.pnpm-debug.log*
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
 # Cache Python
 __pycache__/
 *.py[cod]
@@ -93,6 +145,7 @@ venv.bak/
 
 # mkdocs documentation
 /site
+
 
 # mypy
 .mypy_cache/
