@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import api from '../../services/api'
 import { 
   ChartBarIcon,
   CogIcon,
@@ -18,21 +19,86 @@ export default function DashboardPage() {
   const [botStatus, setBotStatus] = useState({
     running: false,
     symbol: 'BTCUSDT',
-    pnl: 12847.50,
-    pnlPercentage: 24.3,
-    winRate: 87.4,
-    totalTrades: 152,
-    activeStrategies: 3
+    pnl: 0,
+    pnlPercentage: 0,
+    winRate: 0,
+    totalTrades: 0,
+    activeStrategies: 0,
+    balance: 0
   })
 
-  const [recentTrades] = useState([
-    { id: 1, symbol: 'BTCUSDT', side: 'BUY', price: 43250.00, quantity: 0.023, pnl: 145.50, time: '2 min ago' },
-    { id: 2, symbol: 'ETHUSDT', side: 'SELL', price: 2680.50, quantity: 1.5, pnl: -23.40, time: '5 min ago' },
-    { id: 3, symbol: 'AVAXUSDT', side: 'BUY', price: 35.80, quantity: 50, pnl: 87.20, time: '8 min ago' },
-  ])
+  const [recentTrades, setRecentTrades] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const toggleBot = () => {
-    setBotStatus(prev => ({ ...prev, running: !prev.running }))
+  // Carica dati iniziali dalla API
+  useEffect(() => {
+    loadDashboardData()
+  }, [])
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true)
+      setError('')
+      console.log('🔄 Loading dashboard data...')
+
+      // Carica status bot dalle tue funzioni esistenti
+      console.log('📡 Fetching bot status...')
+      const statusResponse = await api.bot.getStatus()
+      console.log('✅ Bot status response:', statusResponse)
+      
+      if (statusResponse.success) {
+        setBotStatus(prev => ({
+          ...prev,
+          ...statusResponse.data,
+          pnlPercentage: statusResponse.data.pnl > 0 ? 
+            ((statusResponse.data.pnl / statusResponse.data.balance) * 100) : 0
+        }))
+      }
+
+      // Carica storico trades dalle tue funzioni esistenti  
+      const tradesResponse = await api.trades.getHistory(10)
+      if (tradesResponse.success) {
+        setRecentTrades(tradesResponse.data.trades)
+      }
+
+    } catch (err) {
+      console.error('❌ Errore caricamento dashboard:', err)
+      setError('Errore nel caricamento dei dati: ' + (err.message || err.toString()))
+    } finally {
+      console.log('✅ Dashboard loading completed')
+      setLoading(false)
+    }
+  }
+
+  const toggleBot = async () => {
+    try {
+      setError('')
+      
+      if (botStatus.running) {
+        // Ferma bot usando le tue funzioni esistenti
+        const response = await api.bot.stop()
+        if (response.success) {
+          setBotStatus(prev => ({ ...prev, running: false }))
+        }
+      } else {
+        // Avvia bot usando le tue funzioni esistenti
+        const response = await api.bot.start({
+          symbol: botStatus.symbol,
+          strategy: 'EMA_CROSSOVER'
+        })
+        if (response.success) {
+          setBotStatus(prev => ({ ...prev, running: true }))
+        }
+      }
+      
+      // Ricarica dati dopo cambio stato
+      await loadDashboardData()
+      
+    } catch (err) {
+      console.error('Errore toggle bot:', err)
+      setError('Errore nel controllo bot')
+    }
   }
 
   return (
