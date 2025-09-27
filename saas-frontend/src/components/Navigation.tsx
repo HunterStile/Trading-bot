@@ -99,13 +99,13 @@ export default function Navigation({ isAuthenticated = false, variant = 'public'
                 {!isAuthenticated && (
                   <>
                     <Link 
-                      href="/login" 
+                      href="/auth/login" 
                       className="hidden sm:block text-dark-300 hover:text-white text-sm font-medium transition-colors"
                     >
-                      Sign In
+                      Accedi
                     </Link>
-                    <Link href="/register" className="btn-primary hidden sm:block">
-                      Get Started
+                    <Link href="/auth/register" className="btn-primary hidden sm:block">
+                      Registrati
                     </Link>
                   </>
                 )}

@@ -40,16 +40,36 @@ logger = logging.getLogger(__name__)
 # 🤖 BOT CONTROL ENDPOINTS
 # ===========================
 
+def get_user_from_token():
+    """Estrae user_id dal JWT token nell'header Authorization"""
+    try:
+        from utils.user_manager import user_manager
+        
+        auth_header = request.headers.get('Authorization')
+        
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return None
+        
+        token = auth_header.split(' ')[1]
+        result = user_manager.verify_token(token)
+        
+        if result['success']:
+            return result['user_id']
+        else:
+            return None
+    except:
+        return None
+
 @api_bp.route('/bot/status', methods=['GET', 'OPTIONS'])
-@cross_origin(origins=["http://localhost:3000"], methods=["GET", "OPTIONS"], allow_headers=["Content-Type"])
+@cross_origin(origins=["http://localhost:3000"], methods=["GET", "OPTIONS"], allow_headers=["Content-Type", "Authorization"])
 def get_bot_status():
-    """Ottiene lo status attuale del bot"""
+    """Ottiene lo status attuale del bot per l'utente specifico"""
     try:
         # Gestisci richiesta preflight
         if request.method == 'OPTIONS':
             response = jsonify({'status': 'OK'})
             response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
             response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
             return response
             

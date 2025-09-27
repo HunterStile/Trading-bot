@@ -88,7 +88,9 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 # Registra i blueprints
+print("🔄 About to call register_blueprints...")
 register_blueprints(app)
+print("✅ register_blueprints completed")
 
 # Registra health check
 app.register_blueprint(health_bp)

@@ -40,12 +40,9 @@ export default function DashboardPage() {
     try {
       setLoading(true)
       setError('')
-      console.log('🔄 Loading dashboard data...')
 
       // Carica status bot dalle tue funzioni esistenti
-      console.log('📡 Fetching bot status...')
       const statusResponse = await api.bot.getStatus()
-      console.log('✅ Bot status response:', statusResponse)
       
       if (statusResponse.success) {
         setBotStatus(prev => ({
@@ -63,10 +60,9 @@ export default function DashboardPage() {
       }
 
     } catch (err) {
-      console.error('❌ Errore caricamento dashboard:', err)
+      console.error('Errore caricamento dashboard:', err)
       setError('Errore nel caricamento dei dati: ' + (err.message || err.toString()))
     } finally {
-      console.log('✅ Dashboard loading completed')
       setLoading(false)
     }
   }

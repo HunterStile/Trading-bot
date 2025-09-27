@@ -19,12 +19,29 @@ export const botAPI = {
     const response = await fetch('/api/bot/status')
     return handleResponse(response)
   },
+  
+  start: async (params = {}) => {
+    const response = await fetch('/api/bot/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    })
+    return handleResponse(response)
+  },
+  
+  stop: async () => {
+    const response = await fetch('/api/bot/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    return handleResponse(response)
+  },
 }
 
 // Trades API (semplificato)
 export const tradesAPI = {
   getHistory: async (limit = 10) => {
-    const response = await fetch(`${API_BASE_URL}/trades/history?limit=${limit}`)
+    const response = await fetch(`/api/trades/history?limit=${limit}`)
     return handleResponse(response)
   },
 }
