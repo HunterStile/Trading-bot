@@ -132,7 +132,7 @@ services:
       - portainer_data:/data
     networks:
       - trading-network
-    command: --admin-password='$2y$10$TRiaveHwUP/ln8qxLPN8H.6w0f.XklQELCwFKtMhHWpV5s7MjprzO'
+    command: --admin-password='$$2y$$10$$TRiaveHwUP/ln8qxLPN8H.6w0f.XklQELCwFKtMhHWpV5s7MjprzO'
 
 volumes:
   redis_dashboards_data:
