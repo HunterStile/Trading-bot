@@ -13,7 +13,12 @@ RUN apt-get update && apt-get install -y \
     npm \
     chromium-driver \
     xvfb \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# Set timezone
+ENV TZ=Europe/Rome
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Install Plotly.js and dependencies via npm
 RUN npm install -g plotly.js-dist@latest

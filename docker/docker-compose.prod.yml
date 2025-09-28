@@ -74,6 +74,7 @@ services:
       - FLASK_ENV=production
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
+      - TZ=Europe/Rome
     dns:
       - 8.8.8.8
       - 1.1.1.1

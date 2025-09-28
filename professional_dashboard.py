@@ -328,7 +328,12 @@ class ProfessionalDashboard:
         """Emit stats update"""
         try:
             symbol = self.current_symbol
-            session_duration = int(time.time() - self.stats[symbol]['session_start'])
+            current_time = time.time()
+            session_start = self.stats[symbol]['session_start']
+            session_duration = int(current_time - session_start)
+            
+            # Debug timezone/timer
+            print(f"⏰ Timer debug - Current: {current_time}, Start: {session_start}, Duration: {session_duration}s")
             
             # Calculate POC, VAH, VAL for current symbol
             poc_data = self._calculate_poc_vah_val(symbol)
@@ -926,6 +931,28 @@ PROFESSIONAL_TEMPLATE = '''
         function addBubbleToChart(order, animate = true) {
             const color = order.side === 'buy' ? '#10b981' : '#ef4444';
             const size = Math.min(40, Math.max(15, order.volume * 6));
+            
+            // Debug: log timestamp and current chart range
+            console.log('Bubble order:', {
+                symbol: order.symbol,
+                timestamp: order.timestamp,
+                time: order.time,
+                price: order.price,
+                volume: order.volume
+            });
+            
+            // Get current chart data to check X-axis range
+            const chartElement = document.getElementById('chart');
+            if (chartElement && chartElement.data && chartElement.data[0]) {
+                const candleData = chartElement.data[0];
+                if (candleData.x && candleData.x.length > 0) {
+                    console.log('Chart X range:', {
+                        first: candleData.x[0],
+                        last: candleData.x[candleData.x.length - 1],
+                        bubbleX: new Date(order.timestamp * 1000).toISOString()
+                    });
+                }
+            }
             
             const bubbleTrace = {
                 x: [new Date(order.timestamp * 1000)],
