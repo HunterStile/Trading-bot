@@ -814,7 +814,7 @@ PROFESSIONAL_TEMPLATE = '''
         function updateChart() {
             if (!chartInitialized) return;
             
-            fetch(`/api/candles?symbol=${currentSymbol}&timeframe=${currentTimeframe}&limit=100`)
+            fetch(`/api/candles?timeframe=${currentTimeframe}&limit=100`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.length === 0) return;
@@ -840,7 +840,7 @@ PROFESSIONAL_TEMPLATE = '''
                     
                     Plotly.newPlot('chart', [candlestickTrace], {
                         title: {
-                            text: `${currentSymbol} ${currentTimeframe.toUpperCase()} Candlesticks + Large Orders`,
+                            text: `BTCUSDT ${currentTimeframe.toUpperCase()} Candlesticks + Large Orders`,
                             font: { color: 'white', size: 16 }
                         },
                         paper_bgcolor: '#1f2937',
@@ -867,7 +867,7 @@ PROFESSIONAL_TEMPLATE = '''
         }
         
         function addExistingBubbles() {
-            fetch(`/api/large-orders?symbol=${currentSymbol}&limit=20`)
+            fetch('/api/large-orders?limit=20')
                 .then(response => response.json())
                 .then(orders => {
                     orders.forEach(order => {
@@ -943,16 +943,13 @@ PROFESSIONAL_TEMPLATE = '''
         socket.on('large_order', function(order) {
             console.log('🐋 Large order:', order);
             
-            // Only show orders for current symbol
-            if (order.symbol === currentSymbol) {
-                // Add to orders list
-                ordersList.unshift(order);
-                if (ordersList.length > 20) ordersList.pop();
-                updateOrdersList();
-                
-                // Add bubble to chart
-                addBubbleToChart(order, true);
-            }
+            // Add to orders list
+            ordersList.unshift(order);
+            if (ordersList.length > 20) ordersList.pop();
+            updateOrdersList();
+            
+            // Add bubble to chart
+            addBubbleToChart(order, true);
         });
         
         function updateConnectionStatus(connected) {
@@ -1054,19 +1051,13 @@ def get_symbols():
 
 @app.route('/api/debug')
 def debug():
-    # Get stats for current symbol
-    current_stats = dashboard.stats.get(dashboard.current_symbol, {})
-    
     return jsonify({
-        'trades_count': current_stats.get('trades_count', 0),
-        'large_orders_count': current_stats.get('large_orders_count', 0),
-        'current_price': current_stats.get('current_price', 0.0),
+        'trades_count': dashboard.trades_count,
+        'large_orders_count': dashboard.large_orders_count,
+        'current_price': dashboard.current_price,
         'connection_active': dashboard.connection_active,
-        'current_symbol': dashboard.current_symbol,
-        'all_symbols_stats': dashboard.stats,
-        'candle_data_lengths': {symbol: {tf: len(candles) for tf, candles in data.items()} 
-                               for symbol, data in dashboard.candle_data.items()},
-        'volume_profile_levels': {symbol: len(vp) for symbol, vp in dashboard.volume_profile.items()}
+        'candle_data_lengths': {tf: len(candles) for tf, candles in dashboard.candle_data.items()},
+        'volume_profile_levels': len(dashboard.volume_profile)
     })
 
 @socketio.on('connect')
@@ -1076,10 +1067,10 @@ def handle_connect():
 
 if __name__ == '__main__':
     print("🚀 Professional Dashboard Starting...")
-    print("🌐 URL: http://localhost:5006")
+    print("🌐 URL: http://localhost:5005")
     print("🕯️ Multi-timeframe candlesticks")
     print("📊 Volume Profile with POC/VAH/VAL") 
     print("🐋 Large orders with bubbles")
     print("📈 Historical data storage")
     
-    socketio.run(app, debug=False, host='0.0.0.0', port=5006)
+    socketio.run(app, debug=False, host='0.0.0.0', port=5005)
