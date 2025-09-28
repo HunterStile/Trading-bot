@@ -1,0 +1,175 @@
+version: '3.8'
+
+services:
+  # Dashboard Semplice Multi-Symbol (Porta 5007)
+  dashboard-multi-simple:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dashboards
+    container_name: dashboard-multi-simple
+    restart: unless-stopped
+    command: ["python", "multi_symbol_dashboard.py"]
+    ports:
+      - "5007:5007"
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+    environment:
+      - FLASK_ENV=production
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5007/debug"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Dashboard Professionale Multi-Symbol (Porta 5006)  
+  dashboard-professional:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dashboards
+    container_name: dashboard-professional
+    restart: unless-stopped
+    command: ["python", "professional_dashboard.py"]
+    ports:
+      - "5006:5006"
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+    environment:
+      - FLASK_ENV=production
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5006/api/debug"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Dashboard Semplice Originale (Porta 5004)
+  dashboard-simple:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dashboards
+    container_name: dashboard-simple
+    restart: unless-stopped
+    command: ["python", "simple_dashboard.py"]
+    ports:
+      - "5004:5004"
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+    environment:
+      - FLASK_ENV=production
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5004/debug"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Dashboard Fixed (Backup - Porta 5003)
+  dashboard-fixed:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dashboards
+    container_name: dashboard-fixed
+    restart: unless-stopped
+    command: ["python", "fixed_dashboard.py"]
+    ports:
+      - "5003:5003"
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+    environment:
+      - FLASK_ENV=production
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5003/chart"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Nginx Reverse Proxy
+  nginx-dashboards:
+    image: nginx:alpine
+    container_name: trading-nginx-dashboards
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-dashboards.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - dashboard-multi-simple
+      - dashboard-professional
+      - dashboard-simple
+      - dashboard-fixed
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis per caching (opzionale)
+  redis-dashboards:
+    image: redis:7-alpine
+    container_name: trading-redis-dashboards
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-dashboards2024}
+    volumes:
+      - redis_dashboards_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Monitoring con Portainer (opzionale)
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: trading-portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - trading-network
+    command: --admin-password='$2y$10$TRiaveHwUP/ln8qxLPN8H.6w0f.XklQELCwFKtMhHWpV5s7MjprzO'
+
+volumes:
+  redis_dashboards_data:
+    driver: local
+  portainer_data:
+    driver: local
+
+networks:
+  trading-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

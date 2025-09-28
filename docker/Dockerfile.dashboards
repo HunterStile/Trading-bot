@@ -1,0 +1,40 @@
+# Dockerfile per i Dashboard Real-Time
+FROM python:3.12-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY docker/requirements-dashboards.txt ./requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy dashboard files
+COPY simple_dashboard.py .
+COPY professional_dashboard.py .
+COPY multi_symbol_dashboard.py .
+COPY fixed_dashboard.py .
+
+# Copy core modules if they exist
+COPY core/ ./core/
+
+# Create data directories
+RUN mkdir -p /app/data /app/logs
+
+# Expose ports for all dashboards
+EXPOSE 5004 5005 5006 5007
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:5007/debug || exit 1
+
+# Default command (can be overridden in docker-compose)
+CMD ["python", "multi_symbol_dashboard.py"]
