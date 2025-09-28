@@ -52,9 +52,14 @@ class ProfessionalDashboard:
             for tf in self.timeframes:
                 self.candle_data[symbol][tf] = []
         
-        # WebSocket
+        # WebSocket with fallback URLs
         self.connection_active = False
-        self.ws_url = "wss://stream.bybit.com/v5/public/linear"
+        self.ws_urls = [
+            "wss://stream.bybit.com/v5/public/linear",
+            "wss://stream-testnet.bybit.com/v5/public/linear",
+            "wss://stream.bytick.com/realtime_public"
+        ]
+        self.current_ws_url = 0
         self.ws_thread = None
     
     def start_websocket(self):
@@ -71,9 +76,17 @@ class ProfessionalDashboard:
     async def _websocket_loop(self):
         while True:
             try:
+                current_url = self.ws_urls[self.current_ws_url]
                 print("🔌 Connecting to Bybit...")
-                print(f"🌐 WebSocket URL: {self.ws_url}")
-                async with websockets.connect(self.ws_url, ping_interval=20, ping_timeout=10) as websocket:
+                print(f"🌐 WebSocket URL: {current_url}")
+                print(f"🔄 Attempt {self.current_ws_url + 1}/{len(self.ws_urls)}")
+                
+                async with websockets.connect(
+                    current_url, 
+                    ping_interval=20, 
+                    ping_timeout=10,
+                    open_timeout=10
+                ) as websocket:
                     self.connection_active = True
                     
                     # Subscribe to all symbols
@@ -92,8 +105,15 @@ class ProfessionalDashboard:
                 print(f"🔍 Error type: {type(e).__name__}")
                 print(f"📍 Error details: {str(e)}")
                 self.connection_active = False
-                print("⏳ Waiting 5 seconds before retry...")
-                await asyncio.sleep(5)
+                
+                # Try next URL in fallback list
+                self.current_ws_url = (self.current_ws_url + 1) % len(self.ws_urls)
+                if self.current_ws_url == 0:
+                    print("⏳ Tried all URLs, waiting 10 seconds before retry...")
+                    await asyncio.sleep(10)
+                else:
+                    print(f"🔄 Trying fallback URL {self.current_ws_url + 1}...")
+                    await asyncio.sleep(2)
     
     async def _handle_message(self, message):
         try:
@@ -1119,6 +1139,19 @@ if __name__ == '__main__':
     print("📊 Volume Profile with POC/VAH/VAL") 
     print("🐋 Large orders with bubbles")
     print("📈 Historical data storage")
+    
+    # Test connettività prima di avviare
+    print("🔍 Testing internet connectivity...")
+    try:
+        import requests
+        response = requests.get("https://api.bybit.com/v5/market/time", timeout=10)
+        if response.status_code == 200:
+            print("✅ Internet connectivity: OK")
+        else:
+            print(f"⚠️ API response: {response.status_code}")
+    except Exception as e:
+        print(f"❌ Internet connectivity test failed: {e}")
+        print("🔄 Will continue anyway, WebSocket will retry...")
     
     # Avvia il WebSocket automaticamente
     dashboard.start_websocket()

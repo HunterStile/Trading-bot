@@ -33,6 +33,10 @@ COPY fixed_dashboard.py .
 # Copy core modules if they exist
 COPY core/ ./core/
 
+# Copy test scripts
+COPY docker/test-container-connectivity.sh ./test-container-connectivity.sh
+RUN chmod +x ./test-container-connectivity.sh
+
 # Create data directories
 RUN mkdir -p /app/data /app/logs
 
