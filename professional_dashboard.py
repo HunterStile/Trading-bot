@@ -467,7 +467,7 @@ PROFESSIONAL_TEMPLATE = '''
         // Ensure Plotly is loaded before proceeding
         if (typeof Plotly === 'undefined') {
             console.error('Plotly failed to load, trying backup...');
-            document.write('<script src="https://unpkg.com/plotly.js-dist/plotly.js"><\/script>');
+            document.write('<script src="https://unpkg.com/plotly.js-dist/plotly.js"></script>');
         }
     </script>
     <style>
@@ -1118,13 +1118,19 @@ def get_symbols():
 
 @app.route('/api/debug')
 def debug():
+    # Get stats for current symbol
+    current_stats = dashboard.stats.get(dashboard.current_symbol, {})
+    
     return jsonify({
-        'trades_count': dashboard.trades_count,
-        'large_orders_count': dashboard.large_orders_count,
-        'current_price': dashboard.current_price,
+        'trades_count': current_stats.get('trades_count', 0),
+        'large_orders_count': current_stats.get('large_orders_count', 0),
+        'current_price': current_stats.get('current_price', 0.0),
         'connection_active': dashboard.connection_active,
-        'candle_data_lengths': {tf: len(candles) for tf, candles in dashboard.candle_data.items()},
-        'volume_profile_levels': len(dashboard.volume_profile)
+        'current_symbol': dashboard.current_symbol,
+        'all_symbols_stats': dashboard.stats,
+        'candle_data_lengths': {symbol: {tf: len(candles) for tf, candles in data.items()} 
+                               for symbol, data in dashboard.candle_data.items()},
+        'volume_profile_levels': {symbol: len(vp) for symbol, vp in dashboard.volume_profile.items()}
     })
 
 @socketio.on('connect')
