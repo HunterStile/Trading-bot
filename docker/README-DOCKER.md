@@ -47,6 +47,35 @@ docker-compose -f docker-compose.dashboards.yml up -d --build
 
 ## 🌐 Accesso ai Servizi
 
+### 🏠 Development (Localhost)
+| Servizio | Porta | URL |
+|----------|--------|-----|
+| Nginx Proxy | 8080 | http://localhost:8080 |
+| Professional | 5006 | http://localhost:5006 |
+| Multi-Symbol | 5007 | http://localhost:5007 |
+| Simple | 5004 | http://localhost:5004 |
+| Redis | 16379 | localhost:16379 |
+| Portainer | 9000 | http://localhost:9000 |
+
+### 🏭 Production Server (Ubuntu)
+Usa il file `docker-compose.prod.yml` per evitare conflitti di porte:
+
+| Servizio | Porta | URL |
+|----------|--------|-----|
+| Nginx Proxy | 9080 | http://your-server-ip:9080 |
+| Professional | 15006 | http://your-server-ip:15006 |
+| Multi-Symbol | 15007 | http://your-server-ip:15007 |
+| Simple | 15004 | http://your-server-ip:15004 |
+| Redis | 19379 | your-server-ip:19379 |
+| Portainer | 19000 | http://your-server-ip:19000 |
+
+### Deployment Produzione Ubuntu
+```bash
+cd docker
+chmod +x setup-dashboards-prod.sh
+./setup-dashboards-prod.sh
+```
+
 ### Tramite Nginx Reverse Proxy (Raccomandato)
 - **Dashboard Multi-Symbol**: http://localhost/ 
 - **Dashboard Professionale**: http://localhost/professional

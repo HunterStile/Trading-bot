@@ -1,5 +1,6 @@
 # File di configurazione sensibili
 .env
+.env.production
 config.py
 screenshots/
 
