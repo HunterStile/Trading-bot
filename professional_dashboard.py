@@ -72,7 +72,8 @@ class ProfessionalDashboard:
         while True:
             try:
                 print("🔌 Connecting to Bybit...")
-                async with websockets.connect(self.ws_url) as websocket:
+                print(f"🌐 WebSocket URL: {self.ws_url}")
+                async with websockets.connect(self.ws_url, ping_interval=20, ping_timeout=10) as websocket:
                     self.connection_active = True
                     
                     # Subscribe to all symbols
@@ -88,7 +89,10 @@ class ProfessionalDashboard:
                         
             except Exception as e:
                 print(f"❌ WebSocket error: {e}")
+                print(f"🔍 Error type: {type(e).__name__}")
+                print(f"📍 Error details: {str(e)}")
                 self.connection_active = False
+                print("⏳ Waiting 5 seconds before retry...")
                 await asyncio.sleep(5)
     
     async def _handle_message(self, message):
@@ -1073,4 +1077,7 @@ if __name__ == '__main__':
     print("🐋 Large orders with bubbles")
     print("📈 Historical data storage")
     
-    socketio.run(app, debug=False, host='0.0.0.0', port=5005)
+    # Avvia il WebSocket automaticamente
+    dashboard.start_websocket()
+    
+    socketio.run(app, debug=False, host='0.0.0.0', port=5006)
