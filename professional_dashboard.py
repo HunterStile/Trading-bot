@@ -1067,7 +1067,7 @@ def handle_connect():
 
 if __name__ == '__main__':
     print("🚀 Professional Dashboard Starting...")
-    print("🌐 URL: http://localhost:5005")
+    print("🌐 URL: http://localhost:5006")
     print("🕯️ Multi-timeframe candlesticks")
     print("📊 Volume Profile with POC/VAH/VAL") 
     print("🐋 Large orders with bubbles")
