@@ -79,32 +79,6 @@ services:
       retries: 3
       start_period: 40s
 
-  # Dashboard Fixed (Backup - Porta 5003)
-  dashboard-fixed:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.dashboards
-    container_name: dashboard-fixed
-    restart: unless-stopped
-    command: ["python", "fixed_dashboard.py"]
-    ports:
-      - "5003:5003"
-    volumes:
-      - ../data:/app/data
-      - ../logs:/app/logs
-    environment:
-      - FLASK_ENV=production
-      - PYTHONPATH=/app
-      - PYTHONUNBUFFERED=1
-    networks:
-      - trading-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5003/chart"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
   # Nginx Reverse Proxy
   nginx-dashboards:
     image: nginx:alpine
@@ -120,7 +94,6 @@ services:
       - dashboard-multi-simple
       - dashboard-professional
       - dashboard-simple
-      - dashboard-fixed
     networks:
       - trading-network
     healthcheck:

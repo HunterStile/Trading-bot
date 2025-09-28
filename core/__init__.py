@@ -10,7 +10,7 @@ Modules:
 """
 
 from .config import *
-from .trading_functions import *
+# from .trading_functions import *  # Disabled for dashboard containers (requires selenium)
 
 __version__ = "2.0.0"
 __author__ = "Trading Bot Team"
