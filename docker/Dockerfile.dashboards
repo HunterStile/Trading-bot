@@ -4,12 +4,19 @@ FROM python:3.12-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including Node.js for Plotly
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     curl \
+    nodejs \
+    npm \
+    chromium-driver \
+    xvfb \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Plotly.js and dependencies via npm
+RUN npm install -g plotly.js-dist@latest
 
 # Copy requirements
 COPY docker/requirements-dashboards.txt ./requirements.txt

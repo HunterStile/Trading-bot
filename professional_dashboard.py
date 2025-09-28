@@ -438,7 +438,18 @@ PROFESSIONAL_TEMPLATE = '''
 <head>
     <title>🚀 Professional Trading Dashboard</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <!-- Multiple fallback sources for Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js" 
+            onerror="this.onerror=null; this.src='https://unpkg.com/plotly.js-dist@2.26.0/plotly.js';"
+            onload="console.log('Plotly loaded successfully');">
+    </script>
+    <script>
+        // Ensure Plotly is loaded before proceeding
+        if (typeof Plotly === 'undefined') {
+            console.error('Plotly failed to load, trying backup...');
+            document.write('<script src="https://unpkg.com/plotly.js-dist/plotly.js"><\/script>');
+        }
+    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -811,8 +822,20 @@ PROFESSIONAL_TEMPLATE = '''
                 showlegend: false
             };
             
-            Plotly.newPlot('chart', [], layout, {responsive: true, displayModeBar: false});
-            chartInitialized = true;
+            // Ensure Plotly is loaded before creating chart
+            if (typeof Plotly !== 'undefined') {
+                try {
+                    Plotly.newPlot('chart', [], layout, {responsive: true, displayModeBar: false});
+                    chartInitialized = true;
+                    console.log('Chart initialized successfully');
+                } catch (error) {
+                    console.error('Error initializing chart:', error);
+                    setTimeout(initChart, 1000); // Retry after 1 second
+                }
+            } else {
+                console.error('Plotly not loaded, retrying...');
+                setTimeout(initChart, 500); // Retry after 500ms
+            }
         }
         
         function updateChart() {
@@ -902,14 +925,34 @@ PROFESSIONAL_TEMPLATE = '''
                 hovertemplate: '%{text}<extra></extra>'
             };
             
-            Plotly.addTraces('chart', bubbleTrace);
+            // Ensure chart exists and Plotly is loaded
+            if (typeof Plotly !== 'undefined' && document.getElementById('chart')) {
+                try {
+                    Plotly.addTraces('chart', bubbleTrace);
+                    console.log('Bubble added successfully:', order);
+                } catch (error) {
+                    console.error('Error adding bubble:', error);
+                    // Try to reinitialize chart
+                    setTimeout(() => {
+                        if (typeof Plotly !== 'undefined') {
+                            Plotly.redraw('chart');
+                        }
+                    }, 100);
+                }
+            } else {
+                console.error('Plotly not loaded or chart not found');
+            }
             
             if (animate) {
-                // Flash effect
+                // Flash effect with error handling
                 setTimeout(() => {
-                    const chartDiv = document.getElementById('chart');
-                    if (chartDiv.data && chartDiv.data.length > 50) {
-                        Plotly.deleteTraces('chart', 1);
+                    try {
+                        const chartDiv = document.getElementById('chart');
+                        if (chartDiv && chartDiv.data && chartDiv.data.length > 50) {
+                            Plotly.deleteTraces('chart', 1);
+                        }
+                    } catch (error) {
+                        console.error('Error removing bubble:', error);
                     }
                 }, 30000); // Remove after 30 seconds
             }
